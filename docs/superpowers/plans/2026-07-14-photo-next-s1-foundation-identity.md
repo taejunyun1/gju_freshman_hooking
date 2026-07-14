@@ -315,6 +315,8 @@ git commit -m "feat: add student identity cryptography"
 - Create: `shared/types/api.ts`
 - Create: `server/utils/supabase.ts`
 - Create: `server/utils/app-error.ts`
+- Create: `supabase/migrations/202607140002_identity_service.sql`
+- Create: `supabase/tests/identity_service.test.sql`
 - Create: `server/modules/identity/service.ts`
 - Create: `server/modules/metrics/events.ts`
 - Create: `server/middleware/request-context.ts`
@@ -377,7 +379,9 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({ phone: phoneSchema, password: z.string().min(7).max(128) })
 ```
 
-`registerStudent` consumes the IP bucket, checks `phone_hmac`, generates nickname/password, encrypts phone, and inserts prospect+credential through one RPC. `loginStudent` returns the same `AUTH_FAILED` response for unknown, wrong, or locked credentials; updates failure count atomically; on success resets failures and inserts a session with 30-minute idle and 12-hour absolute expiry. Set the cookie only in the API handler.
+Before implementing the service, write a failing pgTAP contract for a new `register_student` RPC. Add `202607140002_identity_service.sql`: its security-definer RPC receives the already normalized/encrypted phone and credential material, performs the `prospects` and `student_credentials` insert in one transaction, and returns a created-or-existing result without exposing database details. It must use `set search_path = ''`, be executable only by `service_role`, and tolerate a duplicate `phone_hmac` race without creating a second prospect. Do not read or hash plaintext phone/password inside SQL. Run `pnpm exec supabase db reset && pnpm exec supabase test db` to demonstrate the contract failure before the migration and its pass after the migration.
+
+`registerStudent` consumes the IP bucket, checks `phone_hmac`, generates nickname/password, encrypts phone, and inserts prospect+credential through the `register_student` RPC. `loginStudent` returns the same `AUTH_FAILED` response for unknown, wrong, or locked credentials; updates failure count atomically; on success resets failures and inserts a session with 30-minute idle and 12-hour absolute expiry. Set the cookie only in the API handler.
 
 Record `registration_started`, `registration_completed`, `login_succeeded`, and `login_failed` through the server event writer with campaign ID and request ID only; do not include phone, HMAC, nickname, password, IP, or session identifiers in event properties.
 
@@ -401,7 +405,7 @@ Expected: duplicate registration keeps one row, five failures lock, success emit
 - [ ] **Step 6: Commit account flow**
 
 ```bash
-git add shared server app/stores/student-session.ts app/pages/start.vue app/pages/credentials.vue app/pages/login.vue tests/integration/identity
+git add shared server supabase/migrations/202607140002_identity_service.sql supabase/tests/identity_service.test.sql app/stores/student-session.ts app/pages/start.vue app/pages/credentials.vue app/pages/login.vue tests/integration/identity
 git commit -m "feat: add student registration and login"
 ```
 
