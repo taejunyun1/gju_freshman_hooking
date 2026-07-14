@@ -5,6 +5,7 @@ import AppState from '../components/common/AppState.vue'
 
 const session = ref<StudentSession | null>(null)
 const loggingOut = ref(false)
+const logoutError = ref('')
 
 const loadSession = async (): Promise<void> => {
   try {
@@ -18,9 +19,13 @@ const loadSession = async (): Promise<void> => {
 
 const logout = async (): Promise<void> => {
   loggingOut.value = true
+  logoutError.value = ''
   try {
     await $fetch('/api/student/logout', { method: 'POST' })
     await navigateTo('/login', { replace: true })
+  }
+  catch {
+    logoutError.value = '로그아웃하지 못했습니다. 다시 시도하세요.'
   }
   finally {
     loggingOut.value = false
@@ -71,6 +76,13 @@ onMounted(loadSession)
               {{ loggingOut ? '로그아웃 중…' : '로그아웃' }}
             </button>
           </div>
+          <p
+            v-if="logoutError"
+            class="assessment-page__logout-error"
+            role="alert"
+          >
+            {{ logoutError }}
+          </p>
           <h1 id="assessment-title">나의 연결 경로를<br>시작할 준비가 됐어요</h1>
           <p class="assessment-page__intro">다음 단계에서 하고 싶은 작업을 고르면 수업과 진로로 연결해 드립니다.</p>
           <AppState
@@ -199,6 +211,13 @@ onMounted(loadSession)
 }
 
 .assessment-page__account-row button:disabled { cursor: wait; opacity: 0.66; }
+
+.assessment-page__logout-error {
+  margin: -0.75rem 0 1.5rem;
+  color: var(--color-error);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
 
 h1 {
   margin: 0;

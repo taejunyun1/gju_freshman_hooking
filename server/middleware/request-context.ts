@@ -8,7 +8,7 @@ export default defineEventHandler((event) => {
 
   const isAdminLogin = getRequestURL(event).pathname === '/admin/login'
   const imageSources = isAdminLogin ? "img-src 'self' data:; " : ''
-  const contentSecurityPolicy = `default-src 'self'; script-src 'self' 'nonce-${cspNonce}'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; ${imageSources}base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'`
+  const contentSecurityPolicy = `default-src 'self'; script-src 'self' 'nonce-${cspNonce}'; script-src-attr 'none'; style-src 'self' 'nonce-${cspNonce}'; style-src-attr 'none'; ${imageSources}base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'`
 
   setResponseHeader(event, 'content-security-policy', contentSecurityPolicy)
   setResponseHeader(event, 'x-content-type-options', 'nosniff')

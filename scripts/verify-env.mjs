@@ -14,7 +14,7 @@ for (const name of requiredNames) {
 }
 
 for (const [name, value] of Object.entries(process.env)) {
-  if (name.startsWith('NUXT_') && /^postgres(?:ql)?:\/\//iu.test(value.trim())) {
+  if (name.startsWith('NUXT_') && /postgres(?:ql)?:\/\//iu.test(value)) {
     issues.push({ name, reason: 'PostgreSQL URI is not allowed in a Worker variable' })
   }
 }

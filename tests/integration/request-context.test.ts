@@ -34,7 +34,31 @@ describe('request context security headers', () => {
     expect(event.context.cspNonce).toMatch(/^[A-Za-z0-9_-]{22}$/u)
     expect(policy).toContain(`script-src 'self' 'nonce-${event.context.cspNonce}'`)
     expect(policy).toContain("script-src-attr 'none'")
-    expect(policy).not.toMatch(/script-src[^;]*'unsafe-inline'/u)
+    expect(policy).toContain(`style-src 'self' 'nonce-${event.context.cspNonce}'`)
+    expect(policy).toContain("style-src-attr 'none'")
+    expect(policy).not.toContain("'unsafe-inline'")
+  })
+
+  it('uses a different nonce for each response and matches each policy exactly', async () => {
+    let fill = 0
+    vi.stubGlobal('crypto', {
+      getRandomValues: vi.fn((bytes: Uint8Array) => bytes.fill(++fill)),
+      randomUUID: vi.fn(() => `request-id-${fill}`),
+    })
+    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const first: TestEvent = { context: {}, path: '/', responseHeaders: new Map() }
+    const second: TestEvent = { context: {}, path: '/', responseHeaders: new Map() }
+
+    requestContext(first as never)
+    requestContext(second as never)
+
+    expect(first.context.cspNonce).not.toBe(second.context.cspNonce)
+    for (const event of [first, second]) {
+      const nonce = event.context.cspNonce
+      const policy = event.responseHeaders.get('content-security-policy') ?? ''
+      expect(policy).toContain(`script-src 'self' 'nonce-${nonce}'`)
+      expect(policy).toContain(`style-src 'self' 'nonce-${nonce}'`)
+    }
   })
 
   it('allows Supabase TOTP data images only on the administrator login response', async () => {

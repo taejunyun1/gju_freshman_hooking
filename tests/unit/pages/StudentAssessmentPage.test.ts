@@ -51,4 +51,25 @@ describe('student assessment handoff', () => {
     expect(globalThis.$fetch).toHaveBeenLastCalledWith('/api/student/logout', { method: 'POST' })
     expect(globalThis.navigateTo).toHaveBeenCalledWith('/login', { replace: true })
   })
+
+  it('stays authenticated and restores an accessible error when logout fails', async () => {
+    vi.stubGlobal('$fetch', vi.fn()
+      .mockResolvedValueOnce({
+        data: { expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
+        requestId: 'session-request',
+      })
+      .mockRejectedValueOnce(new Error('sensitive upstream detail')))
+    const { default: AssessmentPage } = await import('../../../app/pages/assessment.vue')
+    const wrapper = mount(AssessmentPage, { global: { stubs: { NuxtLink: true } } })
+    await flushPromises()
+
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+
+    expect(globalThis.navigateTo).not.toHaveBeenCalled()
+    expect(wrapper.get('button').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('button').text()).toBe('로그아웃')
+    expect(wrapper.get('[role="alert"]').text()).toBe('로그아웃하지 못했습니다. 다시 시도하세요.')
+    expect(wrapper.text()).not.toContain('sensitive upstream detail')
+  })
 })

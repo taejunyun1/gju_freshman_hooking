@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "deploy:preview": "node scripts/verify-env.mjs && wrangler deploy --env staging --dry-run",
+    "deploy:preview": "node scripts/verify-env.mjs && node scripts/deploy-preview.mjs",
     "dev": "nuxt dev",
     "lint": "eslint .",
     "postinstall": "nuxt prepare",

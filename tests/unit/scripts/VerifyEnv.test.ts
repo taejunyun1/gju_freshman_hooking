@@ -46,6 +46,20 @@ describe('Worker environment verifier', () => {
     },
   )
 
+  it.each([
+    'prefix=postgres://database.invalid/app',
+    '{"database":"PoStGrEsQl://database.invalid/app"}',
+  ])('rejects an embedded PostgreSQL URI in %s without printing its value', (embeddedUri) => {
+    const sentinel = 'sentinel-embedded-database-secret'
+    const unsafeValue = `${embeddedUri}?token=${sentinel}`
+    const result = runVerifier({ NUXT_EMBEDDED_CONFIG: unsafeValue })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('NUXT_EMBEDDED_CONFIG')
+    expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel)
+    expect(`${result.stdout}${result.stderr}`).not.toContain(unsafeValue)
+  })
+
   it('never prints required secret values to stdout or stderr', () => {
     const sentinel = 'sentinel-secret-never-print'
     const result = runVerifier({
