@@ -33,7 +33,6 @@ type StoredCredential = {
 }
 
 type StoredSession = {
-  id: number
   prospectId: number
   nickname: string
   expiresAt: Date
@@ -46,7 +45,7 @@ export type IdentityDependencies = {
   passwordPepper: Uint8Array
   now?: () => Date
   random?: RandomBytes
-  consumeRateLimit: (input: { ip: string, route: string, limit: number, window: string }) => Promise<boolean>
+  consumeRateLimit: (input: { key: string, route: string, limit: number, window: string }) => Promise<boolean>
   findProspectByPhoneHmac: (phoneHmac: Uint8Array) => Promise<StoredProspect | null>
   isNicknameAvailable: (nickname: string) => Promise<boolean>
   registerStudent: (input: {
@@ -69,7 +68,7 @@ export type IdentityDependencies = {
     idleExpiresAt: Date
     now: Date
   }) => Promise<{ expiresAt: Date } | null>
-  readSession: (tokenHash: Uint8Array, now: Date) => Promise<StoredSession | null>
+  readSession: (tokenHash: Uint8Array) => Promise<StoredSession | null>
   revokeSession: (tokenHash: Uint8Array, now: Date) => Promise<void>
   writeEvent: EventWriter
 }
@@ -97,9 +96,9 @@ const createSupabaseDependencies = (
   secrets: Pick<IdentityDependencies, 'hmacKey' | 'encryptionKey' | 'passwordPepper'>,
 ): IdentityDependencies => ({
   ...secrets,
-  consumeRateLimit: async ({ ip, route, limit, window }) => {
+  consumeRateLimit: async ({ key, route, limit, window }) => {
     const { data, error } = await client.rpc('consume_rate_limit', {
-      p_key: ip,
+      p_key: key,
       p_limit: limit,
       p_route: route,
       p_window: window,
@@ -174,35 +173,26 @@ const createSupabaseDependencies = (
     throwOnStoreError(error)
     return data === true ? { expiresAt } : null
   },
-  readSession: async (tokenHash, now) => {
-    const { data, error } = await client.from('student_sessions')
-      .select('id,expires_at,idle_expires_at,prospect:prospects!inner(id,nickname)')
-      .eq('token_hash', base64FromBytes(tokenHash))
-      .is('revoked_at', null)
-      .gt('expires_at', now.toISOString())
-      .gt('idle_expires_at', now.toISOString())
-      .maybeSingle()
+  readSession: async (tokenHash) => {
+    const { data, error } = await client.rpc('touch_student_session', {
+      p_token_hash: base64FromBytes(tokenHash),
+    })
     throwOnStoreError(error)
-    if (!data) return null
+    const result = Array.isArray(data) ? data[0] : null
+    if (!result) return null
 
-    const prospect = data.prospect as unknown as { id?: number, nickname?: string } | null
-    if (typeof prospect?.id !== 'number' || typeof prospect.nickname !== 'string') throw new Error('IDENTITY_STORE_INVALID')
-
-    const expiresAt = asDate(data.expires_at as string)
-    const idleExpiresAt = asDate(data.idle_expires_at as string)
-    const nextIdleExpiry = new Date(Math.min(expiresAt.getTime(), now.getTime() + SESSION_IDLE_MILLISECONDS))
-    const { error: updateError } = await client.from('student_sessions')
-      .update({ idle_expires_at: nextIdleExpiry.toISOString(), last_seen_at: now.toISOString() })
-      .eq('id', data.id as number)
-      .is('revoked_at', null)
-    throwOnStoreError(updateError)
+    if (
+      typeof result.prospect_id !== 'number'
+      || typeof result.nickname !== 'string'
+      || typeof result.expires_at !== 'string'
+      || typeof result.idle_expires_at !== 'string'
+    ) throw new Error('IDENTITY_STORE_INVALID')
 
     return {
-      id: data.id as number,
-      prospectId: prospect.id,
-      nickname: prospect.nickname,
-      expiresAt,
-      idleExpiresAt,
+      prospectId: result.prospect_id,
+      nickname: result.nickname,
+      expiresAt: asDate(result.expires_at),
+      idleExpiresAt: asDate(result.idle_expires_at),
     }
   },
   revokeSession: async (tokenHash, now) => {
@@ -235,7 +225,7 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
 
   const registerStudent = async (input: RegistrationInput, context: IdentityRequestContext): Promise<RegistrationResult> => {
     await writeEventSafely(dependencies.writeEvent, 'registration_started', REGISTER_ROUTE, context)
-    const allowed = await dependencies.consumeRateLimit({ ip: context.ip, route: REGISTER_ROUTE, limit: 8, window: '1 minute' })
+    const allowed = await dependencies.consumeRateLimit({ key: context.ip, route: REGISTER_ROUTE, limit: 5, window: '1 hour' })
     if (!allowed) throw new AppError('RATE_LIMITED')
 
     const protectedPhone = await protectPhone(input.phone, dependencies.hmacKey, dependencies.encryptionKey)
@@ -268,10 +258,18 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
       return { kind: 'failed' }
     }
 
-    const allowed = await dependencies.consumeRateLimit({ ip: context.ip, route: LOGIN_ROUTE, limit: 12, window: '1 minute' })
-    if (!allowed) return fail()
+    const ipAllowed = await dependencies.consumeRateLimit({ key: context.ip, route: LOGIN_ROUTE, limit: 10, window: '5 minutes' })
+    if (!ipAllowed) return fail()
 
     const protectedPhone = await protectPhone(input.phone, dependencies.hmacKey, dependencies.encryptionKey)
+    const phoneAllowed = await dependencies.consumeRateLimit({
+      key: base64FromBytes(protectedPhone.hmac),
+      route: LOGIN_ROUTE,
+      limit: 5,
+      window: '5 minutes',
+    })
+    if (!phoneAllowed) return fail()
+
     const credential = await dependencies.findCredentialByPhoneHmac(protectedPhone.hmac)
     const attemptAt = now()
     if (!credential || (credential.lockedUntil && credential.lockedUntil > attemptAt)) {
@@ -307,7 +305,7 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
   const getStudentSession = async (sessionToken: string): Promise<StudentSession | null> => {
     if (!sessionToken) return null
     const tokenHash = (await createSessionTokenFromRaw(sessionToken))
-    const session = await dependencies.readSession(tokenHash, now())
+    const session = await dependencies.readSession(tokenHash)
     return session ? {
       prospectId: session.prospectId,
       nickname: session.nickname,

@@ -4,4 +4,5 @@ export default defineEventHandler((event) => {
 
   setResponseHeader(event, 'content-security-policy', "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'")
   setResponseHeader(event, 'x-content-type-options', 'nosniff')
+  setResponseHeader(event, 'x-request-id', requestId)
 })

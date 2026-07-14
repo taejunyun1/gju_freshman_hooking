@@ -83,6 +83,10 @@ const continueToAssessment = async (): Promise<void> => {
 }
 
 .credentials-page__brand {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  min-inline-size: 2.75rem;
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: 1.125rem;

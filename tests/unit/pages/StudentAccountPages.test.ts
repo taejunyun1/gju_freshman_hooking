@@ -1,8 +1,21 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { readFile } from 'node:fs/promises'
 import { createPinia, setActivePinia } from 'pinia'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('student account pages', () => {
+  it.each([
+    ['app/pages/start.vue', 'account-page__brand'],
+    ['app/pages/login.vue', 'login-page__brand'],
+    ['app/pages/credentials.vue', 'credentials-page__brand'],
+  ])('gives the %s home link a 44px logical touch target', async (file, className) => {
+    const source = await readFile(file, 'utf8')
+    const selector = className.replaceAll('-', '\\-')
+    const rule = new RegExp(`\\.${selector}\\s*\\{[^}]*min-block-size:\\s*2\\.75rem;[^}]*min-inline-size:\\s*2\\.75rem;`, 's')
+
+    expect(source).toMatch(rule)
+  })
+
   it('shows each required registration choice in the mobile intake form', async () => {
     const { default: StartPage } = await import('../../../app/pages/start.vue')
     const wrapper = mount(StartPage, { global: { plugins: [createPinia()], stubs: { NuxtLink: true } } })
