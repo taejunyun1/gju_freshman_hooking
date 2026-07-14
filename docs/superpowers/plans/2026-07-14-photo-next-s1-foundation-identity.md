@@ -490,9 +490,14 @@ git commit -m "feat: add administrator auth and recovery"
 ### Task 6: Administrator shell and recovery queue
 
 **Files:**
+- Modify: `nuxt.config.ts`
+- Modify: `.env.example`
 - Create: `server/api/admin/recovery/index.get.ts`
+- Create: `server/api/admin/recovery/[id]/copy.post.ts`
 - Create: `app/middleware/admin.ts`
 - Create: `app/layouts/admin.vue`
+- Create: `app/stores/admin-session.ts`
+- Create: `app/utils/admin-supabase.ts`
 - Create: `app/pages/admin/login.vue`
 - Create: `app/pages/admin/index.vue`
 - Create: `app/pages/admin/recovery.vue`
@@ -524,13 +529,15 @@ Expected: FAIL because the administrator recovery component does not exist.
 
 - [ ] **Step 3: Implement admin login and layout**
 
-Login performs email/password then TOTP challenge through Supabase Auth. The admin layout shows navigation and session expiry. The empty dashboard uses `AppState` and does not fabricate metrics.
+Login performs email/password then TOTP challenge through Supabase Auth using a browser-safe publishable key and an admin-only client wrapper. Store the verified admin session in `sessionStorage`, never `localStorage`; API calls send the short-lived bearer token only in the `Authorization` header. Add `NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the public runtime contract without exposing any service key. The admin layout shows navigation and session expiry. The empty dashboard uses `AppState` and does not fabricate metrics.
 
 - [ ] **Step 4: Implement recovery queue**
 
 List only pending nonexpired recovery requests with masked phone, nickname, region, request age, and verification state. Approval requires explicit confirmation and recent AAL2, displays the raw one-time code once, offers a copy button, then removes it from component state after 60 seconds. Record approval and copy actions in audit events; never place the code in a URL or log.
 
-`bootstrap-local-admin.ts` creates only the documented local test email from environment input, enrolls a deterministic test TOTP fixture, and upserts its Auth UUID into `admin_users`; it aborts unless the Supabase URL is localhost. The runbook directs a production operator to create the real Auth user in Supabase Dashboard, enroll TOTP on first login, copy only the Auth UUID into `admin_users`, and disable public admin signup. No password or TOTP secret is written to the repository.
+The copy action calls a dedicated authenticated audit endpoint with only the recovery request ID and request ID; it never sends the raw code back to the server.
+
+`bootstrap-local-admin.ts` creates only the documented local test email from environment input, upserts its Auth UUID into `admin_users`, then uses the supported Supabase Auth MFA enrollment flow to print a one-time local enrollment URI/QR payload. Supabase Auth generates the TOTP secret; do not patch Auth internals or attempt unsupported caller-selected secrets. The script aborts unless the Supabase URL is localhost and never persists the password, enrollment URI, or TOTP secret. The runbook directs a production operator to create the real Auth user in Supabase Dashboard, enroll TOTP on first login, copy only the Auth UUID into `admin_users`, and disable public admin signup. No password or TOTP secret is written to the repository.
 
 - [ ] **Step 5: Verify and commit admin shell**
 
@@ -539,7 +546,7 @@ Run: `pnpm vitest run tests/unit/components/AdminRecovery.test.ts && pnpm nuxi t
 Expected: hidden-before-approval, explicit approval, timed clear, and type checks pass.
 
 ```bash
-git add server/api/admin/recovery/index.get.ts app/middleware/admin.ts app/layouts/admin.vue app/pages/admin app/components/admin/AdminRecovery.vue scripts/bootstrap-local-admin.ts docs/operations/admin-bootstrap.md tests/unit/components/AdminRecovery.test.ts
+git add nuxt.config.ts .env.example server/api/admin/recovery/index.get.ts server/api/admin/recovery/\[id\]/copy.post.ts app/middleware/admin.ts app/layouts/admin.vue app/stores/admin-session.ts app/utils/admin-supabase.ts app/pages/admin app/components/admin/AdminRecovery.vue scripts/bootstrap-local-admin.ts docs/operations/admin-bootstrap.md tests/unit/components/AdminRecovery.test.ts
 git commit -m "feat: add administrator recovery shell"
 ```
 
