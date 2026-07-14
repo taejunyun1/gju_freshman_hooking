@@ -113,13 +113,17 @@ describe('GET /api/assessment/options', () => {
       if (key) responseKeys.push(key)
       return value
     })
-    expect(responseKeys).not.toEqual(expect.arrayContaining([
+    const forbiddenKeys = [
       'id',
       'status',
       'trackWeights',
       'interestTags',
       'weight',
-    ]))
+    ]
+    expect(responseKeys).toContain('visualKey')
+    for (const forbiddenKey of forbiddenKeys) {
+      expect(responseKeys).not.toContain(forbiddenKey)
+    }
     expect(serialized).not.toContain('private draft label')
   })
 })

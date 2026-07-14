@@ -13,7 +13,6 @@ export type ServerEvent = {
   anonymousId: string
   eventName: ServerEventName
   path: '/api/student/register' | '/api/student/login'
-  campaignId?: number
   prospectId?: number
   properties?: Record<string, unknown>
   requestId: string
@@ -21,7 +20,6 @@ export type ServerEvent = {
 
 export type BrowserEvent = {
   anonymousId: string
-  campaignId: null
   eventName: 'landing_viewed' | 'assessment_started' | 'assessment_step_completed'
   path: '/api/events'
   properties: Record<string, unknown>
@@ -35,7 +33,7 @@ export type EventWriter = (event: ProductEvent) => Promise<void>
 export const createEventWriter = (client: SupabaseClient): EventWriter => async (event) => {
   const { error } = await client.from('events').insert({
     anonymous_id: event.anonymousId,
-    campaign_id: event.campaignId ?? null,
+    campaign_id: null,
     event_name: event.eventName,
     path: event.path,
     properties: event.properties ?? { request_id: event.requestId },

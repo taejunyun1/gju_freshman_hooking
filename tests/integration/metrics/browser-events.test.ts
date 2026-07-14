@@ -104,7 +104,6 @@ describe('POST /api/events', () => {
 
     await writer({
       anonymousId,
-      campaignId: null,
       eventName: 'landing_viewed',
       path: '/api/events',
       properties,
@@ -120,6 +119,24 @@ describe('POST /api/events', () => {
       properties,
       prospect_id: null,
     })
+  })
+
+  it('forces a null campaign for identity events even if an unsafe caller supplies a number', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null })
+    const writer = createEventWriter({
+      from: vi.fn().mockReturnValue({ insert }),
+    } as never)
+
+    await writer({
+      anonymousId,
+      campaignId: 7,
+      eventName: 'login_succeeded',
+      path: '/api/student/login',
+      prospectId: 42,
+      requestId,
+    } as never)
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ campaign_id: null }))
   })
 
   it('derives identity, path, campaign, properties, and rate buckets before insert', async () => {
@@ -142,7 +159,6 @@ describe('POST /api/events', () => {
     ])
     expect(writes).toEqual([{
       anonymousId,
-      campaignId: null,
       eventName: 'assessment_step_completed',
       path: '/api/events',
       properties: {

@@ -19,7 +19,6 @@ export type IdentityRequestContext = {
   anonymousId: string
   ip: string
   requestId: string
-  campaignId?: number
 }
 
 type StoredProspect = {
@@ -223,7 +222,6 @@ const writeEventSafely = async (
       anonymousId: context.anonymousId,
       eventName,
       path,
-      campaignId: context.campaignId,
       ...(prospectId === undefined ? {} : { prospectId }),
       requestId: context.requestId,
     })

@@ -134,7 +134,6 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
     }
     await dependencies.writeEvent({
       anonymousId,
-      campaignId: null,
       eventName: parsed.data.eventName,
       path: EVENT_ROUTE,
       properties,
