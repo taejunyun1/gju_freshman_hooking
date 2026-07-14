@@ -64,6 +64,8 @@ export type IdentityDependencies = {
   recordLoginFailure: (phoneHmac: Uint8Array, now: Date) => Promise<unknown>
   completeLogin: (input: {
     prospectId: number
+    expectedPasswordHash: Uint8Array
+    expectedPasswordSalt: Uint8Array
     tokenHash: Uint8Array
     expiresAt: Date
     idleExpiresAt: Date
@@ -164,9 +166,11 @@ const createSupabaseDependencies = (
     })
     throwOnStoreError(error)
   },
-  completeLogin: async ({ prospectId, tokenHash, expiresAt, idleExpiresAt }) => {
+  completeLogin: async ({ prospectId, expectedPasswordHash, expectedPasswordSalt, tokenHash, expiresAt, idleExpiresAt }) => {
     const { data, error } = await client.rpc('complete_student_login', {
       p_expires_at: expiresAt.toISOString(),
+      p_expected_password_hash: postgresByteaFromBytes(expectedPasswordHash),
+      p_expected_password_salt: postgresByteaFromBytes(expectedPasswordSalt),
       p_idle_expires_at: idleExpiresAt.toISOString(),
       p_prospect_id: prospectId,
       p_token_hash: postgresByteaFromBytes(tokenHash),
@@ -292,6 +296,8 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
     const idleExpiresAt = new Date(attemptAt.getTime() + SESSION_IDLE_MILLISECONDS)
     const completed = await dependencies.completeLogin({
       prospectId: credential.prospectId,
+      expectedPasswordHash: credential.passwordHash,
+      expectedPasswordSalt: credential.passwordSalt,
       tokenHash: sessionToken.hash,
       expiresAt,
       idleExpiresAt,

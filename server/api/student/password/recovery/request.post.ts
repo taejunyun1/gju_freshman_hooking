@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { phoneSchema, regionSchema } from '../../../../../shared/schemas/identity'
 import { getServerPasswordRecoveryService } from '../../../../modules/identity/password-recovery'
+import { getTrustedClientIp } from '../../../../utils/trusted-client-ip'
 
 const recoveryRequestSchema = z.object({
   phone: phoneSchema,
@@ -32,7 +33,7 @@ export const createRecoveryRequestHandler = (dependencies: RecoveryRequestHandle
 }
 
 export default defineEventHandler((event) => createRecoveryRequestHandler({
-  getIp: requestEvent => getRequestIP(requestEvent as never, { xForwardedFor: true }) ?? 'unknown',
+  getIp: getTrustedClientIp,
   getRequestId: (requestEvent) => {
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()

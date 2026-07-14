@@ -96,6 +96,49 @@ describe('student browser mutation security', () => {
     await expect(middleware({ ...base, csrf })).resolves.toBeUndefined()
   })
 
+  it.each([
+    '/api/student/logout/',
+    '/api/student/password/change///',
+    '/api/student//logout',
+  ])('requires session CSRF after canonicalizing a protected path: %s', async (path) => {
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const middleware = createStudentRequestSecurityMiddleware({
+      getCsrf: event => (event as TestEvent).csrf,
+      getMethod: event => (event as TestEvent).method,
+      getOrigin: event => (event as TestEvent).origin,
+      getPath: event => (event as TestEvent).path,
+      getRequestOrigin: event => (event as TestEvent).requestOrigin,
+      getSessionToken: event => (event as TestEvent).sessionToken,
+    })
+
+    await expect(middleware({
+      method: 'POST',
+      origin: 'https://photo-next.example',
+      path,
+      requestOrigin: 'https://photo-next.example',
+      sessionToken: 'opaque-session-token',
+    })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+  })
+
+  it('rejects percent-encoded student mutation paths before route dispatch', async () => {
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const middleware = createStudentRequestSecurityMiddleware({
+      getCsrf: () => undefined,
+      getMethod: event => (event as TestEvent).method,
+      getOrigin: event => (event as TestEvent).origin,
+      getPath: event => (event as TestEvent).path,
+      getRequestOrigin: event => (event as TestEvent).requestOrigin,
+      getSessionToken: () => undefined,
+    })
+
+    await expect(middleware({
+      method: 'POST',
+      origin: 'https://photo-next.example',
+      path: '/api/student/%6Cogout',
+      requestOrigin: 'https://photo-next.example',
+    })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+  })
+
   it('does not apply browser mutation checks to the read-only session endpoint', async () => {
     const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({

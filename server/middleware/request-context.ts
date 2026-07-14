@@ -28,6 +28,10 @@ export default defineEventHandler((event) => {
   const pathname = getRequestURL(event).pathname
   const isAdminDocument = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminLogin = pathname === '/admin/login'
+  const isPrivateApi = pathname === '/api/student'
+    || pathname.startsWith('/api/student/')
+    || pathname === '/api/admin'
+    || pathname.startsWith('/api/admin/')
   const imageSources = isAdminLogin ? "img-src 'self' data:; " : ''
   const connectSources = isAdminDocument
     ? `connect-src 'self' ${validatedSupabaseOrigin(useRuntimeConfig(event).public.supabaseUrl)}; `
@@ -38,4 +42,5 @@ export default defineEventHandler((event) => {
   setResponseHeader(event, 'x-content-type-options', 'nosniff')
   setResponseHeader(event, 'referrer-policy', 'no-referrer')
   setResponseHeader(event, 'x-request-id', requestId)
+  if (isPrivateApi) setResponseHeader(event, 'cache-control', 'private, no-store')
 })

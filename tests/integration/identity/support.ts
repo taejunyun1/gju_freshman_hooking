@@ -70,6 +70,8 @@ export const createMemoryBackend = () => {
       },
       completeLogin: async (input: {
         prospectId: number
+        expectedPasswordHash: Uint8Array
+        expectedPasswordSalt: Uint8Array
         tokenHash: Uint8Array
         expiresAt: Date
         idleExpiresAt: Date
@@ -77,6 +79,10 @@ export const createMemoryBackend = () => {
       }) => {
         const credential = credentials.get(input.prospectId)
         if (!credential || (credential.lockedUntil && credential.lockedUntil > input.now)) return null
+        if (
+          bytesKey(credential.passwordHash) !== bytesKey(input.expectedPasswordHash)
+          || bytesKey(credential.passwordSalt) !== bytesKey(input.expectedPasswordSalt)
+        ) return null
         credential.failedAttempts = 0
         credential.lockedUntil = null
         return { expiresAt: input.expiresAt }

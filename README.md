@@ -17,7 +17,7 @@ pnpm test:e2e
 pnpm build
 ```
 
-`test:local-integration`과 `test:sql`, `test:e2e`는 실행 중인 로컬 Supabase만 허용하며 원격 프로젝트 URL에서는 mutation 전에 종료합니다. 학생 상태 변경 API는 정확한 same-origin `Origin`을 요구하고, 쿠키 인증 로그아웃·비밀번호 변경은 `/api/student/session`이 페이지 메모리에 제공한 `X-Photo-Next-CSRF` 값도 전송합니다. 복구 요청 제한은 IP 10회/시간과 번호 HMAC 3회/시간, 복구 완료 제한은 IP 10회/5분과 코드 해시 5회/15분입니다.
+`test:local-integration`과 `test:sql`, `test:e2e`는 실행 중인 로컬 Supabase만 허용하며 원격 프로젝트 URL에서는 mutation 전에 종료합니다. 학생 상태 변경 API는 canonical path의 정확한 same-origin `Origin`을 요구하고, 쿠키 인증 로그아웃·비밀번호 변경은 `/api/student/session`이 페이지 메모리에 제공한 `X-Photo-Next-CSRF` 값도 전송합니다. 학생·관리자 API 응답은 `private, no-store`입니다. IP 제한 키는 Cloudflare runtime의 검증된 단일 `CF-Connecting-IP` 또는 forwarded trust 없는 direct address만 사용하며 X-Forwarded-For를 신뢰하지 않습니다. 복구 요청 제한은 IP 10회/시간과 번호 HMAC 3회/시간, 복구 완료 제한은 IP 10회/5분과 코드 해시 5회/15분입니다.
 
 ## Project references
 

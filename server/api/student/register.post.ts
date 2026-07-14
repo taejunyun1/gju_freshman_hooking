@@ -2,6 +2,7 @@ import { registerSchema } from '../../../shared/schemas/identity'
 import type { ApiFailure, ApiSuccess, RegistrationResult } from '../../../shared/types/api'
 import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
+import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 
 type RegisterHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerIdentityService>, 'registerStudent'>
@@ -13,7 +14,7 @@ type RegisterHandlerDependencies = {
 const defaultContext = (event: unknown): IdentityRequestContext => {
   const requestEvent = event as { context?: { requestId?: unknown } }
   return {
-    ip: getRequestIP(event as never, { xForwardedFor: true }) ?? 'unknown',
+    ip: getTrustedClientIp(event),
     requestId: typeof requestEvent.context?.requestId === 'string' ? requestEvent.context.requestId : crypto.randomUUID(),
   }
 }

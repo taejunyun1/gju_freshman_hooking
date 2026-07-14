@@ -3,6 +3,7 @@ import type { ApiFailure, ApiSuccess, LoginResult } from '../../../shared/types/
 import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
 import { studentSessionCookie } from '../../utils/student-request-security'
+import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 
 export { studentSessionCookie } from '../../utils/student-request-security'
 
@@ -25,7 +26,7 @@ type LoginHandlerDependencies = {
 const defaultContext = (event: unknown): IdentityRequestContext => {
   const requestEvent = event as { context?: { requestId?: unknown } }
   return {
-    ip: getRequestIP(event as never, { xForwardedFor: true }) ?? 'unknown',
+    ip: getTrustedClientIp(event),
     requestId: typeof requestEvent.context?.requestId === 'string' ? requestEvent.context.requestId : crypto.randomUUID(),
   }
 }

@@ -521,6 +521,8 @@ PHOTO:NEXT                         02 / 04
 - 계정 잠금은 `student_credentials`, IP·경로 제한은 `rate_limit_buckets`의 원자적 RPC로 처리하며 원문 IP를 저장하지 않음
 - 오류 응답은 계정 존재 여부를 노출하지 않는 동일한 메시지와 상태 코드를 사용
 - 성공 로그인 시 실패 횟수를 초기화하고 세션 고정 공격을 막기 위해 새 토큰 발급
+- 로그인 완료 RPC는 credential row를 먼저 잠그고 애플리케이션이 검증한 password hash·salt와 현재 값을 원자적으로 비교한 뒤 일치할 때만 세션을 발급
+- Cloudflare에서는 단일 형식으로 검증한 `CF-Connecting-IP`, 그 외 환경에서는 forwarded trust 없는 direct address만 IP bucket key로 사용하며 X-Forwarded-For는 신뢰하지 않음
 
 ### 9.4 학생 세션
 
@@ -531,8 +533,10 @@ PHOTO:NEXT                         02 / 04
 - 로그아웃·비밀번호 변경·계정 정리 때 관련 세션을 폐기
 - 휴대전화, 비밀번호, 토큰은 localStorage, sessionStorage, URL, 분석 이벤트에 저장하지 않음
 - 모든 상태 변경 `/api/student/*` 요청은 요청 URL과 정확히 같은 `Origin`을 요구한다. 가입·로그인·익명 복구 요청·완료는 Origin만 요구한다.
+- 반복·후행 slash를 canonicalize한 뒤 CSRF 보호 경로를 판정하고 percent-encoded 학생 mutation 경로는 라우터 처리 전에 거부한다.
 - 쿠키 인증 로그아웃과 비밀번호 변경은 추가로 `X-Photo-Next-CSRF` 헤더를 요구한다. 토큰은 불투명 세션 토큰을 key로 고정 도메인 문자열에 HMAC-SHA-256을 적용한 256-bit 값이며 DB 저장 없이 `/api/student/session`에서만 반환하고 페이지 메모리에만 둔다.
 - CSRF 토큰은 고정 base64url 형식으로 검사한 뒤 constant-time 비교하며 로그, Storage, URL, 분석 이벤트에 기록하지 않는다.
+- 모든 학생·관리자 API 응답은 `Cache-Control: private, no-store`로 공유·개인 HTTP cache 저장을 금지한다.
 
 ### 9.5 관리자 인증
 

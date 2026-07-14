@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { ApiFailure, ApiSuccess } from '../../../../../shared/types/api'
 import { getServerPasswordRecoveryService } from '../../../../modules/identity/password-recovery'
 import { AppError, toApiFailure } from '../../../../utils/app-error'
+import { getTrustedClientIp } from '../../../../utils/trusted-client-ip'
 
 const completeRecoverySchema = z.object({
   code: z.string().min(1).max(128),
@@ -39,7 +40,7 @@ export const createCompleteRecoveryHandler = (dependencies: CompleteRecoveryHand
 
 export default defineEventHandler((event) => createCompleteRecoveryHandler({
   completeRecovery: getServerPasswordRecoveryService().complete,
-  getIp: requestEvent => getRequestIP(requestEvent as never, { xForwardedFor: true }) ?? 'unknown',
+  getIp: getTrustedClientIp,
   getRequestId: (requestEvent) => {
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()

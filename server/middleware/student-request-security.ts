@@ -19,12 +19,27 @@ const forbidden = (): never => {
   throw new Error('STUDENT_REQUEST_FORBIDDEN')
 }
 
+const canonicalStudentPath = (rawPath: string): string | null => {
+  const collapsedPath = rawPath.replace(/\/{2,}/gu, '/')
+  let decodedPath = collapsedPath
+  try {
+    decodedPath = decodeURIComponent(collapsedPath).replace(/\/{2,}/gu, '/')
+  }
+  catch {
+    // Malformed encoding is rejected below when it targets the student API prefix.
+  }
+  const targetsStudentApi = collapsedPath.startsWith('/api/student/') || decodedPath.startsWith('/api/student/')
+  if (!targetsStudentApi) return null
+  if (rawPath.includes('%') || rawPath.includes('\\')) forbidden()
+  return collapsedPath.length > 1 ? collapsedPath.replace(/\/+$/u, '') : collapsedPath
+}
+
 export const createStudentRequestSecurityMiddleware = (
   dependencies: StudentRequestSecurityDependencies,
 ) => async (event: unknown): Promise<void> => {
   const method = dependencies.getMethod(event).toUpperCase()
-  const path = dependencies.getPath(event)
-  if (!path.startsWith('/api/student/') || safeMethods.has(method)) return
+  const path = canonicalStudentPath(dependencies.getPath(event))
+  if (path === null || safeMethods.has(method)) return
 
   const origin = dependencies.getOrigin(event)
   if (!origin || origin !== dependencies.getRequestOrigin(event)) forbidden()

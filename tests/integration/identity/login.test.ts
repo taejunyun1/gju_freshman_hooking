@@ -116,4 +116,59 @@ describe('POST /api/student/login', () => {
       options: expect.objectContaining({ httpOnly: true, sameSite: 'lax', secure: true }),
     }])
   })
+
+  it('rejects a login when the credential changes after password verification but before session creation', async () => {
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    const { createIdentityService } = await import('../../../server/modules/identity/service')
+    const { createRegisterHandler } = await import('../../../server/api/student/register.post')
+    const backend = createMemoryBackend()
+    const originalCompleteLogin = backend.dependencies.completeLogin
+    let insertedSessions = 0
+    let completionProof: { passwordHash?: Uint8Array, passwordSalt?: Uint8Array } = {}
+    backend.dependencies.completeLogin = async (input) => {
+      const expected = input as typeof input & {
+        expectedPasswordHash?: Uint8Array
+        expectedPasswordSalt?: Uint8Array
+      }
+      completionProof = {
+        passwordHash: expected.expectedPasswordHash,
+        passwordSalt: expected.expectedPasswordSalt,
+      }
+      const credential = backend.readCredential()
+      if (!credential) return null
+      credential.passwordHash = new Uint8Array(32).fill(9)
+      credential.passwordSalt = new Uint8Array(16).fill(8)
+      if (
+        !expected.expectedPasswordHash
+        || !expected.expectedPasswordSalt
+        || !expected.expectedPasswordHash.every((byte, index) => byte === credential.passwordHash[index])
+        || !expected.expectedPasswordSalt.every((byte, index) => byte === credential.passwordSalt[index])
+      ) return null
+      insertedSessions += 1
+      return originalCompleteLogin(input)
+    }
+    const identity = createIdentityService(backend.dependencies)
+    const register = createRegisterHandler({
+      identity,
+      getContext: () => ({ ip: '203.0.113.4', requestId: '55555555-5555-4555-8555-555555555555' }),
+      readBody: async (event: { body: unknown }) => event.body,
+      setStatus: () => undefined,
+    })
+    const registration = await register({
+      body: { phone: '01012345678', schoolName: '광주고등학교', applicantStage: 'high3', region: 'gwangju' },
+    })
+    const verifiedCredential = backend.readCredential()
+    if (!verifiedCredential) throw new Error('TEST_CREDENTIAL_MISSING')
+    const verifiedHash = verifiedCredential.passwordHash.slice()
+    const verifiedSalt = verifiedCredential.passwordSalt.slice()
+
+    const result = await identity.loginStudent(
+      { phone: '01012345678', password: registration.data.initialPassword },
+      { ip: '203.0.113.4', requestId: '66666666-6666-4666-8666-666666666666' },
+    )
+
+    expect(completionProof).toEqual({ passwordHash: verifiedHash, passwordSalt: verifiedSalt })
+    expect(result).toEqual({ kind: 'failed' })
+    expect(insertedSessions).toBe(0)
+  })
 })
