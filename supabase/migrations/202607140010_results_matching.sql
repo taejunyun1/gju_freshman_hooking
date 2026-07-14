@@ -32,6 +32,65 @@ begin
 end;
 $$;
 
+create function public.compact_jsonb_text(p_value jsonb)
+returns text
+language plpgsql
+immutable
+strict
+set search_path = ''
+as $$
+declare
+  v_type text;
+  v_serialized text;
+begin
+  v_type := pg_catalog.jsonb_typeof(p_value);
+
+  case v_type
+    when 'object' then
+      select '{' || coalesce(
+        pg_catalog.string_agg(
+          pg_catalog.to_jsonb(entry.key)::text
+            || ':'
+            || public.compact_jsonb_text(entry.value),
+          ',' order by entry.key
+        ),
+        ''
+      ) || '}'
+      into v_serialized
+      from pg_catalog.jsonb_each(p_value) as entry(key, value);
+    when 'array' then
+      select '[' || coalesce(
+        pg_catalog.string_agg(
+          public.compact_jsonb_text(entry.value),
+          ',' order by entry.position
+        ),
+        ''
+      ) || ']'
+      into v_serialized
+      from pg_catalog.jsonb_array_elements(p_value) with ordinality as entry(value, position);
+    when 'string' then v_serialized := p_value::text;
+    when 'number' then v_serialized := p_value::text;
+    when 'boolean' then v_serialized := p_value::text;
+    when 'null' then v_serialized := p_value::text;
+    else raise exception 'unsupported JSONB type';
+  end case;
+
+  return v_serialized;
+end;
+$$;
+
+create function public.compact_jsonb_octet_length(p_value jsonb)
+returns integer
+language sql
+immutable
+strict
+set search_path = ''
+as $$
+  select pg_catalog.octet_length(
+    pg_catalog.convert_to(public.compact_jsonb_text(p_value), 'UTF8')
+  );
+$$;
+
 create function public.is_valid_bounded_json_object(p_value jsonb, p_max_bytes integer)
 returns boolean
 language sql
@@ -41,7 +100,7 @@ set search_path = ''
 as $$
   select p_max_bytes between 2 and 1048576
     and pg_catalog.jsonb_typeof(p_value) = 'object'
-    and pg_catalog.octet_length(p_value::text) <= p_max_bytes;
+    and public.compact_jsonb_octet_length(p_value) <= p_max_bytes;
 $$;
 
 create function public.is_safe_relative_asset_path(p_path text)
@@ -437,6 +496,10 @@ revoke all privileges on sequence
 from public, anon, authenticated, service_role;
 
 revoke all privileges on function public.is_valid_result_track_scores(jsonb)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function public.compact_jsonb_text(jsonb)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function public.compact_jsonb_octet_length(jsonb)
   from public, anon, authenticated, service_role;
 revoke all privileges on function public.is_valid_bounded_json_object(jsonb, integer)
   from public, anon, authenticated, service_role;

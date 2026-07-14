@@ -430,6 +430,20 @@ describe('result snapshot decoder', () => {
     expect(() => decodeResultSnapshot(snapshot)).toThrow()
   })
 
+  it('rejects unpaired UTF-16 surrogates while preserving valid emoji pairs', () => {
+    const loneHighSurrogate = clone(makeValidSnapshot())
+    loneHighSurrogate.resources.project[0]!.summary = `깨진 문자 \uD800`
+    expect(() => decodeResultSnapshot(loneHighSurrogate)).toThrow()
+
+    const loneLowSurrogate = clone(makeValidSnapshot())
+    loneLowSurrogate.selectedInterests[0]!.label = `깨진 문자 \uDC00`
+    expect(() => decodeResultSnapshot(loneLowSurrogate)).toThrow()
+
+    const validEmoji = clone(makeValidSnapshot())
+    validEmoji.resources.project[0]!.summary = '정상 이모지 📷와 🎬는 보존됩니다.'
+    expect(() => decodeResultSnapshot(validEmoji)).not.toThrow()
+  })
+
   it('rejects a title-only connection reason unrelated to every selected interest label', () => {
     const snapshot = clone(makeValidSnapshot())
     const project = snapshot.resources.project[0]!

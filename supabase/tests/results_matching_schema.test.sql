@@ -1,6 +1,6 @@
 begin;
 
-select plan(66);
+select plan(77);
 
 select has_table('public'::name, 'assessments'::name);
 select has_table('public'::name, 'assessment_responses'::name);
@@ -188,6 +188,62 @@ select ok(
   'assessment public IDs default to generated UUIDs'
 );
 
+select has_function(
+  'public',
+  'compact_jsonb_text',
+  array['jsonb'],
+  'compact JSONB serializer exists'
+);
+select has_function(
+  'public',
+  'compact_jsonb_octet_length',
+  array['jsonb'],
+  'compact JSONB byte-length helper exists'
+);
+select is(
+  public.compact_jsonb_text('{"a":[1,2],"b":3}'::jsonb),
+  '{"a":[1,2],"b":3}'::text,
+  'nested objects and arrays serialize without presentation spaces'
+);
+select is(
+  public.compact_jsonb_octet_length('{"a":[1,2],"b":3}'::jsonb),
+  17,
+  'known compact nested JSON is exactly 17 UTF-8 bytes'
+);
+select is(
+  public.compact_jsonb_octet_length('{"b":3,"a":[1,2]}'::jsonb),
+  17,
+  'compact byte counts are independent of input object key order'
+);
+select is(
+  pg_catalog.octet_length('{"a":[1,2],"b":3}'::jsonb::text),
+  21,
+  'native jsonb text includes four presentation spaces'
+);
+select is(
+  public.compact_jsonb_text($json${"한글":"가\n\"나\"\\다"}$json$::jsonb),
+  $json${"한글":"가\n\"나\"\\다"}$json$::text,
+  'Korean, escapes, quotes, and backslashes are preserved exactly'
+);
+select is(
+  public.compact_jsonb_octet_length($json${"한글":"가\n\"나\"\\다"}$json$::jsonb),
+  30,
+  'Korean and escaped string bytes are counted as UTF-8 compact JSON'
+);
+select ok(
+  public.compact_jsonb_text($json${"한글":" 가  나 ","items":["x\\y","x\"y"]}$json$::jsonb)::jsonb
+    = $json${"한글":" 가  나 ","items":["x\\y","x\"y"]}$json$::jsonb,
+  'compact serialization never mutates string content'
+);
+select ok(
+  public.is_valid_bounded_json_object(pg_catalog.jsonb_build_object('x', pg_catalog.repeat('a', 24)), 32),
+  'an object exactly at its compact UTF-8 byte boundary is accepted'
+);
+select ok(
+  not public.is_valid_bounded_json_object(pg_catalog.jsonb_build_object('x', pg_catalog.repeat('a', 25)), 32),
+  'an object one compact UTF-8 byte over its boundary is rejected'
+);
+
 insert into public.prospects (
   nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage, region
 ) values (
@@ -357,6 +413,8 @@ select is(
    from unnest(array[
      'public.is_valid_result_track_scores(jsonb)'::regprocedure,
      'public.is_valid_bounded_json_object(jsonb,integer)'::regprocedure,
+     'public.compact_jsonb_text(jsonb)'::regprocedure,
+     'public.compact_jsonb_octet_length(jsonb)'::regprocedure,
      'public.is_safe_relative_asset_path(text)'::regprocedure,
      'public.is_valid_faculty_contact_visibility(jsonb)'::regprocedure
    ]) procedure_oid
@@ -367,6 +425,8 @@ select is(
    from unnest(array[
      'public.is_valid_result_track_scores(jsonb)'::regprocedure,
      'public.is_valid_bounded_json_object(jsonb,integer)'::regprocedure,
+     'public.compact_jsonb_text(jsonb)'::regprocedure,
+     'public.compact_jsonb_octet_length(jsonb)'::regprocedure,
      'public.is_safe_relative_asset_path(text)'::regprocedure,
      'public.is_valid_faculty_contact_visibility(jsonb)'::regprocedure
    ]) procedure_oid

@@ -9,10 +9,32 @@ import type { ResultSnapshot } from '../types/result'
 
 export const resultSnapshotMaxBytes = 262_144
 
+const hasOnlyPairedUtf16Surrogates = (value: string) => {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index)
+    if (codeUnit >= 0xD800 && codeUnit <= 0xDBFF) {
+      const nextCodeUnit = value.charCodeAt(index + 1)
+      if (
+        index + 1 >= value.length
+        || nextCodeUnit < 0xDC00
+        || nextCodeUnit > 0xDFFF
+      ) {
+        return false
+      }
+      index += 1
+    }
+    else if (codeUnit >= 0xDC00 && codeUnit <= 0xDFFF) {
+      return false
+    }
+  }
+  return true
+}
+
 const boundedText = (minimum: number, maximum: number) => z.string()
   .min(minimum)
   .max(maximum)
   .refine(value => value === value.trim(), '앞뒤 공백을 제거해 주세요.')
+  .refine(hasOnlyPairedUtf16Surrogates, '짝이 맞지 않는 UTF-16 문자는 사용할 수 없습니다.')
 
 const safeIdSchema = z.number().int().positive().safe()
 const finiteScoreSchema = z.number().finite().min(0).max(100)
