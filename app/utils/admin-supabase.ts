@@ -35,6 +35,19 @@ export const createAdminSupabaseClient = (
   })
 }
 
+export const cancelAdminEnrollment = async (
+  client: SupabaseClient,
+  factorId: string,
+): Promise<void> => {
+  try {
+    const { data, error } = await client.auth.mfa.unenroll({ factorId })
+    if (error || data?.id !== factorId) throw new Error('ADMIN_AUTH_FAILED')
+  }
+  catch {
+    throw new Error('ADMIN_AUTH_FAILED')
+  }
+}
+
 export const beginAdminAuthentication = async (
   client: SupabaseClient,
   email: string,
@@ -45,6 +58,14 @@ export const beginAdminAuthentication = async (
 
   const { data: factors, error: factorError } = await client.auth.mfa.listFactors()
   if (factorError || !factors) throw new Error('ADMIN_AUTH_FAILED')
+
+  const staleTotpFactors = factors.all.filter(factor => (
+    factor.factor_type === 'totp' && factor.status === 'unverified'
+  ))
+  for (const factor of staleTotpFactors) {
+    await cancelAdminEnrollment(client, factor.id)
+  }
+
   const verifiedTotp = factors.totp[0]
   if (verifiedTotp) return { enrollment: null, factorId: verifiedTotp.id }
 

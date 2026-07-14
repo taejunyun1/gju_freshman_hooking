@@ -5,6 +5,7 @@ import { useAdminSessionStore } from '../../../app/stores/admin-session'
 
 const adminAuthMocks = vi.hoisted(() => ({
   beginAdminAuthentication: vi.fn(),
+  cancelAdminEnrollment: vi.fn(),
   getAdminSupabaseClient: vi.fn(() => ({ auth: { signOut: vi.fn() } })),
   verifyAdminTotp: vi.fn(),
 }))
@@ -53,6 +54,51 @@ describe('administrator shell', () => {
     await flushPromises()
 
     expect(wrapper.get('img').attributes('src')).toBe(qrCode)
+  })
+
+  it('removes the current unverified factor before signing out on restart', async () => {
+    const signOut = vi.fn(async () => ({ error: null }))
+    const client = { auth: { signOut } }
+    adminAuthMocks.getAdminSupabaseClient.mockReturnValue(client as never)
+    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
+      enrollment: { qrCode: 'data:image/svg+xml;utf-8,%3Csvg%2F%3E', secret: 'enrollment-secret' },
+      factorId: 'new-factor',
+    })
+    adminAuthMocks.cancelAdminEnrollment.mockResolvedValueOnce(undefined)
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('.admin-login__actions button.app-button--secondary').trigger('click')
+    await flushPromises()
+
+    expect(adminAuthMocks.cancelAdminEnrollment).toHaveBeenCalledWith(client, 'new-factor')
+    expect(adminAuthMocks.cancelAdminEnrollment.mock.invocationCallOrder[0]).toBeLessThan(signOut.mock.invocationCallOrder[0]!)
+    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('enrollment-secret')
+  })
+
+  it('keeps the enrollment retryable and does not sign out when restart cleanup fails', async () => {
+    const signOut = vi.fn()
+    adminAuthMocks.getAdminSupabaseClient.mockReturnValue({ auth: { signOut } } as never)
+    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
+      enrollment: { qrCode: 'data:image/svg+xml;utf-8,%3Csvg%2F%3E', secret: 'enrollment-secret' },
+      factorId: 'new-factor',
+    })
+    adminAuthMocks.cancelAdminEnrollment.mockRejectedValueOnce(new Error('provider-secret-detail'))
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    await wrapper.get('.admin-login__actions button.app-button--secondary').trigger('click')
+    await flushPromises()
+
+    expect(signOut).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('등록을 취소하지 못했습니다')
+    expect(wrapper.text()).not.toContain('provider-secret-detail')
+    expect(wrapper.find('#admin-totp').exists()).toBe(true)
   })
 
   it('uses AppState for the empty dashboard instead of invented metrics', async () => {

@@ -26,4 +26,21 @@ describe('administrator route middleware', () => {
       replace: true,
     })
   })
+
+  it('does not compose server administrator dependencies for public routes', async () => {
+    vi.resetModules()
+    const getServerRequireAdmin = vi.fn(() => {
+      throw new Error('SERVER_CONFIG_INVALID')
+    })
+    vi.doMock('../../../server/modules/identity/admin-auth', () => ({ getServerRequireAdmin }))
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    vi.stubGlobal('createError', ({ statusCode, statusMessage }: { statusCode: number, statusMessage: string }) => (
+      Object.assign(new Error(statusMessage), { statusCode, statusMessage })
+    ))
+    const { default: adminAuthMiddleware } = await import('../../../server/middleware/admin-auth')
+
+    await expect(adminAuthMiddleware({ path: '/api/health', context: {} } as never)).resolves.toBeUndefined()
+    await expect(adminAuthMiddleware({ path: '/admin/login', context: {} } as never)).resolves.toBeUndefined()
+    expect(getServerRequireAdmin).not.toHaveBeenCalled()
+  })
 })

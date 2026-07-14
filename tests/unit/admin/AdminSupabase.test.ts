@@ -41,7 +41,13 @@ describe('administrator-only Supabase Auth wrapper', () => {
 
   it('uses Auth-generated TOTP enrollment when no verified factor exists', async () => {
     const { beginAdminAuthentication } = await import('../../../app/utils/admin-supabase')
-    const unverifiedFactor = { factor_type: 'totp', id: 'unverified-factor', status: 'unverified' }
+    const unverifiedFactor = {
+      created_at: '2026-07-14T10:00:00.000Z',
+      factor_type: 'totp',
+      id: 'unverified-factor',
+      status: 'unverified',
+      updated_at: '2026-07-14T10:00:00.000Z',
+    }
     const client = {
       auth: {
         mfa: {
@@ -61,6 +67,7 @@ describe('administrator-only Supabase Auth wrapper', () => {
             data: { all: [unverifiedFactor], phone: [], totp: [], webauthn: [] },
             error: null,
           })),
+          unenroll: vi.fn(async () => ({ data: { id: 'unverified-factor' }, error: null })),
         },
         signInWithPassword: vi.fn(async () => ({ data: {}, error: null })),
       },
@@ -77,6 +84,54 @@ describe('administrator-only Supabase Auth wrapper', () => {
       factorType: 'totp',
       friendlyName: 'PHOTO:NEXT administrator',
     })
+    expect(client.auth.mfa.unenroll).toHaveBeenCalledWith({ factorId: 'unverified-factor' })
+    expect(client.auth.mfa.unenroll.mock.invocationCallOrder[0]).toBeLessThan(
+      client.auth.mfa.enroll.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it('fails closed without enrolling when stale-factor cleanup fails', async () => {
+    const { beginAdminAuthentication } = await import('../../../app/utils/admin-supabase')
+    const enroll = vi.fn(async () => ({
+      data: {
+        id: 'unexpected-new-factor',
+        totp: {
+          qr_code: 'data:image/svg+xml;utf-8,%3Csvg%2F%3E',
+          secret: 'unexpected-secret',
+          uri: 'otpauth://unexpected',
+        },
+        type: 'totp',
+      },
+      error: null,
+    }))
+    const client = {
+      auth: {
+        mfa: {
+          enroll,
+          listFactors: vi.fn(async () => ({
+            data: {
+              all: [{
+                created_at: '2026-07-14T10:00:00.000Z',
+                factor_type: 'totp',
+                id: 'stale-factor',
+                status: 'unverified',
+                updated_at: '2026-07-14T10:00:00.000Z',
+              }],
+              phone: [],
+              totp: [],
+              webauthn: [],
+            },
+            error: null,
+          })),
+          unenroll: vi.fn(async () => ({ data: null, error: new Error('secret provider detail') })),
+        },
+        signInWithPassword: vi.fn(async () => ({ data: {}, error: null })),
+      },
+    }
+
+    await expect(beginAdminAuthentication(client as never, 'admin@example.test', 'password-from-form'))
+      .rejects.toThrow('ADMIN_AUTH_FAILED')
+    expect(enroll).not.toHaveBeenCalled()
   })
 
   it('explicitly challenges and verifies TOTP while dropping the returned refresh token', async () => {

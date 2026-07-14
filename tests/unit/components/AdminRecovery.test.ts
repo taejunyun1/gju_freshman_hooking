@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,6 +16,20 @@ const pendingRequest = {
 
 const approvedCode = 'BwcHBwcHBwcHBwcHBwcHBw'
 
+const relativeLuminance = (hex: string): number => {
+  const channels = hex.match(/[0-9a-f]{2}/giu)?.map(channel => Number.parseInt(channel, 16) / 255) ?? []
+  const [red = 0, green = 0, blue = 0] = channels.map(channel => (
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  ))
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+}
+
+const contrastRatio = (foreground: string, background: string): number => {
+  const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background))
+  const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background))
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
 describe('AdminRecovery', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -31,6 +46,21 @@ describe('AdminRecovery', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
     sessionStorage.clear()
+  })
+
+  it('keeps the 12px recovery status label at WCAG AA text contrast', () => {
+    const component = readFileSync('app/components/admin/AdminRecovery.vue', 'utf8')
+    const tokens = readFileSync('app/assets/css/tokens.css', 'utf8')
+    const recordRule = component.match(/\.recovery-record\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body
+    const statusRule = component.match(/\.recovery-record__state\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body
+    const foregroundToken = statusRule?.match(/color:\s*var\(--color-(?<name>[a-z-]+)\)/u)?.groups?.name
+    const backgroundToken = recordRule?.match(/background:\s*var\(--color-(?<name>[a-z-]+)\)/u)?.groups?.name
+    const foreground = tokens.match(new RegExp(`--color-${foregroundToken}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+    const background = tokens.match(new RegExp(`--color-${backgroundToken}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+
+    expect(foreground).toBeDefined()
+    expect(background).toBeDefined()
+    expect(contrastRatio(foreground!, background!)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('reveals a one-time code only after explicit approval', async () => {

@@ -21,6 +21,8 @@ export const createAdminAuthMiddleware = (dependencies: AdminAuthMiddlewareDepen
 }
 
 export default defineEventHandler(async (event) => {
+  if (!isProtectedAdminPath(event.path)) return
+
   try {
     await createAdminAuthMiddleware({ requireAdmin: getServerRequireAdmin() })(event as unknown as AdminEvent)
   }

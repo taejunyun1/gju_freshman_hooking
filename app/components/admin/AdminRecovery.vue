@@ -209,7 +209,7 @@ onBeforeUnmount(() => {
 .recovery-record__state {
   border: 1px solid var(--color-signal);
   padding: 0.375rem 0.5rem;
-  color: var(--color-signal);
+  color: var(--color-ink);
   white-space: nowrap;
 }
 

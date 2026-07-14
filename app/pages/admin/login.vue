@@ -5,6 +5,7 @@ import AppButton from '../../components/common/AppButton.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
 import {
   beginAdminAuthentication,
+  cancelAdminEnrollment,
   getAdminSupabaseClient,
   verifyAdminTotp,
   type AdminAuthenticationStep,
@@ -99,13 +100,38 @@ const submitTotp = async (): Promise<void> => {
 }
 
 const restart = async (): Promise<void> => {
+  if (submitting.value) return
+  submitting.value = true
+  errorMessage.value = ''
+  const currentAuthentication = authentication.value
+  const client = getAdminSupabaseClient()
+
   try {
-    await getAdminSupabaseClient().auth.signOut({ scope: 'local' })
+    if (currentAuthentication?.enrollment) {
+      await cancelAdminEnrollment(client, currentAuthentication.factorId)
+    }
   }
-  finally {
+  catch {
+    errorMessage.value = '2단계 인증 등록을 취소하지 못했습니다. 다시 시도하세요.'
+    submitting.value = false
+    return
+  }
+
+  try {
+    const { error } = await client.auth.signOut({ scope: 'local' })
+    if (error) throw new Error('ADMIN_AUTH_FAILED')
     clearEnrollment()
     step.value = 'credentials'
-    errorMessage.value = ''
+  }
+  catch {
+    if (currentAuthentication?.enrollment) {
+      clearEnrollment()
+      step.value = 'credentials'
+    }
+    errorMessage.value = '로그인을 초기화하지 못했습니다. 다시 시도하세요.'
+  }
+  finally {
+    submitting.value = false
   }
 }
 
@@ -217,6 +243,7 @@ onBeforeUnmount(clearEnrollment)
             </AppButton>
             <AppButton
               variant="secondary"
+              :loading="submitting"
               @click="restart"
             >
               다시 로그인

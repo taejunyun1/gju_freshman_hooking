@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 type TestFactor = {
+  created_at: string
   factor_type: 'totp'
   id: string
   status: 'unverified' | 'verified'
+  updated_at: string
 }
 
 describe('local administrator bootstrap guard', () => {
@@ -38,10 +40,11 @@ describe('local administrator bootstrap guard', () => {
     expect(adapter.signIn).not.toHaveBeenCalled()
   })
 
-  it('leaves TOTP enrollment to the browser and reuses the single verified factor on later login', async () => {
+  it('replaces an interrupted browser enrollment and reuses the verified factor on later login', async () => {
     const { bootstrapLocalAdmin } = await import('../../../scripts/bootstrap-local-admin')
     const { beginAdminAuthentication, verifyAdminTotp } = await import('../../../app/utils/admin-supabase')
     const factors: TestFactor[] = []
+    let enrollmentCount = 0
     const write = vi.fn()
     const adapter = {
       createUser: vi.fn(async () => 'admin-1'),
@@ -49,7 +52,14 @@ describe('local administrator bootstrap guard', () => {
       upsertAdmin: vi.fn(async () => undefined),
     }
     const enroll = vi.fn(async () => {
-      const factor: TestFactor = { factor_type: 'totp', id: 'browser-factor-1', status: 'unverified' }
+      enrollmentCount += 1
+      const factor: TestFactor = {
+        created_at: '2026-07-14T10:00:00.000Z',
+        factor_type: 'totp',
+        id: `browser-factor-${enrollmentCount}`,
+        status: 'unverified',
+        updated_at: '2026-07-14T10:00:00.000Z',
+      }
       factors.push(factor)
       return {
         data: {
@@ -81,6 +91,12 @@ describe('local administrator bootstrap guard', () => {
             },
             error: null,
           })),
+          unenroll: vi.fn(async ({ factorId }: { factorId: string }) => {
+            const index = factors.findIndex(factor => factor.id === factorId)
+            if (index === -1) return { data: null, error: new Error('factor missing') }
+            factors.splice(index, 1)
+            return { data: { id: factorId }, error: null }
+          }),
           verify: vi.fn(async ({ factorId }: { factorId: string }) => {
             const factor = factors.find(candidate => candidate.id === factorId)
             if (factor) factor.status = 'verified'
@@ -116,14 +132,20 @@ describe('local administrator bootstrap guard', () => {
 
     const firstLogin = await beginAdminAuthentication(browserClient as never, 'local-admin@example.test', 'environment-only-password')
     expect(firstLogin.factorId).toBe('browser-factor-1')
-    expect(factors).toEqual([{ factor_type: 'totp', id: 'browser-factor-1', status: 'unverified' }])
+    expect(factors).toHaveLength(1)
 
-    await verifyAdminTotp(browserClient as never, firstLogin.factorId, '123456')
-    expect(factors).toEqual([{ factor_type: 'totp', id: 'browser-factor-1', status: 'verified' }])
+    const resumedLogin = await beginAdminAuthentication(browserClient as never, 'local-admin@example.test', 'environment-only-password')
+    expect(resumedLogin.factorId).toBe('browser-factor-2')
+    expect(factors).toHaveLength(1)
+    expect(factors[0]).toMatchObject({ id: 'browser-factor-2', status: 'unverified' })
+
+    await verifyAdminTotp(browserClient as never, resumedLogin.factorId, '123456')
+    expect(factors).toHaveLength(1)
+    expect(factors[0]).toMatchObject({ id: 'browser-factor-2', status: 'verified' })
 
     const laterLogin = await beginAdminAuthentication(browserClient as never, 'local-admin@example.test', 'environment-only-password')
-    expect(laterLogin).toEqual({ enrollment: null, factorId: 'browser-factor-1' })
-    expect(enroll).toHaveBeenCalledOnce()
+    expect(laterLogin).toEqual({ enrollment: null, factorId: 'browser-factor-2' })
+    expect(enroll).toHaveBeenCalledTimes(2)
     expect(factors).toHaveLength(1)
   })
 })
