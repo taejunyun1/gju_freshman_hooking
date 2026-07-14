@@ -5,6 +5,7 @@ import {
   AssessmentScoringError,
   scoreAssessment,
 } from '../../../server/modules/assessment/scoring'
+import { selectionLimits } from '../../../shared/schemas/assessment'
 import { questionGroups, trackKeys } from '../../../shared/types/domain'
 import type {
   AssessmentOption,
@@ -78,6 +79,40 @@ const deepFreeze = <T>(value: T): T => {
   return value
 }
 
+const safeString = (value: unknown) => {
+  try {
+    return String(value)
+  }
+  catch {
+    return '[unprintable]'
+  }
+}
+
+const safeSerialize = (value: unknown) => {
+  try {
+    return JSON.stringify(value) ?? '[not-serializable]'
+  }
+  catch {
+    return '[not-serializable]'
+  }
+}
+
+const collectErrorSurfaces = (value: unknown, seen = new Set<object>()): string[] => {
+  const surfaces = [safeString(value), safeSerialize(value)]
+  if (value instanceof Error) {
+    surfaces.push(value.message, value.stack ?? '')
+  }
+
+  if (value !== null && typeof value === 'object' && !seen.has(value)) {
+    seen.add(value)
+    if ('cause' in value && value.cause !== undefined) {
+      surfaces.push(...collectErrorSurfaces(value.cause, seen))
+    }
+  }
+
+  return surfaces
+}
+
 const expectScoringError = (
   callback: () => unknown,
   code: AssessmentScoringError['code'],
@@ -92,10 +127,18 @@ const expectScoringError = (
   }
 
   expect(caught).toBeInstanceOf(AssessmentScoringError)
-  expect((caught as AssessmentScoringError).code).toBe(code)
-  const serialized = JSON.stringify(caught)
+  const scoringError = caught as AssessmentScoringError
+  expect(scoringError.code).toBe(code)
+  const surfaces = collectErrorSurfaces(scoringError)
   for (const secret of secrets) {
-    expect(serialized).not.toContain(secret)
+    const serializedSecret = safeSerialize(secret)
+    const escapedSecret = serializedSecret.startsWith('"') && serializedSecret.endsWith('"')
+      ? serializedSecret.slice(1, -1)
+      : serializedSecret
+    for (const surface of surfaces) {
+      expect(surface).not.toContain(secret)
+      expect(surface).not.toContain(escapedSecret)
+    }
   }
 }
 
@@ -150,6 +193,28 @@ describe('scoreAssessment', () => {
     expect(careerPriority.trackScores.documentary).toBe(careerPriority.trackScores.art_photo)
     expect(careerPriority.rankedTracks.indexOf('documentary'))
       .toBeLessThan(careerPriority.rankedTracks.indexOf('art_photo'))
+  })
+
+  it('breaks rounded-total ties by raw result instead of raw total or style', () => {
+    const documentaryRawTotal = (3 / (1 * 3)) * 100 * selectionLimits.style.weight
+    const artPhotoRawTotal = (1 / (1 * 3)) * 100 * selectionLimits.result.weight
+    const round1 = (value: number) => Math.round(value * 10) / 10
+
+    expect(documentaryRawTotal).not.toBe(artPhotoRawTotal)
+    expect(round1(documentaryRawTotal)).toBe(round1(artPhotoRawTotal))
+    expect(round1(documentaryRawTotal)).toBe(10)
+
+    const scored = scoreAssessment(makeCatalog({
+      work: { commercial: 1 },
+      result: { art_photo: 1 },
+      style: { documentary: 3 },
+      career: { commercial: 1 },
+    }), baseSelections())
+
+    expect(scored.trackScores.documentary).toBe(10)
+    expect(scored.trackScores.art_photo).toBe(10)
+    expect(scored.rankedTracks.indexOf('art_photo'))
+      .toBeLessThan(scored.rankedTracks.indexOf('documentary'))
   })
 
   it('falls back to the fixed track order after all score ties', () => {
@@ -359,7 +424,7 @@ describe('scoreAssessment validation and determinism', () => {
     const wrongPrefix = catalog.map(option => option.group === 'work'
       ? { ...option, optionKey: 'result.ambiguous' as const }
       : option)
-    const rawWeight = '4'
+    const rawWeight = '4.000000000000001'
     const invalidWeight = catalog.map(option => option.group === 'work'
       ? {
           ...option,
