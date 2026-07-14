@@ -1,6 +1,6 @@
 # PHOTO:NEXT MVP 설계 명세
 
-- 상태: 사용자 설계 검토 전
+- 상태: 승인됨 — 교수진 콘텐츠 보강 포함
 - 작성일: 2026-07-14
 - 대상: 광주대학교 사진영상학과 신입생 관심사-교육환경 연결 서비스
 - 개발 주체: 1인 풀스택 개발자
@@ -17,6 +17,7 @@ PHOTO:NEXT는 지원 예정 학생이 하고 싶은 사진·영상 작업과 작
 - `PHOTO_NEXT_MVP_서비스기획서_v1.0.docx`
 - `PHOTO_NEXT_MVP_기술설계서_v1.0.docx`
 - `resource/curri-data.pdf` — 2026학년도 개설 예정 교과목, 학년·학기·학점·수업 목표
+- `docs/content/faculty-directory-guide.md` — 교수진 프로필, 전문분야, 상담·전문 연계 규칙
 
 원본 문서의 텍스트와 표를 모두 검토했다. 원본 렌더링에서는 로컬 한글 글꼴 문제로 일부 글자가 표시되지 않았으나, OOXML 본문과 표 데이터는 정상 추출되어 요구사항 검토에 사용했다.
 
@@ -367,15 +368,37 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 
 #### `faculty`
 
-- `id`, `name`, `title`, `bio`, `status`, `weekly_capacity`
-- `track_weights jsonb`, `activity_weights jsonb`, `result_weights jsonb`, `career_weights jsonb`
+- `id`, `name`, `title`, `employment_type`, `consultation_role`
+- `office`, `phone`, `email`, `website`, `contact_visibility jsonb`
+- `expertise_summary`, `bio`, `profile_sections jsonb`
+- `status`, `weekly_capacity`, `priority`, `source_date`, `last_verified_at`
 - `image_path`, `created_at`, `updated_at`
+- `employment_type`: `full_time`, `adjunct`, `practitioner`
+- `consultation_role`: `primary`, `specialist`
+
+#### `faculty_tags`
+
+- `faculty_id`, `tag_key`, `tag_label`, `category`, `weight`, `is_primary`
+- `category`: `track`, `activity`, `result`, `career`, `specialist`
+- `weight` check 0–3
+- `(faculty_id, tag_key, category)` unique
+
+#### `faculty_specialist_links`
+
+- `primary_faculty_id`, `specialist_faculty_id`, `tag_key`, `priority`, `explanation_template`
+- 전임교원 총괄과 겸임교원 전문 연계의 허용 조합을 관리
+- `(primary_faculty_id, specialist_faculty_id, tag_key)` unique
 
 #### `counseling_requests`
 
 - `id`, `prospect_id`, `assessment_id`, `status`
-- `recommended_primary_faculty_id`, `recommended_backup_faculty_id`
 - `assigned_faculty_id`, `admin_note`, `contacted_at`, `completed_at`, `closed_at`, `created_at`, `updated_at`
+
+#### `counseling_faculty_recommendations`
+
+- `counseling_request_id`, `faculty_id`, `role`, `rank`, `score`, `reason_snapshot jsonb`
+- `role`: `primary`, `backup`, `specialist`
+- `(counseling_request_id, role, rank)` unique
 
 #### `campaigns`
 
@@ -411,8 +434,11 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 - `resources (type, status, visibility, priority desc)`
 - `resources (source_date desc)` where `status in ('active', 'next_year_confirmed')`
 - `resource_tags (tag_key, weight desc)`
+- `faculty_tags (tag_key, category, weight desc)`
+- `faculty_specialist_links (primary_faculty_id, tag_key, priority desc)`
 - `counseling_requests (status, created_at desc)`
 - `counseling_requests (assigned_faculty_id, status)` where `status in ('assigned', 'contacted')`
+- `counseling_faculty_recommendations (counseling_request_id, role, rank)`
 - `events (event_name, created_at desc)`
 - `events (campaign_id, created_at desc)`
 - `daily_metrics (metric_date desc, metric_name)`
@@ -588,8 +614,10 @@ environment_score
 
 ### 10.7 교수 추천
 
+교수진 콘텐츠와 역할의 기준은 `docs/content/faculty-directory-guide.md`다. 총괄 상담교수 후보는 `active`, `full_time`, `primary`인 전임교원으로 제한한다. 조대연 교수는 사회·사람·포토스토리·포토커뮤니케이션, 윤태준 교수는 예술사진·영상·AI·설치·전시·개인창작, 김사라 교수는 지역·공공기관·아카이브·인터뷰·현장조사 태그를 중심으로 매칭한다.
+
 ```text
-faculty_score
+primary_faculty_score
   = track_match × 0.40
   + activity_match × 0.25
   + result_portfolio_match × 0.15
@@ -599,7 +627,23 @@ faculty_score
 load_score = max(0, 1 - open_assigned_count / weekly_capacity) × 100
 ```
 
-`weekly_capacity`가 0이면 추천 대상에서 제외한다. 시스템은 1순위와 예비 1명을 추천하지만 담당 교수의 최종 배정은 관리자만 한다. 점수가 같은 경우 현재 열린 상담 수, 교수 ID 순으로 결정한다.
+다큐멘터리 관심이 사회·사람·포토스토리에 가까우면 조대연 교수를, 지역·기관·아카이브·현장조사에 가까우면 김사라 교수를 우선한다. 두 방향이 같으면 두 교수를 총괄·예비로 함께 보여주고 현재 열린 상담 수로 순서를 정한다. 광고·패션·제품사진처럼 겸임교원의 전문성이 가장 높은 분야는 학생의 다른 관심 태그와 상담 용량으로 전임교원 총괄·예비를 정하고 곽동욱 겸임교수를 전문 연계로 표시한다. 근거 없이 특정 전임교원을 광고사진 전문가로 표현하지 않는다.
+
+전문 연계 후보는 `active`, `adjunct` 또는 `practitioner`, `specialist`인 교수진으로 제한한다.
+
+```text
+specialist_score
+  = specialist_tag_match × 0.50
+  + project_match × 0.30
+  + career_match × 0.20
+```
+
+- 영상·드론·VR·360은 윤태준 교수 총괄 우선 + 박재웅 겸임교수 연계
+- 전시·큐레이팅·예술이론은 윤태준 교수 총괄 우선 + 정철호 겸임교수 연계
+- 광고·패션·제품·뷰티·브랜드·스튜디오는 전임교원 총괄 + 곽동욱 겸임교수 연계
+- 다큐멘터리·사회·지역·아카이브가 함께 높으면 조대연·김사라 교수 공동 연계 가능
+
+전문 연계는 50점 이상을 최대 2명까지 표시한다. `weekly_capacity`가 0인 전임교원은 신규 총괄 추천에서 제외하되 공개 프로필은 유지한다. 총괄 점수가 같은 경우 현재 열린 상담 수, 관리자 우선순위, 교수 ID 순으로 결정한다. 시스템은 총괄 1명, 예비 1명, 전문 연계 0–2명을 추천하지만 실제 담당 교수의 최종 배정은 관리자만 한다.
 
 ### 10.8 원자적 완료와 최근 3개
 
@@ -623,7 +667,7 @@ load_score = max(0, 1 - open_assigned_count / weekly_capacity) × 100
 3. 4개 레인의 연결 근거 타임라인: V1 교과(1–4학년 학습 경로) → V2 장비·시설 → V3 비교과·프로젝트 → OUT 작품·진로
 4. 범주별 근거 카드와 구체적인 연결 이유
 5. 4개 트랙 점수와 교육환경 적합도
-6. 학생 작품, 진로, 지원 제도, 추천 교수
+6. 학생 작품, 진로, 지원 제도, 추천 총괄교수·예비교수·전문 연계교원
 7. 상담 신청 CTA
 
 타임라인의 V1–V3는 학년을 뜻하지 않고 편집 레인을 뜻한다. 실제 이수 학년이나 학기가 확인된 교과는 카드 메타데이터로 별도 표시한다. 결과 문구는 “당신은 광고사진형입니다”처럼 성격을 단정하지 않고 “선택한 관심사는 광고사진 실습과 높은 연결을 보입니다”처럼 설명한다.
@@ -883,7 +927,7 @@ Supabase Cron으로 데이터베이스 가까이에서 실행한다.
 
 실제 학과 콘텐츠는 코드와 분리된 운영 데이터로 입력한다. 각 레코드는 제목, 요약, 유형, 공개 상태, 출처 기준일, 연결 태그와 근거 문장을 가져야 한다. 교과 데이터는 `curri-data.pdf`의 2026학년도 개설 예정 표를 기준으로 구조화한 뒤 학과 확인을 거쳐 게시한다. 작품 이미지는 공개 동의와 대체 텍스트가 필수다. 사실 확인되지 않은 교과·장비·프로젝트·진로를 샘플 데이터 그대로 프로덕션에 공개하지 않는다.
 
-현재 제공된 사실 데이터는 2026 교과 표까지다. 장비·시설, 비교과·학과 프로젝트, 교수 전문 분야, 학생 작품, 진로, 지원 제도는 구현 시 관리 화면과 반입 서식을 먼저 제공하고, 학과가 확인한 레코드만 게시한다. 이 범주들을 임의로 작성하지 않으며, 출시 승인에서는 각 범주가 비어 있지 않고 공개 상태·출처 날짜·연결 태그를 갖췄는지 확인한다.
+현재 제공된 사실 데이터는 2026 교과 표와 `faculty-directory-guide.md`의 교수진 6명 프로필·추천 규칙이다. 교수 연락처는 필드별 공개 상태를 학과가 확인한 뒤 노출한다. 교수 사진은 사용 권한이 확인될 때까지 플레이스홀더를 사용한다. 장비·시설, 비교과·학과 프로젝트, 학생 작품, 진로, 지원 제도는 구현 시 관리 화면과 반입 서식을 먼저 제공하고, 학과가 확인한 레코드만 게시한다. 이 범주들을 임의로 작성하지 않으며, 출시 승인에서는 각 범주가 비어 있지 않고 공개 상태·출처 날짜·연결 태그를 갖췄는지 확인한다.
 
 ## 23. 공식 기술 참고
 
