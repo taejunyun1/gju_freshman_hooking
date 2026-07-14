@@ -414,6 +414,8 @@ git commit -m "feat: add student registration and login"
 **Files:**
 - Create: `server/modules/identity/admin-auth.ts`
 - Create: `server/middleware/admin-auth.ts`
+- Create: `supabase/migrations/202607140004_recovery_service.sql`
+- Create: `supabase/tests/recovery_service.test.sql`
 - Create: `server/api/admin/session.get.ts`
 - Create: `server/api/student/password/change.post.ts`
 - Create: `server/api/student/password/recovery/request.post.ts`
@@ -462,7 +464,9 @@ Verify the Supabase access token server-side, require `aal2`, check active `admi
 
 - [ ] **Step 4: Implement change and recovery transaction**
 
-The authenticated change endpoint verifies the current password, hashes the new password, updates the credential, and revokes other sessions. The anonymous request endpoint always returns HTTP 202 with `{ accepted: true }`. Admin approval generates 16 random bytes, stores only SHA-256, returns raw code once, and records an audit event. Complete consumes the code with `select ... for update`, rejects used/expired codes, updates password, marks consumed, and revokes all sessions in one RPC.
+Before implementing the endpoint, write a failing pgTAP contract and add `202607140004_recovery_service.sql`. Its `complete_credential_recovery` security-definer RPC receives only a recovery code hash and already-derived password material, locks the matching request with `select ... for update`, rejects used/expired/unverified requests, updates the credential, marks the request consumed, and revokes every active session in one transaction. It must use `set search_path = ''` and be executable only by `service_role`. Run `pnpm exec supabase db reset && pnpm exec supabase test db` before and after this migration.
+
+The authenticated change endpoint verifies the current password, hashes the new password, updates the credential, and revokes other sessions. The anonymous request endpoint always returns HTTP 202 with `{ accepted: true }`. Admin approval generates 16 random bytes, stores only SHA-256, returns raw code once, and records an audit event. Complete consumes the code through `complete_credential_recovery`; it rejects used/expired codes, updates the password, marks consumed, and revokes all sessions atomically.
 
 - [ ] **Step 5: Implement reset page states**
 
@@ -475,7 +479,7 @@ Run: `pnpm vitest run tests/integration/identity/admin-auth.test.ts tests/integr
 Expected: AAL1 rejected, stale sensitive auth rejected, recovery tests pass, type errors 0.
 
 ```bash
-git add server/modules/identity/admin-auth.ts server/middleware/admin-auth.ts server/api/admin/session.get.ts server/api/student/password server/api/admin/recovery app/pages/password/reset.vue tests/integration/identity/admin-auth.test.ts tests/integration/identity/recovery.test.ts
+git add server/modules/identity/admin-auth.ts server/middleware/admin-auth.ts server/api/admin/session.get.ts server/api/student/password server/api/admin/recovery supabase/migrations/202607140004_recovery_service.sql supabase/tests/recovery_service.test.sql app/pages/password/reset.vue tests/integration/identity/admin-auth.test.ts tests/integration/identity/recovery.test.ts
 git commit -m "feat: add administrator auth and recovery"
 ```
 
