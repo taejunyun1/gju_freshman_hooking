@@ -1,0 +1,282 @@
+[
+  {
+    "group": "work",
+    "optionKey": "work.photo_everyday",
+    "label": "인물·풍경·일상을 사진으로 촬영하기",
+    "visualKey": "photo_frame",
+    "trackWeights": { "documentary": 2, "art_photo": 3, "commercial": 1, "video": 0 },
+    "interestTags": ["photography", "portrait", "landscape", "daily_life", "field"],
+    "status": "active",
+    "sortOrder": 1
+  },
+  {
+    "group": "work",
+    "optionKey": "work.video_scene",
+    "label": "카메라로 영상 장면 촬영하기",
+    "visualKey": "video_frame",
+    "trackWeights": { "documentary": 1, "art_photo": 1, "commercial": 1, "video": 3 },
+    "interestTags": ["video", "camera", "cinematography", "scene"],
+    "status": "active",
+    "sortOrder": 2
+  },
+  {
+    "group": "work",
+    "optionKey": "work.video_post",
+    "label": "촬영한 영상을 편집하고 색보정하기",
+    "visualKey": "edit_timeline",
+    "trackWeights": { "documentary": 1, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["video", "editing", "color_grading", "post_production"],
+    "status": "active",
+    "sortOrder": 3
+  },
+  {
+    "group": "work",
+    "optionKey": "work.commercial_image",
+    "label": "제품·패션·광고 이미지 만들기",
+    "visualKey": "studio_still",
+    "trackWeights": { "documentary": 0, "art_photo": 1, "commercial": 3, "video": 1 },
+    "interestTags": ["commercial", "fashion", "product", "studio", "lighting", "brand"],
+    "status": "active",
+    "sortOrder": 4
+  },
+  {
+    "group": "work",
+    "optionKey": "work.interview_life",
+    "label": "사람을 인터뷰하고 삶을 기록하기",
+    "visualKey": "interview_strip",
+    "trackWeights": { "documentary": 3, "art_photo": 1, "commercial": 0, "video": 2 },
+    "interestTags": ["documentary", "interview", "people", "field", "storytelling"],
+    "status": "active",
+    "sortOrder": 5
+  },
+  {
+    "group": "work",
+    "optionKey": "work.brand_region",
+    "label": "브랜드·지역을 위한 콘텐츠 만들기",
+    "visualKey": "location_board",
+    "trackWeights": { "documentary": 2, "art_photo": 1, "commercial": 3, "video": 2 },
+    "interestTags": ["brand", "local_culture", "content", "planning", "public_content"],
+    "status": "active",
+    "sortOrder": 6
+  },
+  {
+    "group": "work",
+    "optionKey": "work.exhibition_install",
+    "label": "사진전이나 설치작업 만들기",
+    "visualKey": "gallery_grid",
+    "trackWeights": { "documentary": 1, "art_photo": 3, "commercial": 0, "video": 1 },
+    "interestTags": ["art_photo", "exhibition", "installation", "media_art"],
+    "status": "active",
+    "sortOrder": 7
+  },
+  {
+    "group": "work",
+    "optionKey": "work.music_shortform",
+    "label": "뮤직비디오·숏폼 영상 만들기",
+    "visualKey": "music_cuts",
+    "trackWeights": { "documentary": 0, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["video", "music_video", "shortform", "editing"],
+    "status": "active",
+    "sortOrder": 8
+  },
+  {
+    "group": "work",
+    "optionKey": "work.photobook",
+    "label": "사진집·포토북 만들기",
+    "visualKey": "photobook_spread",
+    "trackWeights": { "documentary": 2, "art_photo": 3, "commercial": 1, "video": 0 },
+    "interestTags": ["photobook", "editing", "sequencing", "portfolio"],
+    "status": "active",
+    "sortOrder": 9
+  },
+  {
+    "group": "work",
+    "optionKey": "work.project_plan",
+    "label": "콘텐츠와 프로젝트를 기획하기",
+    "visualKey": "project_board",
+    "trackWeights": { "documentary": 2, "art_photo": 2, "commercial": 2, "video": 2 },
+    "interestTags": ["planning", "project", "content", "cultural_planning"],
+    "status": "active",
+    "sortOrder": 10
+  },
+  {
+    "group": "result",
+    "optionKey": "result.photo_portfolio",
+    "label": "사진 포트폴리오",
+    "visualKey": "photo_frame",
+    "trackWeights": { "documentary": 1, "art_photo": 3, "commercial": 2, "video": 0 },
+    "interestTags": ["photography", "portfolio", "editing"],
+    "status": "active",
+    "sortOrder": 1
+  },
+  {
+    "group": "result",
+    "optionKey": "result.exhibit_photobook",
+    "label": "사진전·포토북",
+    "visualKey": "gallery_grid",
+    "trackWeights": { "documentary": 2, "art_photo": 3, "commercial": 0, "video": 0 },
+    "interestTags": ["exhibition", "photobook", "art_photo", "sequencing"],
+    "status": "active",
+    "sortOrder": 2
+  },
+  {
+    "group": "result",
+    "optionKey": "result.commercial_fashion",
+    "label": "광고·패션 이미지",
+    "visualKey": "studio_still",
+    "trackWeights": { "documentary": 0, "art_photo": 1, "commercial": 3, "video": 0 },
+    "interestTags": ["commercial", "fashion", "brand", "studio"],
+    "status": "active",
+    "sortOrder": 3
+  },
+  {
+    "group": "result",
+    "optionKey": "result.documentary",
+    "label": "다큐멘터리 사진·영상",
+    "visualKey": "interview_strip",
+    "trackWeights": { "documentary": 3, "art_photo": 1, "commercial": 0, "video": 2 },
+    "interestTags": ["documentary", "storytelling", "interview", "field"],
+    "status": "active",
+    "sortOrder": 4
+  },
+  {
+    "group": "result",
+    "optionKey": "result.brand_video",
+    "label": "브랜드 홍보영상",
+    "visualKey": "video_frame",
+    "trackWeights": { "documentary": 1, "art_photo": 0, "commercial": 3, "video": 3 },
+    "interestTags": ["brand", "video", "commercial", "promotion"],
+    "status": "active",
+    "sortOrder": 5
+  },
+  {
+    "group": "result",
+    "optionKey": "result.shortform_mv",
+    "label": "숏폼·뮤직비디오",
+    "visualKey": "music_cuts",
+    "trackWeights": { "documentary": 0, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["shortform", "music_video", "video", "editing"],
+    "status": "active",
+    "sortOrder": 6
+  },
+  {
+    "group": "result",
+    "optionKey": "result.video_showreel",
+    "label": "영상 촬영·편집 쇼릴",
+    "visualKey": "edit_timeline",
+    "trackWeights": { "documentary": 0, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["video", "cinematography", "editing", "showreel"],
+    "status": "active",
+    "sortOrder": 7
+  },
+  {
+    "group": "result",
+    "optionKey": "result.project_proposal",
+    "label": "콘텐츠·프로젝트 기획안",
+    "visualKey": "project_board",
+    "trackWeights": { "documentary": 2, "art_photo": 2, "commercial": 2, "video": 2 },
+    "interestTags": ["planning", "project", "proposal", "cultural_planning"],
+    "status": "active",
+    "sortOrder": 8
+  },
+  {
+    "group": "style",
+    "optionKey": "style.solo",
+    "label": "혼자 집중해서 작업",
+    "visualKey": "photobook_spread",
+    "trackWeights": { "documentary": 1, "art_photo": 3, "commercial": 1, "video": 1 },
+    "interestTags": ["solo", "art_photo", "research"],
+    "status": "active",
+    "sortOrder": 1
+  },
+  {
+    "group": "style",
+    "optionKey": "style.team",
+    "label": "팀으로 제작",
+    "visualKey": "project_board",
+    "trackWeights": { "documentary": 1, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["team", "collaboration", "video", "production"],
+    "status": "active",
+    "sortOrder": 2
+  },
+  {
+    "group": "style",
+    "optionKey": "style.field",
+    "label": "현장에서 촬영",
+    "visualKey": "location_board",
+    "trackWeights": { "documentary": 3, "art_photo": 1, "commercial": 1, "video": 2 },
+    "interestTags": ["field", "documentary", "local_culture"],
+    "status": "active",
+    "sortOrder": 3
+  },
+  {
+    "group": "style",
+    "optionKey": "style.studio",
+    "label": "스튜디오에서 촬영",
+    "visualKey": "studio_still",
+    "trackWeights": { "documentary": 0, "art_photo": 2, "commercial": 3, "video": 2 },
+    "interestTags": ["studio", "lighting", "commercial", "portrait"],
+    "status": "active",
+    "sortOrder": 4
+  },
+  {
+    "group": "style",
+    "optionKey": "style.interview",
+    "label": "사람을 만나고 인터뷰",
+    "visualKey": "interview_strip",
+    "trackWeights": { "documentary": 3, "art_photo": 1, "commercial": 0, "video": 2 },
+    "interestTags": ["interview", "people", "documentary", "oral_history"],
+    "status": "active",
+    "sortOrder": 5
+  },
+  {
+    "group": "style",
+    "optionKey": "style.post",
+    "label": "컴퓨터로 편집·후반작업",
+    "visualKey": "edit_timeline",
+    "trackWeights": { "documentary": 1, "art_photo": 2, "commercial": 2, "video": 3 },
+    "interestTags": ["editing", "post_production", "color_grading", "digital_image"],
+    "status": "active",
+    "sortOrder": 6
+  },
+  {
+    "group": "career",
+    "optionKey": "career.photo",
+    "label": "사진을 직접 촬영하고 보정해 작품·광고·포트폴리오로 완성하고 싶어요.",
+    "visualKey": "photo_frame",
+    "trackWeights": { "documentary": 1, "art_photo": 3, "commercial": 3, "video": 0 },
+    "interestTags": ["photography", "art_photo", "commercial", "portfolio", "freelance"],
+    "status": "active",
+    "sortOrder": 1
+  },
+  {
+    "group": "career",
+    "optionKey": "career.video",
+    "label": "영상을 직접 촬영하고 편집해 숏폼·다큐멘터리·브랜드 콘텐츠로 완성하고 싶어요.",
+    "visualKey": "video_frame",
+    "trackWeights": { "documentary": 1, "art_photo": 1, "commercial": 2, "video": 3 },
+    "interestTags": ["video", "shortform", "documentary", "brand", "showreel"],
+    "status": "active",
+    "sortOrder": 2
+  },
+  {
+    "group": "career",
+    "optionKey": "career.planning",
+    "label": "사진·영상 프로젝트를 기획하고 사람·지역·브랜드를 연결하는 일을 하고 싶어요.",
+    "visualKey": "project_board",
+    "trackWeights": { "documentary": 2, "art_photo": 2, "commercial": 3, "video": 2 },
+    "interestTags": ["planning", "project", "brand", "local_culture", "cultural_planning"],
+    "status": "active",
+    "sortOrder": 3
+  },
+  {
+    "group": "career",
+    "optionKey": "career.explore",
+    "label": "아직 구체적인 진로를 정하지 않았거나 사진·영상과 연결된 다른 가능성을 탐색하고 싶어요.",
+    "visualKey": "contact_sheet",
+    "trackWeights": { "documentary": 1, "art_photo": 1, "commercial": 1, "video": 1 },
+    "interestTags": ["exploration", "photography", "video", "planning"],
+    "status": "active",
+    "sortOrder": 4
+  }
+]
