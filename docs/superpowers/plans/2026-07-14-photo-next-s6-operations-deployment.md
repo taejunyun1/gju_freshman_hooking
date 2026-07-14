@@ -346,7 +346,7 @@ The checklist contains commands and result fields for lint, typecheck, all tests
 
 - [ ] **Step 2: Create content readiness matrix**
 
-List counts and reviewer fields for active 2026 courses, equipment, facilities, extracurriculars/projects, six faculty, public faculty contacts, student works with consent, careers, and support programs. Block production when any required category is empty, source date is missing, faculty contact is unverified, or work consent is absent.
+List counts and reviewer fields for active 2026 courses, 144 equipment inventory rows grouped into public equipment resources, four facilities, extracurriculars/projects, six faculty, public faculty contacts, student works with consent, careers, and support programs. Verify location totals 83/61, access totals 81/63, and explicit review states for 10 duplicate-code rows, 2 unidentified rows, and 4 quantity-check rows. Block production when any required public category is empty, source date is missing, unresolved inventory is counted as verified, faculty contact is unverified, or work consent is absent.
 
 - [ ] **Step 3: Run the complete release gate**
 

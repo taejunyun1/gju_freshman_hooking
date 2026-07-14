@@ -30,16 +30,17 @@
 - Create: `shared/schemas/result.ts`
 
 **Interfaces:**
-- Produces: `assessments`, `assessment_responses`, `resources`, `resource_tags`, `faculty`, `faculty_tags`, `faculty_specialist_links`; RPC `complete_assessment(jsonb)`
+- Produces: `assessments`, `assessment_responses`, `resources`, `resource_tags`, `equipment_inventory_items`, `faculty`, `faculty_tags`, `faculty_specialist_links`
 - Consumes: prospects, options, events from S1–S2
 
 - [ ] **Step 1: Write failing schema and RLS tests**
 
 ```sql
 begin;
-select plan(5);
+select plan(6);
 select has_table('public','assessments');
 select has_table('public','resources');
+select has_table('public','equipment_inventory_items');
 select has_table('public','faculty');
 select col_is_unique('public','assessments',array['public_id']);
 select policies_are('public','assessments',array[]::text[],'browser roles have no policy');
@@ -73,7 +74,7 @@ create table public.assessments (
 create index assessments_recent_idx on public.assessments(prospect_id, completed_at desc) where status = 'completed';
 ```
 
-Create response snapshots with question group, option key/label, weight snapshot, nullable `free_text`, and timestamp; a check permits free text only for `career.explore` and limits it to 30 characters. Create all resource types and statuses, 0–3 tag checks, faculty employment/consultation roles, contact visibility JSON, normalized faculty tags, and specialist links. `faculty_specialist_links.primary_faculty_id` is nullable; null means the specialist may accompany any active full-time primary consultant. Enforce link uniqueness with `unique nulls not distinct (primary_faculty_id,specialist_faculty_id,tag_key)`. Enable default-deny RLS on every table and index every FK and lookup listed in the design spec.
+Create response snapshots with question group, option key/label, weight snapshot, nullable `free_text`, and timestamp; a check permits free text only for `career.explore` and limits it to 30 characters. Create all resource types and statuses and 0–3 tag checks. Create `equipment_inventory_items` with internal identity PK, equipment resource FK, original inventory code, source row, location, access mode, availability, note, data-quality status and source date. Do not make the source inventory code unique because the provided list contains five duplicated codes; index it for quality review. Create faculty employment/consultation roles, contact visibility JSON, normalized faculty tags, and specialist links. `faculty_specialist_links.primary_faculty_id` is nullable; null means the specialist may accompany any active full-time primary consultant. Enforce link uniqueness with `unique nulls not distinct (primary_faculty_id,specialist_faculty_id,tag_key)`. Enable default-deny RLS on every table and index every FK and lookup listed in the design spec.
 
 - [ ] **Step 4: Define result snapshot contract**
 
@@ -110,12 +111,14 @@ git commit -m "feat: add result matching schema"
 **Files:**
 - Create: `supabase/seed/curriculum-2026.json`
 - Create: `supabase/seed/faculty-2026.json`
+- Create: `supabase/seed/equipment-inventory-2026-07-14.json`
+- Create: `supabase/seed/facilities-2026.json`
 - Create: `scripts/seed-content.ts`
 - Create: `tests/unit/content/content-seed.test.ts`
 
 **Interfaces:**
-- Produces: 41 draft course resources; 6 draft faculty profiles; normalized faculty tags and specialist links
-- Consumes: `resource/curri-data.pdf` as internal source and `docs/content/faculty-directory-guide.md` as committed source
+- Produces: 41 draft course resources; 144 individual equipment rows grouped into draft public resources; 4 draft facility resources; 6 draft faculty profiles; normalized tags and specialist links
+- Consumes: `resource/curri-data.pdf`, `docs/content/equipment-facilities-guide.md`, and `docs/content/faculty-directory-guide.md`
 
 - [ ] **Step 1: Write failing source-count and identity tests**
 
@@ -125,9 +128,18 @@ expect(new Set(curriculum.map(course => course.title)).size).toBe(41)
 expect(faculty.map(person => person.name)).toEqual(['조대연','윤태준','김사라','박재웅','정철호','곽동욱'])
 expect(faculty.filter(person => person.employmentType === 'full_time')).toHaveLength(3)
 expect(faculty.filter(person => person.consultationRole === 'specialist')).toHaveLength(3)
+expect(equipment).toHaveLength(144)
+expect(equipment.filter(item => item.locationKey === 'department_equipment_room')).toHaveLength(83)
+expect(equipment.filter(item => item.locationKey === 'fantasy_lab')).toHaveLength(61)
+expect(equipment.filter(item => item.accessMode === 'reservation')).toHaveLength(81)
+expect(equipment.filter(item => item.accessMode === 'inquiry')).toHaveLength(63)
+expect(equipment.filter(item => item.dataQualityStatus === 'duplicate_code')).toHaveLength(10)
+expect(equipment.filter(item => item.dataQualityStatus === 'unidentified')).toHaveLength(2)
+expect(equipment.filter(item => item.dataQualityStatus === 'quantity_check')).toHaveLength(4)
+expect(facilities.map(item => item.facilityKey)).toEqual(['studio_a_horizon','studio_b','darkroom','computer_lab'])
 ```
 
-Assert every course has academic year 2026, grade year, term, credits, course goal, source date, and at least one tag. Assert every faculty profile contains the guide’s expertise summary, profile, education, careers, teaching fields, projects, tags, status `draft`, and contact visibility `admin_only`.
+Assert every course has academic year 2026, grade year, term, credits, course goal, source date, and at least one tag. Assert duplicated-code items total 10 rows across five codes, unidentified items total 2, quantity-check items total 4, and all other inventory rows are verified. Assert every facility starts draft with source date and tags. Assert every faculty profile contains the guide’s expertise summary, profile, education, careers, teaching fields, projects, tags, status `draft`, and contact visibility `admin_only`.
 
 - [ ] **Step 2: Run and verify missing seed files**
 
@@ -160,7 +172,11 @@ Preserve original goal text in `metadata.source_goal` and store a proofread stud
 
 Copy every structured field from `docs/content/faculty-directory-guide.md`. Generate weights by its locked rules: platform tags 3, teaching-only activity tags 2, project result tags 2, career tags 3, adjunct specialist tags 3. Create 윤태준–박재웅 links for video/drone/VR/360, 윤태준–정철호 links for exhibition/curating/art theory, and null-primary–곽동욱 links for commercial/fashion/product/beauty/brand/studio/lighting. All contact fields start `admin_only`.
 
-- [ ] **Step 5: Validate, seed, and verify counts**
+- [ ] **Step 5: Transcribe and group the equipment and facilities**
+
+Copy all 144 individual rows from `docs/content/equipment-facilities-guide.md`, preserving name, code, location, access mode, availability, note, source row and 2026-07-14 source date. Mark both rows for each of the five duplicated codes `duplicate_code`, the two unnamed lenses `unidentified`, and the four quantity-check rows `quantity_check`; all other rows are `verified`. Group public equipment resources by normalized model name plus location and set confirmed quantity to the verified row count only. Add the guide’s category tags and model-specific tags. Create draft facility resources for 스튜디오 A(호리존), 스튜디오 B, 암실, 컴퓨터실 with the exact keys, activities, course examples and verification notes in the guide.
+
+- [ ] **Step 6: Validate, seed, and verify counts**
 
 Run:
 
@@ -169,12 +185,12 @@ pnpm vitest run tests/unit/content/content-seed.test.ts
 pnpm tsx scripts/seed-content.ts
 ```
 
-Expected: PASS; script prints `courses=41 faculty=6` and no validation errors.
+Expected: PASS; script prints `courses=41 equipment_items=144 facilities=4 faculty=6` and no validation errors.
 
-- [ ] **Step 6: Commit verified content seed**
+- [ ] **Step 7: Commit verified content seed**
 
 ```bash
-git add supabase/seed/curriculum-2026.json supabase/seed/faculty-2026.json scripts/seed-content.ts tests/unit/content/content-seed.test.ts
+git add supabase/seed/curriculum-2026.json supabase/seed/faculty-2026.json supabase/seed/equipment-inventory-2026-07-14.json supabase/seed/facilities-2026.json scripts/seed-content.ts tests/unit/content/content-seed.test.ts
 git commit -m "feat: seed curriculum and faculty content"
 ```
 
@@ -203,6 +219,10 @@ it('allows no more than two resources with one primary tag', () => {
 it('returns fewer than the cap instead of unrelated filler', () => {
   expect(rankResources(oneRelevantCourse).course).toHaveLength(1)
 })
+it('caps equipment and facilities at four combined cards', () => {
+  const ranked = rankResources(manyEquipmentAndFacilities)
+  expect(ranked.equipment.length + ranked.facility.length).toBe(4)
+})
 it('keeps support programs out of the environment score', () => {
   expect(computeEnvironmentScore({ course: 80, equipmentFacility: 70, extracurricularProject: 60, faculty: 90, careerPortfolio: 50, support: 100 })).toBe(72.0)
 })
@@ -223,7 +243,7 @@ const affinity = (student: Record<string, number>, tags: ResourceTag[]) => {
 }
 ```
 
-Filter inactive/private rows first. Sort with the locked four keys, apply category caps and primary-tag diversity, then compute each category fit as the weighted average of displayed affinity. Compute environment score as `course*.35 + equipmentFacility*.20 + extracurricularProject*.15 + faculty*.15 + careerPortfolio*.15`; a missing verified category is 0 and support is never included. Build grade-year buckets 1–4 from selected courses. A missing year remains an explicit empty state; do not move a course to a false year.
+Filter inactive/private rows first. Sort with the locked four keys, apply category caps and primary-tag diversity, then compute each category fit as the weighted average of displayed affinity. Equipment and facility candidates share one ranked pool and a combined cap of four, while the snapshot preserves each item’s original type. Compute environment score as `course*.35 + equipmentFacility*.20 + extracurricularProject*.15 + faculty*.15 + careerPortfolio*.15`; a missing verified category is 0 and support is never included. Build grade-year buckets 1–4 from selected courses. A missing year remains an explicit empty state; do not move a course to a false year.
 
 - [ ] **Step 4: Implement evidence sentences**
 
@@ -395,7 +415,7 @@ Expected: FAIL because result components do not exist.
 
 - [ ] **Step 3: Implement the evidence-first responsive result**
 
-Render interest clips, V1 curriculum with four grade-year groups, V2 equipment/facilities, V3 extracurricular/projects, and OUT works/careers. Mobile uses vertical lanes; 1024px and above uses horizontal lanes. Each resource displays its reason and source date. Empty categories say “확인된 학과 데이터를 준비 중입니다” without inventing recommendations.
+Render interest clips, V1 curriculum with four grade-year groups, V2 equipment/facilities, V3 extracurricular/projects, and OUT works/careers. Mobile uses vertical lanes; 1024px and above uses horizontal lanes. Each resource displays its reason and source date. Equipment cards show grouped verified quantity, department equipment room or fantasy lab, reservation or inquiry access, and the reservation-system link; they do not expose inventory codes. Facility cards show only administrator-verified operation notes. Empty categories say “확인된 학과 데이터를 준비 중입니다” without inventing recommendations.
 
 Animate one playhead and reveal for no more than 500ms; card transitions are 160ms. Under `prefers-reduced-motion: reduce`, render the final state immediately. Faculty cards use “추천 총괄교수”, “예비 상담교수”, and “함께 연결되는 전문분야”. Public contacts render only when the snapshot field is public.
 
@@ -427,12 +447,14 @@ git commit -m "feat: add evidence timeline results"
 
 - [ ] **Step 1: Write full result E2E**
 
-In the E2E setup, promote only the named commercial curriculum fixtures and all six faculty fixtures from draft to active, assign positive weekly capacity to the three full-time faculty, and keep every contact `admin_only`.
+In the E2E setup, promote only the named commercial curriculum fixtures, verified Aputure/Profoto lighting groups, 스튜디오 A(호리존), and all six faculty fixtures from draft to active. Assign positive weekly capacity to the three full-time faculty, keep every contact `admin_only`, and leave duplicated/unidentified/quantity-check inventory rows unpublished.
 
 ```ts
 test('commercial student sees curriculum and 곽동욱 specialist evidence', async ({ page }) => {
   await completeCommercialAssessment(page)
   await expect(page.getByText('커머셜 포토그라피 기초 워크숍')).toBeVisible()
+  await expect(page.getByText('스튜디오 A(호리존)')).toBeVisible()
+  await expect(page.getByText(/프로포토 B10|APUTURE 600X/)).toBeVisible()
   await expect(page.getByText('곽동욱')).toBeVisible()
   await expect(page.getByText('추천 총괄교수')).toBeVisible()
 })

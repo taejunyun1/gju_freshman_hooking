@@ -38,7 +38,7 @@
 |---:|---|---|---|
 | S1 | `2026-07-14-photo-next-s1-foundation-identity.md` | 배포 가능한 앱 셸, 학생 계정·세션, 관리자 MFA 셸 | 없음 |
 | S2 | `2026-07-14-photo-next-s2-assessment.md` | 4단계 평가와 재현 가능한 트랙 점수 | S1 |
-| S3 | `2026-07-14-photo-next-s3-results-matching.md` | 커리큘럼·교수진 seed, 매칭, 결과 타임라인, 최근 3개 | S2 |
+| S3 | `2026-07-14-photo-next-s3-results-matching.md` | 교과 41개·기자재 144개·시설 4곳·교수진 6명 seed, 매칭, 결과 타임라인, 최근 3개 | S2 |
 | S4 | `2026-07-14-photo-next-s4-counseling.md` | 상담 신청, 교수 추천, 관리자 배정·상태 전이 | S3 |
 | S5 | `2026-07-14-photo-next-s5-admin-operations.md` | 학생·자원·교수·캠페인 관리와 XLSX | S4 |
 | S6 | `2026-07-14-photo-next-s6-operations-deployment.md` | 지표·보존·보안·접근성·부하·프로덕션 배포 | S5 |
@@ -55,7 +55,7 @@
 | 데이터 모델·인덱스·RLS | S1–S6의 SQL Task |
 | 학생 인증·개인정보·세션·복구·MFA | S1, S6 |
 | 4단계 선택지·트랙 점수 | S2 |
-| 2026 커리큘럼·자원·환경 점수·최근 3개 | S3 |
+| 2026 커리큘럼·기자재·시설·자원·환경 점수·최근 3개 | S3 |
 | 전임 총괄·예비·겸임 전문 연계 추천 | S3, S5 |
 | 상담 신청·배정·상태·전달 요약 | S4 |
 | 학생·자원·교수·캠페인·XLSX 관리자 기능 | S5 |

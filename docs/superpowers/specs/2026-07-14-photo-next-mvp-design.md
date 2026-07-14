@@ -18,6 +18,7 @@ PHOTO:NEXT는 지원 예정 학생이 하고 싶은 사진·영상 작업과 작
 - `PHOTO_NEXT_MVP_기술설계서_v1.0.docx`
 - `resource/curri-data.pdf` — 2026학년도 개설 예정 교과목, 학년·학기·학점·수업 목표
 - `docs/content/faculty-directory-guide.md` — 교수진 프로필, 전문분야, 상담·전문 연계 규칙
+- `docs/content/equipment-facilities-guide.md` — 2026-07-14 기준 기자재 144개와 스튜디오·암실·컴퓨터실
 
 원본 문서의 텍스트와 표를 모두 검토했다. 원본 렌더링에서는 로컬 한글 글꼴 문제로 일부 글자가 표시되지 않았으나, OOXML 본문과 표 데이터는 정상 추출되어 요구사항 검토에 사용했다.
 
@@ -358,12 +359,23 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 - 유형: `course`, `equipment`, `facility`, `extracurricular`, `project`, `student_work`, `career`, `support`
 - 상태: `draft`, `active`, `next_year_confirmed`, `archived`
 - 교과 `metadata`: `academic_year`, `grade_year`, `term`, `credits`, `former_name`, `course_goal`, `convergence_major`
+- 기자재 `metadata`: `location_key`, `category`, `confirmed_quantity`, `access_mode`, `source_url`
+- 시설 `metadata`: `facility_key`, `activities`, `related_course_keys`, `operation_note`, `last_verified_at`
 
 #### `resource_tags`
 
 - `resource_id`, `tag_key`, `weight smallint`, `is_primary`
 - `weight` check 0–3
 - `(resource_id, tag_key)` unique
+
+#### `equipment_inventory_items`
+
+- `id`, `equipment_resource_id`, `inventory_code`, `source_row`, `location_key`
+- `access_mode`, `availability_state`, `note`, `data_quality_status`, `source_date`
+- `access_mode`: `reservation`, `inquiry`
+- `availability_state`: `available`, `unavailable`, `unknown`
+- `data_quality_status`: `verified`, `duplicate_code`, `unidentified`, `quantity_check`
+- 2026-07-14 원문에 중복 코드 5건이 있으므로 `inventory_code`는 unique로 만들지 않고 내부 identity PK로 개별 항목을 식별
 
 #### `assessment_options`
 
@@ -445,6 +457,8 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 - `resources (type, status, visibility, priority desc)`
 - `resources (source_date desc)` where `status in ('active', 'next_year_confirmed')`
 - `resource_tags (tag_key, weight desc)`
+- `equipment_inventory_items (equipment_resource_id, data_quality_status)`
+- `equipment_inventory_items (inventory_code)`
 - `faculty_tags (tag_key, category, weight desc)`
 - `faculty_specialist_links (primary_faculty_id, tag_key, priority desc)`
 - `counseling_requests (status, created_at desc)`
@@ -600,6 +614,8 @@ resource_affinity(r)
 4. `id` 오름차순
 
 동일 주 태그 자원이 한 범주 결과의 2개를 초과하지 않도록 다양성 규칙을 적용한다. 자원이 부족하면 사실과 무관한 항목을 채우지 않고 최대치보다 적게 표시한다.
+
+기자재는 동일 위치·동일 모델의 개별 재고를 하나의 공개 자원으로 묶고 확인된 수량을 표시한다. 내부 관리에서는 144개 개별 항목과 코드를 유지한다. `duplicate_code`, `unidentified`, `quantity_check` 상태는 정확한 코드·모델·수량이 검수될 때까지 개별 공개 추천에서 제외한다. 이용 가능 표시는 기준일 스냅샷임을 밝히고 실제 대여는 [기자재 예약 시스템](https://gjureserve.co.kr) 또는 학과 문의로 확인하게 한다.
 
 ### 10.5 교육환경 적합도
 
@@ -932,6 +948,8 @@ Supabase Cron으로 데이터베이스 가까이에서 실행한다.
 - 결과의 모든 자원은 학생 선택과 연결되는 구체적 이유를 표시한다.
 - 실제 학과 데이터가 각 자원 상한을 만족하거나, 부족한 범주가 운영자에게 명확히 경고된다.
 - 교과·장비·비교과·교수·작품·진로의 출처 기준일과 공개 상태가 검증된다.
+- 기자재 개별 항목이 기자재실 83개, 판타지랩 61개, 총 144개와 일치하고 중복 코드 5건·확인 필요 6건의 검수 상태가 표시된다.
+- 스튜디오 A(호리존), 스튜디오 B, 암실, 컴퓨터실의 운영·예약 정보가 학과 확인을 거친다.
 - 최근 3개 결과, 상담 상태, 관리자 내보내기가 데이터 규칙과 일치한다.
 - 타인 결과, 학생 목록, 원문 전화번호가 권한 없이 노출되지 않는다.
 - 자동 테스트, 17 req/s 부하, WCAG 2.2 AA 핵심 검사가 통과한다.
@@ -941,7 +959,7 @@ Supabase Cron으로 데이터베이스 가까이에서 실행한다.
 
 실제 학과 콘텐츠는 코드와 분리된 운영 데이터로 입력한다. 각 레코드는 제목, 요약, 유형, 공개 상태, 출처 기준일, 연결 태그와 근거 문장을 가져야 한다. 교과 데이터는 `curri-data.pdf`의 2026학년도 개설 예정 표를 기준으로 구조화한 뒤 학과 확인을 거쳐 게시한다. 작품 이미지는 공개 동의와 대체 텍스트가 필수다. 사실 확인되지 않은 교과·장비·프로젝트·진로를 샘플 데이터 그대로 프로덕션에 공개하지 않는다.
 
-현재 제공된 사실 데이터는 2026 교과 표와 `faculty-directory-guide.md`의 교수진 6명 프로필·추천 규칙이다. 교수 연락처는 필드별 공개 상태를 학과가 확인한 뒤 노출한다. 교수 사진은 사용 권한이 확인될 때까지 플레이스홀더를 사용한다. 장비·시설, 비교과·학과 프로젝트, 학생 작품, 진로, 지원 제도는 구현 시 관리 화면과 반입 서식을 먼저 제공하고, 학과가 확인한 레코드만 게시한다. 이 범주들을 임의로 작성하지 않으며, 출시 승인에서는 각 범주가 비어 있지 않고 공개 상태·출처 날짜·연결 태그를 갖췄는지 확인한다.
+현재 제공된 사실 데이터는 2026 교과 표, `faculty-directory-guide.md`의 교수진 6명 프로필·추천 규칙, `equipment-facilities-guide.md`의 기자재 144개와 시설 4곳이다. 교수 연락처는 필드별 공개 상태를 학과가 확인한 뒤 노출하고, 교수·시설·기자재 사진은 사용 권한이 확인될 때까지 플레이스홀더를 사용한다. 기자재는 2026-07-14 스냅샷이므로 실제 이용 상태를 예약 시스템과 학과 문의로 다시 확인하게 한다. 비교과·학과 프로젝트, 학생 작품, 진로, 지원 제도는 구현 시 관리 화면과 반입 서식을 먼저 제공하고, 학과가 확인한 레코드만 게시한다. 이 범주들을 임의로 작성하지 않으며, 출시 승인에서는 각 범주가 비어 있지 않고 공개 상태·출처 날짜·연결 태그를 갖췄는지 확인한다.
 
 ## 23. 공식 기술 참고
 

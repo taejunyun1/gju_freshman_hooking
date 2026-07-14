@@ -123,9 +123,11 @@ git commit -m "feat: add administrator student operations"
 - Create: `server/api/admin/resources/[id].put.ts`
 - Create: `server/api/admin/resources/[id]/publish.post.ts`
 - Create: `server/api/admin/resources/[id]/archive.post.ts`
+- Create: `server/api/admin/resources/equipment/import/validate.post.ts`
 - Create: `app/pages/admin/resources/index.vue`
 - Create: `app/pages/admin/resources/[id].vue`
 - Create: `app/components/admin/ResourceEditor.vue`
+- Create: `app/components/admin/EquipmentInventoryTable.vue`
 - Create: `tests/integration/admin/resources.test.ts`
 
 **Interfaces:**
@@ -137,6 +139,8 @@ git commit -m "feat: add administrator student operations"
 ```ts
 expect((await publishResource(courseWithoutSourceDate)).error.code).toBe('RESOURCE_SOURCE_REQUIRED')
 expect((await publishResource(workWithoutConsent)).error.code).toBe('WORK_CONSENT_REQUIRED')
+expect((await publishResource(equipmentWithoutVerifiedItems)).error.code).toBe('EQUIPMENT_INVENTORY_UNVERIFIED')
+expect((await publishResource(facilityWithoutOperationVerification)).error.code).toBe('FACILITY_OPERATION_UNVERIFIED')
 expect((await updateResource(staleVersion)).status).toBe(409)
 ```
 
@@ -148,13 +152,13 @@ Expected: FAIL with missing endpoints.
 
 - [ ] **Step 3: Implement CRUD and publication checks**
 
-All types require title, summary, source date, visibility, priority, one primary tag, and connection template. Course additionally requires academic year, grade, term, credits, and goal. Student work additionally requires consent timestamp, image, alt text, related course/year/track. Image upload validates MIME `image/jpeg|image/png|image/webp`, 8MB maximum, randomized Storage path, and deletes failed orphan uploads.
+All types require title, summary, source date, visibility, priority, one primary tag, and connection template. Course additionally requires academic year, grade, term, credits, and goal. Student work additionally requires consent timestamp, image, alt text, related course/year/track. Equipment publication requires at least one verified inventory row; confirmed quantity is recomputed from verified rows and duplicate/unidentified/quantity-check rows never count. Facility publication requires verified operation note and `last_verified_at`. Image upload validates MIME `image/jpeg|image/png|image/webp`, 8MB maximum, randomized Storage path, and deletes failed orphan uploads.
 
 Update uses expected `updated_at`; stale writes return 409 and current data. Archive never deletes referenced records. Publish writes an audit event with changed field names, not full content.
 
 - [ ] **Step 4: Implement editor and preview**
 
-Editor separates content, tags, media, and publication. Result-card preview uses the same `ResourceCard` component as the student result. Disable publish until validator returns zero issues. Show source staleness when older than the configured academic cycle.
+Editor separates content, tags, media, and publication. Result-card preview uses the same `ResourceCard` component as the student result. Equipment inventory displays all 144 source rows by location with filters for duplicate code, unidentified model and quantity check; editing a code retains the original value in an audit event. Import validation reports expected totals 83/61/144, access totals 81/63, duplicate-code groups and unmatched source rows before applying any update. Facility editor requires location, operation/reservation note, activities and verification date. Disable publish until validator returns zero issues. Show source staleness when older than the configured academic cycle.
 
 - [ ] **Step 5: Verify and commit resource operations**
 
@@ -163,7 +167,7 @@ Run: `pnpm vitest run tests/integration/admin/resources.test.ts && pnpm nuxi typ
 Expected: type-specific required fields, upload, preview, stale update, publish, archive tests pass.
 
 ```bash
-git add server/modules/admin/resources.ts server/api/admin/resources app/pages/admin/resources app/components/admin/ResourceEditor.vue tests/integration/admin/resources.test.ts
+git add server/modules/admin/resources.ts server/api/admin/resources app/pages/admin/resources app/components/admin/ResourceEditor.vue app/components/admin/EquipmentInventoryTable.vue tests/integration/admin/resources.test.ts
 git commit -m "feat: add department resource management"
 ```
 
