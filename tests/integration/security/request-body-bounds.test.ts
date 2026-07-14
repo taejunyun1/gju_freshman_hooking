@@ -6,10 +6,16 @@ import {
 import { createBodyGuardWorker } from '../../../cloudflare/request-body-guard.mjs'
 
 const guardedUrl = 'https://photo-next.example/api/events'
+const defaultMaxRequestBodyBytes = 65_536
 
-const streamRequest = (chunks: Uint8Array[], onCancel: () => void) => {
+const streamRequest = (
+  chunks: Uint8Array[],
+  onCancel: () => void,
+  url = guardedUrl,
+  headers: Record<string, string> = {},
+) => {
   let index = 0
-  return new Request(guardedUrl, {
+  return new Request(url, {
     body: new ReadableStream<Uint8Array>({
       cancel: onCancel,
       pull(controller) {
@@ -23,6 +29,7 @@ const streamRequest = (chunks: Uint8Array[], onCancel: () => void) => {
     headers: {
       'content-type': 'application/json',
       origin: 'https://photo-next.example',
+      ...headers,
     },
     method: 'POST',
   } as RequestInit)
@@ -102,8 +109,10 @@ describe('bounded request bodies', () => {
     '/api/student/assessment/validate%2F',
   ])('does not read a known oversized Cloudflare %s request before forwarding an overflow marker', async (path) => {
     let pulls = 0
+    let cancellations = 0
     const request = new Request(new URL(path, guardedUrl), {
       body: new ReadableStream<Uint8Array>({
+        cancel() { cancellations += 1 },
         pull(controller) {
           pulls += 1
           controller.enqueue(new Uint8Array(16_384))
@@ -143,6 +152,7 @@ describe('bounded request bodies', () => {
     await worker.fetch(request, {}, {})
 
     expect(pulls).toBe(0)
+    expect(cancellations).toBe(1)
     expect(received).toEqual([{
       bytes: 2,
       cookie: 'photo_next_session=opaque-session',
@@ -150,6 +160,148 @@ describe('bounded request bodies', () => {
       marker: '1',
       origin: 'https://photo-next.example',
     }])
+  })
+
+  it.each([
+    '/not-found',
+    '/api/events/subpath',
+    '/api/student/login',
+  ])('bounds a known million-byte Cloudflare %s body before Nitro routing', async (path) => {
+    let pulls = 0
+    const cancelled = vi.fn()
+    const request = new Request(new URL(path, guardedUrl), {
+      body: new ReadableStream<Uint8Array>({
+        cancel: cancelled,
+        pull(controller) {
+          pulls += 1
+          controller.enqueue(new Uint8Array(1_000_000))
+          controller.close()
+        },
+      }, { highWaterMark: 0 }),
+      duplex: 'half',
+      headers: {
+        'content-length': '1000000',
+        'content-type': 'application/json',
+      },
+      method: 'POST',
+    } as RequestInit)
+    const received: Array<{ bytes: number, marker: string | null, url: string }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+          url: forwarded.url,
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(request, {}, {})
+
+    expect(pulls).toBe(0)
+    expect(cancelled).toHaveBeenCalledOnce()
+    expect(received).toEqual([{
+      bytes: 2,
+      marker: '1',
+      url: new URL(path, guardedUrl).href,
+    }])
+  })
+
+  it('enforces the default bound when Content-Length understates the body', async () => {
+    const cancelled = vi.fn()
+    const request = streamRequest([
+      new Uint8Array(defaultMaxRequestBodyBytes),
+      new Uint8Array(defaultMaxRequestBodyBytes),
+    ], cancelled, 'https://photo-next.example/not-found', { 'content-length': '1' })
+    const received: Array<{ bytes: number, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(request, {}, {})
+
+    expect(cancelled).toHaveBeenCalledOnce()
+    expect(received).toEqual([{ bytes: 2, marker: '1' }])
+  })
+
+  it('enforces the default bound for an unknown-length chunked login body', async () => {
+    const cancelled = vi.fn()
+    const request = streamRequest([
+      new Uint8Array(32_768),
+      new Uint8Array(32_768),
+      new Uint8Array(32_768),
+    ], cancelled, 'https://photo-next.example/api/student/login')
+    const received: Array<{ bytes: number, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(request, {}, {})
+
+    expect(cancelled).toHaveBeenCalledOnce()
+    expect(received).toEqual([{ bytes: 2, marker: '1' }])
+  })
+
+  it('forwards an exact default-limit body on a non-overridden path unchanged', async () => {
+    const cancelled = vi.fn()
+    const url = 'https://photo-next.example/api/events/subpath?source=limit-test'
+    const request = streamRequest([
+      new Uint8Array(defaultMaxRequestBodyBytes),
+    ], cancelled, url)
+    const received: Array<{ bytes: number, marker: string | null, url: string }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+          url: forwarded.url,
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(request, {}, {})
+
+    expect(cancelled).not.toHaveBeenCalled()
+    expect(received).toEqual([{ bytes: defaultMaxRequestBodyBytes, marker: null, url }])
+  })
+
+  it('clears a client-spoofed overflow marker on a default-limit path', async () => {
+    const request = new Request('https://photo-next.example/api/student/login', {
+      body: '{}',
+      headers: {
+        'content-type': 'application/json',
+        'x-photo-next-body-overflow': '1',
+      },
+      method: 'POST',
+    })
+    const received: Array<{ body: string, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          body: await forwarded.text(),
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(request, {}, {})
+
+    expect(received).toEqual([{ body: '{}', marker: null }])
   })
 
   it.each(['PUT', 'PATCH', 'OUTPUT'])(

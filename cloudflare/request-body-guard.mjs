@@ -1,9 +1,11 @@
 export const MAX_REQUEST_BODY_BYTES = 8_192
+// Current mutation endpoints accept small JSON; add route-specific exceptions to the table below.
+export const DEFAULT_MAX_REQUEST_BODY_BYTES = 65_536
 export const requestBodyOverflowHeader = 'x-photo-next-body-overflow'
 
-const guardedRoutes = new Set([
-  '/api/events',
-  '/api/student/assessment/validate',
+const requestBodyLimitOverrides = new Map([
+  ['/api/events', MAX_REQUEST_BODY_BYTES],
+  ['/api/student/assessment/validate', MAX_REQUEST_BODY_BYTES],
 ])
 
 const normalizeGuardedPath = (pathname) => {
@@ -20,8 +22,9 @@ const normalizeGuardedPath = (pathname) => {
 // Mirror Nitro's Cloudflare requestHasBody check so method mismatches cannot bypass the bound.
 const nitroBuffersRequestBody = request => /post|put|patch/iu.test(request.method)
 
-const isGuardedRequest = request => nitroBuffersRequestBody(request)
-  && guardedRoutes.has(normalizeGuardedPath(new URL(request.url).pathname))
+const requestBodyLimit = request => requestBodyLimitOverrides.get(
+  normalizeGuardedPath(new URL(request.url).pathname),
+) ?? DEFAULT_MAX_REQUEST_BODY_BYTES
 
 const parseContentLength = (value) => {
   if (!value || !/^\d+$/u.test(value.trim())) return undefined
@@ -51,25 +54,38 @@ const replaceRequestBody = (request, body, overflow) => {
 
 const overflowRequest = request => replaceRequestBody(request, '{}', true)
 
-const readBoundedRequest = async (request) => {
+const cancelRequestBody = async (request) => {
+  if (!request.body) return
+  try {
+    await request.body.cancel()
+  }
+  catch {
+    // A locked or already disturbed body is still replaced by the bounded sentinel.
+  }
+}
+
+const readBoundedRequest = async (request, maxBytes) => {
   const contentLength = parseContentLength(request.headers.get('content-length'))
-  if ((contentLength ?? 0) > MAX_REQUEST_BODY_BYTES) return overflowRequest(request)
+  if ((contentLength ?? 0) > maxBytes) {
+    await cancelRequestBody(request)
+    return overflowRequest(request)
+  }
   if (!request.body) return replaceRequestBody(request, new Uint8Array(), false)
 
   const reader = request.body.getReader()
-  const body = new Uint8Array(MAX_REQUEST_BODY_BYTES + 1)
+  const body = new Uint8Array(maxBytes + 1)
   let retainedBytes = 0
   while (true) {
     const result = await reader.read()
     if (result.done) break
 
-    const remaining = MAX_REQUEST_BODY_BYTES + 1 - retainedBytes
+    const remaining = maxBytes + 1 - retainedBytes
     if (remaining > 0) {
       const retainedLength = Math.min(result.value.byteLength, remaining)
       body.set(result.value.subarray(0, retainedLength), retainedBytes)
       retainedBytes += retainedLength
     }
-    if (retainedBytes > MAX_REQUEST_BODY_BYTES) {
+    if (retainedBytes > maxBytes) {
       try {
         await reader.cancel()
       }
@@ -86,7 +102,9 @@ const readBoundedRequest = async (request) => {
 export const createBodyGuardWorker = worker => ({
   ...worker,
   async fetch(request, env, context) {
-    const guarded = isGuardedRequest(request) ? await readBoundedRequest(request) : request
+    const guarded = nitroBuffersRequestBody(request)
+      ? await readBoundedRequest(request, requestBodyLimit(request))
+      : request
     return worker.fetch(guarded, env, context)
   },
 })

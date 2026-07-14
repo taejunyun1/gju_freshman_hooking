@@ -1,4 +1,5 @@
 export const MAX_REQUEST_BODY_BYTES: number
+export const DEFAULT_MAX_REQUEST_BODY_BYTES: number
 export const requestBodyOverflowHeader: string
 
 type WorkerLike<Environment = unknown, Context = unknown> = {

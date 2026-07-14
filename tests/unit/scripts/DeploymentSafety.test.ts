@@ -71,9 +71,13 @@ describe('deployment and E2E safety contracts', () => {
   it('routes Wrangler through the checked-in body guard before generated Nitro output', () => {
     const wrangler = readFileSync('wrangler.jsonc', 'utf8')
     const worker = readFileSync('cloudflare/worker.mjs', 'utf8')
+    const guard = readFileSync('cloudflare/request-body-guard.mjs', 'utf8')
+    const guardTypes = readFileSync('cloudflare/request-body-guard.d.mts', 'utf8')
 
     expect(wrangler).toMatch(/"main":\s*"cloudflare\/worker\.mjs"/u)
     expect(worker).toContain("from '../.output/server/index.mjs'")
     expect(worker).toContain('createBodyGuardWorker')
+    expect(guard).toMatch(/DEFAULT_MAX_REQUEST_BODY_BYTES\s*=\s*65_536/u)
+    expect(guardTypes).toContain('DEFAULT_MAX_REQUEST_BODY_BYTES')
   })
 })
