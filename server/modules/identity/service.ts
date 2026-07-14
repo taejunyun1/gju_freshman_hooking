@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LoginInput, LoginResult, RegistrationInput, RegistrationResult, StudentSession } from '../../../shared/types/api'
 import { AppError } from '../../utils/app-error'
 import { decodeBase64urlSecret, randomBytes, type RandomBytes } from '../../utils/web-crypto'
+import { bytesFromPostgresBytea, postgresByteaFromBytes } from '../../utils/postgres-bytea'
 import { createEventWriter, type EventWriter } from '../metrics/events'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { generateNickname } from './nickname'
@@ -79,8 +80,6 @@ const base64FromBytes = (bytes: Uint8Array): string => {
   return btoa(binary)
 }
 
-const bytesFromBase64 = (value: string): Uint8Array => Uint8Array.from(atob(value), (character) => character.charCodeAt(0))
-
 const asDate = (value: string): Date => {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) throw new Error('IDENTITY_STORE_INVALID')
@@ -88,7 +87,9 @@ const asDate = (value: string): Date => {
 }
 
 const throwOnStoreError = (error: { code?: string } | null): void => {
-  if (error && error.code !== 'PGRST116') throw new Error('IDENTITY_STORE_UNAVAILABLE')
+  if (error && error.code !== 'PGRST116') {
+    throw new Error('IDENTITY_STORE_UNAVAILABLE')
+  }
 }
 
 const createSupabaseDependencies = (
@@ -109,7 +110,7 @@ const createSupabaseDependencies = (
   findProspectByPhoneHmac: async (phoneHmac) => {
     const { data, error } = await client.from('prospects')
       .select('id')
-      .eq('phone_hmac', base64FromBytes(phoneHmac))
+      .eq('phone_hmac', postgresByteaFromBytes(phoneHmac))
       .maybeSingle()
     throwOnStoreError(error)
     return data ? { id: data.id as number } : null
@@ -123,11 +124,11 @@ const createSupabaseDependencies = (
     const { data, error } = await client.rpc('register_student', {
       p_applicant_stage: input.applicantStage,
       p_nickname: input.nickname,
-      p_password_hash: base64FromBytes(input.passwordHash),
-      p_password_salt: base64FromBytes(input.passwordSalt),
-      p_phone_ciphertext: base64FromBytes(input.phoneCiphertext),
-      p_phone_hmac: base64FromBytes(input.phoneHmac),
-      p_phone_iv: base64FromBytes(input.phoneIv),
+      p_password_hash: postgresByteaFromBytes(input.passwordHash),
+      p_password_salt: postgresByteaFromBytes(input.passwordSalt),
+      p_phone_ciphertext: postgresByteaFromBytes(input.phoneCiphertext),
+      p_phone_hmac: postgresByteaFromBytes(input.phoneHmac),
+      p_phone_iv: postgresByteaFromBytes(input.phoneIv),
       p_region: input.region,
       p_school_name: input.schoolName,
     })
@@ -139,7 +140,7 @@ const createSupabaseDependencies = (
   findCredentialByPhoneHmac: async (phoneHmac) => {
     const { data, error } = await client.from('student_credentials')
       .select('prospect_id,password_hash,password_salt,locked_until,prospect:prospects!inner(nickname)')
-      .eq('prospects.phone_hmac', base64FromBytes(phoneHmac))
+      .eq('prospects.phone_hmac', postgresByteaFromBytes(phoneHmac))
       .maybeSingle()
     throwOnStoreError(error)
     if (!data) return null
@@ -152,14 +153,14 @@ const createSupabaseDependencies = (
     return {
       prospectId: data.prospect_id as number,
       nickname: prospect.nickname,
-      passwordHash: bytesFromBase64(data.password_hash),
-      passwordSalt: bytesFromBase64(data.password_salt),
+      passwordHash: bytesFromPostgresBytea(data.password_hash),
+      passwordSalt: bytesFromPostgresBytea(data.password_salt),
       lockedUntil: data.locked_until ? asDate(data.locked_until as string) : null,
     }
   },
   recordLoginFailure: async (phoneHmac) => {
     const { error } = await client.rpc('record_student_login_failure', {
-      p_phone_hmac: base64FromBytes(phoneHmac),
+      p_phone_hmac: postgresByteaFromBytes(phoneHmac),
     })
     throwOnStoreError(error)
   },
@@ -168,14 +169,14 @@ const createSupabaseDependencies = (
       p_expires_at: expiresAt.toISOString(),
       p_idle_expires_at: idleExpiresAt.toISOString(),
       p_prospect_id: prospectId,
-      p_token_hash: base64FromBytes(tokenHash),
+      p_token_hash: postgresByteaFromBytes(tokenHash),
     })
     throwOnStoreError(error)
     return data === true ? { expiresAt } : null
   },
   readSession: async (tokenHash) => {
     const { data, error } = await client.rpc('touch_student_session', {
-      p_token_hash: base64FromBytes(tokenHash),
+      p_token_hash: postgresByteaFromBytes(tokenHash),
     })
     throwOnStoreError(error)
     const result = Array.isArray(data) ? data[0] : null
@@ -198,7 +199,7 @@ const createSupabaseDependencies = (
   revokeSession: async (tokenHash, now) => {
     const { error } = await client.from('student_sessions')
       .update({ revoked_at: now.toISOString() })
-      .eq('token_hash', base64FromBytes(tokenHash))
+      .eq('token_hash', postgresByteaFromBytes(tokenHash))
       .is('revoked_at', null)
     throwOnStoreError(error)
   },

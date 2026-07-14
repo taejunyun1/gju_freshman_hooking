@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { AppError } from '../../utils/app-error'
 import { decodeBase64urlSecret, hmacSha256, randomBytes, sha256, utf8, type RandomBytes } from '../../utils/web-crypto'
 import { getServerSupabaseClient } from '../../utils/supabase'
+import { bytesFromPostgresBytea, postgresByteaFromBytes } from '../../utils/postgres-bytea'
 import { hashPassword, verifyPassword } from './password'
 import { normalizeKoreanPhone } from './phone'
 
@@ -38,14 +39,7 @@ export type PasswordRecoveryDependencies = {
   }) => Promise<boolean>
 }
 
-export const postgresByteaFromBytes = (bytes: Uint8Array): string => (
-  `\\x${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`
-)
-
-export const bytesFromPostgresBytea = (value: string): Uint8Array => {
-  if (!/^\\x(?:[0-9a-f]{2})*$/i.test(value)) throw new Error('RECOVERY_STORE_INVALID')
-  return Uint8Array.from(value.slice(2).match(/.{2}/g) ?? [], byte => Number.parseInt(byte, 16))
-}
+export { bytesFromPostgresBytea, postgresByteaFromBytes } from '../../utils/postgres-bytea'
 
 const asDate = (value: string): Date => {
   const parsed = new Date(value)

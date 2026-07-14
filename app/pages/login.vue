@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess } from '../../shared/types/api'
 
+const hydrated = ref(false)
 const submitting = ref(false)
 const errorMessage = ref('')
 const form = reactive({ phone: '', password: '' })
+
+onMounted(() => {
+  hydrated.value = true
+})
 
 const submitLogin = async (): Promise<void> => {
   submitting.value = true
@@ -59,6 +64,10 @@ const submitLogin = async (): Promise<void> => {
           class="login-form"
           @submit.prevent="submitLogin"
         >
+          <fieldset
+            class="login-form__fieldset"
+            :disabled="!hydrated || submitting"
+          >
           <div class="login-form__field">
             <label for="login-phone">휴대전화 번호</label>
             <input
@@ -93,10 +102,10 @@ const submitLogin = async (): Promise<void> => {
           <button
             class="login-form__submit"
             type="submit"
-            :disabled="submitting"
           >
             {{ submitting ? '로그인 중…' : '내 경로 이어 보기' }}
           </button>
+          </fieldset>
         </form>
       </div>
     </section>
@@ -200,7 +209,14 @@ h1 {
   word-break: keep-all;
 }
 
-.login-form { display: grid; gap: 1.25rem; }
+.login-form__fieldset {
+  min-inline-size: 0;
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
 .login-form__field { display: grid; gap: 0.5rem; }
 
 .login-form label {

@@ -5,10 +5,6 @@ const studentSession = useStudentSessionStore()
 const credentials = studentSession.consumeInitialCredentials()
 
 if (!credentials) void navigateTo('/start', { replace: true })
-
-const continueToAssessment = async (): Promise<void> => {
-  await navigateTo('/assessment', { replace: true })
-}
 </script>
 
 <template>
@@ -47,21 +43,26 @@ const continueToAssessment = async (): Promise<void> => {
         <dl class="credentials-page__sheet">
           <div>
             <dt>NICKNAME</dt>
-            <dd>{{ credentials.nickname }}</dd>
+            <dd data-testid="nickname">{{ credentials.nickname }}</dd>
           </div>
           <div>
             <dt>INITIAL PASSWORD</dt>
-            <dd class="credentials-page__password">{{ credentials.initialPassword }}</dd>
+            <dd
+              class="credentials-page__password"
+              data-testid="initial-password"
+            >
+              {{ credentials.initialPassword }}
+            </dd>
           </div>
         </dl>
 
-        <button
+        <NuxtLink
           class="credentials-page__continue"
-          type="button"
-          @click="continueToAssessment"
+          to="/login"
+          replace
         >
-          확인했고, 다음으로 가기
-        </button>
+          로그인하러 가기
+        </NuxtLink>
       </div>
     </section>
   </main>
@@ -195,8 +196,10 @@ h1 {
 }
 
 .credentials-page__continue {
+  display: grid;
   min-height: 3.25rem;
   width: 100%;
+  place-items: center;
   margin-top: 1.25rem;
   border: 1px solid var(--color-sequence);
   border-radius: 0.25rem;
@@ -204,6 +207,7 @@ h1 {
   color: var(--color-surface);
   font-family: var(--font-display);
   font-weight: 750;
+  text-decoration: none;
   cursor: pointer;
 }
 

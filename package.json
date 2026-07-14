@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
+    "deploy:preview": "node scripts/verify-env.mjs && wrangler deploy --env staging --dry-run",
     "dev": "nuxt dev",
+    "lint": "eslint .",
     "postinstall": "nuxt prepare",
     "test": "vitest run",
+    "test:sql": "supabase db reset --local && supabase test db --local",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",

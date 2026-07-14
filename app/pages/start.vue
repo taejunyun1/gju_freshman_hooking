@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess, RegistrationInput, RegistrationResult } from '../../shared/types/api'
 import { useStudentSessionStore } from '../stores/student-session'
 
 const studentSession = useStudentSessionStore()
+const hydrated = ref(false)
 const submitting = ref(false)
 const errorMessage = ref('')
 const form = reactive<RegistrationInput>({
@@ -11,6 +12,10 @@ const form = reactive<RegistrationInput>({
   schoolName: '',
   applicantStage: 'high3',
   region: 'gwangju',
+})
+
+onMounted(() => {
+  hydrated.value = true
 })
 
 const submitRegistration = async (): Promise<void> => {
@@ -78,6 +83,10 @@ const submitRegistration = async (): Promise<void> => {
           class="account-form"
           @submit.prevent="submitRegistration"
         >
+          <fieldset
+            class="account-form__fieldset"
+            :disabled="!hydrated || submitting"
+          >
           <div class="account-form__field">
             <label for="phone">휴대전화 번호</label>
             <input
@@ -150,10 +159,10 @@ const submitRegistration = async (): Promise<void> => {
           <button
             class="account-form__submit"
             type="submit"
-            :disabled="submitting"
           >
             {{ submitting ? '확인 중…' : '내 연결 경로 시작하기' }}
           </button>
+          </fieldset>
         </form>
 
         <p class="account-page__footnote">이미 계정이 있다면 로그인 화면으로 바로 안내합니다.</p>
@@ -262,7 +271,14 @@ h1 {
   word-break: keep-all;
 }
 
-.account-form { display: grid; gap: 1.25rem; }
+.account-form__fieldset {
+  min-inline-size: 0;
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
 
 .account-form__field { display: grid; gap: 0.5rem; }
 

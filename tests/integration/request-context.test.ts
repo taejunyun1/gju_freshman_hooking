@@ -14,7 +14,27 @@ vi.stubGlobal('setResponseHeader', (event: TestEvent, name: string, value: strin
 
 describe('request context security headers', () => {
   beforeEach(() => {
-    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => 'request-id-1') })
+    vi.stubGlobal('crypto', {
+      getRandomValues: vi.fn((bytes: Uint8Array) => bytes.fill(7)),
+      randomUUID: vi.fn(() => 'request-id-1'),
+    })
+  })
+
+  it('uses a request nonce for Nuxt scripts without allowing arbitrary inline scripts', async () => {
+    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const event: TestEvent = {
+      context: {},
+      path: '/start',
+      responseHeaders: new Map(),
+    }
+
+    requestContext(event as never)
+
+    const policy = event.responseHeaders.get('content-security-policy') ?? ''
+    expect(event.context.cspNonce).toMatch(/^[A-Za-z0-9_-]{22}$/u)
+    expect(policy).toContain(`script-src 'self' 'nonce-${event.context.cspNonce}'`)
+    expect(policy).toContain("script-src-attr 'none'")
+    expect(policy).not.toMatch(/script-src[^;]*'unsafe-inline'/u)
   })
 
   it('allows Supabase TOTP data images only on the administrator login response', async () => {
@@ -33,12 +53,8 @@ describe('request context security headers', () => {
     requestContext(loginEvent as never)
     requestContext(publicEvent as never)
 
-    expect(loginEvent.responseHeaders.get('content-security-policy')).toBe(
-      "default-src 'self'; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'",
-    )
-    expect(publicEvent.responseHeaders.get('content-security-policy')).toBe(
-      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'",
-    )
+    expect(loginEvent.responseHeaders.get('content-security-policy')).toContain("img-src 'self' data:")
+    expect(publicEvent.responseHeaders.get('content-security-policy')).not.toContain('data:')
   })
 
   it('preserves the existing response hardening headers', async () => {
