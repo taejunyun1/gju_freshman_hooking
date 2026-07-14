@@ -113,4 +113,12 @@ export const assessmentCatalogOptionSchema = z.object({
     .refine(tags => new Set(tags).size === tags.length, 'interest tags must be unique'),
   status: z.enum(['draft', 'active', 'archived']),
   sortOrder: z.number().int().min(1).max(100),
-}).strict()
+}).strict().superRefine((option, context) => {
+  if (!optionKeySchemas[option.group].safeParse(option.optionKey).success) {
+    context.addIssue({
+      code: 'custom',
+      message: 'option key must match its group format',
+      path: ['optionKey'],
+    })
+  }
+})

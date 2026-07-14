@@ -415,6 +415,42 @@ describe('scoreAssessment validation and determinism', () => {
     )
   })
 
+  it.each([
+    'work.',
+    'work.bad-key',
+    'work.a.b',
+    'work.Bad',
+    'work.한글',
+  ] as const)('rejects an unselected malformed catalog key without exposing it: %s', (malformedKey) => {
+    const catalog = [
+      ...makeCatalog(uniformWeights({ documentary: 1 })),
+      makeOption(malformedKey, { documentary: 1 }, ['private_interest'], { sortOrder: 2 }),
+    ]
+
+    expectScoringError(
+      () => scoreAssessment(catalog, baseSelections()),
+      'ASSESSMENT_CATALOG_INVALID',
+      [malformedKey],
+    )
+  })
+
+  it('validates a malformed catalog key before validating a selection that references it', () => {
+    const malformedKey = 'work.bad-key'
+    const catalog = [
+      ...makeCatalog(uniformWeights({ documentary: 1 })),
+      makeOption(malformedKey, { documentary: 1 }, ['private_interest'], { sortOrder: 2 }),
+    ]
+
+    expectScoringError(
+      () => scoreAssessment(catalog, {
+        ...baseSelections(),
+        work: [malformedKey],
+      }),
+      'ASSESSMENT_CATALOG_INVALID',
+      [malformedKey],
+    )
+  })
+
   it('rejects duplicate, ambiguous, and invalid-weight catalog entries without exposing raw data', () => {
     const catalog = makeCatalog(uniformWeights({ documentary: 1 }))
     const duplicateKey = [
