@@ -553,13 +553,20 @@ git commit -m "feat: add administrator recovery shell"
 ### Task 7: S1 end-to-end and Worker preview gate
 
 **Files:**
+- Create: `app/pages/assessment.vue`
+- Modify: `app/pages/credentials.vue`
+- Modify: `app/pages/login.vue`
 - Create: `tests/e2e/identity.spec.ts`
 - Create: `scripts/verify-env.mjs`
+- Create: `tests/unit/scripts/VerifyEnv.test.ts`
+- Create: `tests/unit/pages/StudentAssessmentPage.test.ts`
+- Modify: `playwright.config.ts`
+- Modify: `wrangler.jsonc`
 - Modify: `package.json`
 
 **Interfaces:**
 - Consumes: complete S1 student and admin flows
-- Produces: repeatable local and Cloudflare preview verification commands
+- Produces: authenticated student handoff plus repeatable local and Cloudflare preview verification commands
 
 - [ ] **Step 1: Write the failing identity E2E**
 
@@ -570,13 +577,13 @@ test('new student can register, save credentials, log in, and log out', async ({
   await page.getByLabel('학교명').fill('광주고등학교')
   await page.getByLabel('현재 상태').selectOption('high3')
   await page.getByLabel('지역').selectOption('gwangju')
-  await page.getByRole('button', { name: '시작하기' }).click()
+  await page.getByRole('button', { name: '내 연결 경로 시작하기' }).click()
   await expect(page).toHaveURL('/credentials')
   const nickname = await page.getByTestId('nickname').textContent()
   const password = await page.getByTestId('initial-password').textContent()
-  await page.getByRole('link', { name: '로그인' }).click()
+  await page.getByRole('link', { name: '로그인하러 가기' }).click()
   await page.getByLabel('휴대전화 번호').fill('01012345678')
-  await page.getByLabel('비밀번호').fill(password!)
+  await page.getByLabel('임시 비밀번호').fill(password!)
   await page.getByRole('button', { name: '로그인' }).click()
   await expect(page.getByText(`${nickname}님`)).toBeVisible()
   await page.getByRole('button', { name: '로그아웃' }).click()
@@ -586,6 +593,8 @@ test('new student can register, save credentials, log in, and log out', async ({
 
 - [ ] **Step 2: Run the completed identity E2E**
 
+Before GREEN, make the student handoff real: the one-time credential page exposes the nickname and initial password only from memory, then links to `/login` instead of the nonexistent assessment route. A new authenticated `/assessment` handoff reads `/api/student/session`, greets the student by nickname, exposes logout, redirects an unauthenticated visitor to `/login`, and uses an honest `AppState` for assessment functionality that belongs to S2. It must not persist or redisplay the initial password.
+
 Run: `pnpm playwright test tests/e2e/identity.spec.ts --project=chromium`
 
 Expected: PASS with registration, one-time credentials, phone login, authenticated greeting, and logout.
@@ -593,6 +602,8 @@ Expected: PASS with registration, one-time credentials, phone login, authenticat
 - [ ] **Step 3: Add environment verifier**
 
 `scripts/verify-env.mjs` must exit nonzero when any required variable is absent, reject a PostgreSQL URI in Worker variables, and print variable names only. Add scripts `lint`, `typecheck`, `test:unit`, `test:integration`, `test:sql`, `test:e2e`, `build`, and `deploy:preview` to `package.json`.
+
+The E2E server must derive local Supabase runtime values without writing or printing secrets, use ephemeral cryptographic test values, and target only the local Supabase stack. The identity E2E must leave no generated password in logs, screenshots, traces, or committed files. Define a real `staging` Worker environment and verify Wrangler v4 syntax against the installed config schema and current official Cloudflare documentation. `deploy:preview` is dry-run only and must never publish.
 
 - [ ] **Step 4: Run the S1 gate and preview**
 
