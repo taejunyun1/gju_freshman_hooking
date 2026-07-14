@@ -1,5 +1,7 @@
 import { base64urlEncode, randomBytes } from '../utils/web-crypto'
 
+// Nitro scans server middleware in filename order; request metadata and headers must run first.
+
 const loopbackHosts = new Set(['127.0.0.1', '[::1]', 'localhost'])
 
 export const validatedSupabaseOrigin = (value: unknown): string => {

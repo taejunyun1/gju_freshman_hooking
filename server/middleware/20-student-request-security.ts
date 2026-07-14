@@ -1,5 +1,7 @@
 import { studentCsrfHeader, studentSessionCookie, verifyStudentCsrfToken } from '../utils/student-request-security'
 
+// Browser mutation checks intentionally follow request metadata and administrator authentication.
+
 type StudentRequestSecurityDependencies = {
   getCsrf: (event: unknown) => string | undefined
   getMethod: (event: unknown) => string
@@ -38,8 +40,9 @@ export const createStudentRequestSecurityMiddleware = (
   dependencies: StudentRequestSecurityDependencies,
 ) => async (event: unknown): Promise<void> => {
   const method = dependencies.getMethod(event).toUpperCase()
+  if (safeMethods.has(method)) return
   const path = canonicalStudentPath(dependencies.getPath(event))
-  if (path === null || safeMethods.has(method)) return
+  if (path === null) return
 
   const origin = dependencies.getOrigin(event)
   if (!origin || origin !== dependencies.getRequestOrigin(event)) forbidden()

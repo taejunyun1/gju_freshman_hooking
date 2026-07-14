@@ -16,6 +16,47 @@ describe('global request error sanitizer', () => {
     expect(error.statusCode).toBe(403)
     expect(error.statusMessage).toBe('REQUEST_FORBIDDEN')
     expect(error.message).toBe('REQUEST_FORBIDDEN')
+    expect(error.stack).toBeUndefined()
+  })
+
+  it.each(['ADMIN_REQUIRED', 'MFA_REQUIRED', 'REAUTH_REQUIRED'])(
+    'preserves only the known administrator 403 pair while deleting sensitive properties: %s',
+    async (code) => {
+      vi.stubGlobal('defineNitroPlugin', (plugin: unknown) => plugin)
+      const { sanitizeUnhandledError } = await import('../../server/plugins/error-sanitizer')
+      const error = Object.assign(new Error(code), {
+        cause: new Error('internal-admin-cause'),
+        data: { authorization: 'Bearer internal-admin-token' },
+        stack: 'internal-admin-stack',
+        statusCode: 403,
+        statusMessage: code,
+      })
+
+      sanitizeUnhandledError(error, { context: { requestId: '99999999-9999-4999-8999-999999999999' } })
+
+      expect(error.statusCode).toBe(403)
+      expect(error.statusMessage).toBe(code)
+      expect(error.message).toBe(code)
+      expect(error.cause).toBeUndefined()
+      expect(error.data).toBeUndefined()
+      expect(error.stack).toBeUndefined()
+    },
+  )
+
+  it('does not preserve a spoofed arbitrary 403 status message', async () => {
+    vi.stubGlobal('defineNitroPlugin', (plugin: unknown) => plugin)
+    const { sanitizeUnhandledError } = await import('../../server/plugins/error-sanitizer')
+    const error = Object.assign(new Error('ARBITRARY_FORBIDDEN'), {
+      statusCode: 403,
+      statusMessage: 'ARBITRARY_FORBIDDEN',
+    })
+
+    sanitizeUnhandledError(error, { context: {} })
+
+    expect(error.statusCode).toBe(500)
+    expect(error.statusMessage).toBe('Internal Server Error')
+    expect(error.message).toBe('Internal Server Error')
+    expect(error.stack).toBeUndefined()
   })
 
   it('scrubs an unhandled error before response serialization or logging while preserving its request ID', async () => {

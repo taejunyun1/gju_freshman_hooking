@@ -119,3 +119,27 @@ test('administrator recovery hard-load restores a future session before the clie
   await expect(page.getByRole('heading', { name: '복구 대기열' })).toBeVisible()
   await expect(page.getByText('복구 대기열을 불러오지 못했습니다. 세션을 확인한 뒤 다시 시도하세요.')).toBeVisible()
 })
+
+test('administrator API authentication failures keep safe 403 bodies and private request headers', async ({ request }) => {
+  for (const headers of [{}, { Authorization: 'Bearer invalid-admin-token' }]) {
+    const response = await request.get('/api/admin/recovery', { headers })
+    const responseHeaders = response.headers()
+    const payload = await response.json()
+
+    expect(response.status()).toBe(403)
+    expect(responseHeaders['cache-control']).toBe('private, no-store')
+    expect(responseHeaders['x-request-id']).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u)
+    expect(payload).toMatchObject({
+      error: true,
+      message: 'ADMIN_REQUIRED',
+      stack: ['ADMIN_REQUIRED', ''],
+      statusCode: 403,
+      statusMessage: 'ADMIN_REQUIRED',
+    })
+    expect(new URL(payload.url).pathname).toBe('/api/admin/recovery')
+    expect(JSON.stringify(payload)).not.toMatch(/cause|data|supabase|authorization|server\/middleware|node_modules/iu)
+  }
+
+  const health = await request.get('/api/health')
+  expect(health.headers()['cache-control']).not.toBe('private, no-store')
+})

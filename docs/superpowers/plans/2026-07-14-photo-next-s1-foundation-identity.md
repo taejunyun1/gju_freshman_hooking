@@ -319,7 +319,7 @@ git commit -m "feat: add student identity cryptography"
 - Create: `supabase/tests/identity_service.test.sql`
 - Create: `server/modules/identity/service.ts`
 - Create: `server/modules/metrics/events.ts`
-- Create: `server/middleware/request-context.ts`
+- Create: `server/middleware/00-request-context.ts`
 - Create: `server/api/student/register.post.ts`
 - Create: `server/api/student/login.post.ts`
 - Create: `server/api/student/logout.post.ts`
@@ -413,7 +413,7 @@ git commit -m "feat: add student registration and login"
 
 **Files:**
 - Create: `server/modules/identity/admin-auth.ts`
-- Create: `server/middleware/admin-auth.ts`
+- Create: `server/middleware/10-admin-auth.ts`
 - Create: `supabase/migrations/202607140004_recovery_service.sql`
 - Create: `supabase/tests/recovery_service.test.sql`
 - Create: `supabase/migrations/202607140005_change_password_service.sql`
@@ -489,7 +489,7 @@ Run: `pnpm vitest run tests/integration/identity/admin-auth.test.ts tests/integr
 Expected: AAL1 rejected, stale sensitive auth rejected, recovery tests pass, type errors 0.
 
 ```bash
-git add server/modules/identity/admin-auth.ts server/middleware/admin-auth.ts server/api/admin/session.get.ts server/api/student/password server/api/admin/recovery supabase/migrations/202607140004_recovery_service.sql supabase/tests/recovery_service.test.sql supabase/migrations/202607140005_change_password_service.sql supabase/tests/change_password_service.test.sql app/pages/password/reset.vue tests/integration/identity/admin-auth.test.ts tests/integration/identity/recovery.test.ts
+git add server/modules/identity/admin-auth.ts server/middleware/10-admin-auth.ts server/api/admin/session.get.ts server/api/student/password server/api/admin/recovery supabase/migrations/202607140004_recovery_service.sql supabase/tests/recovery_service.test.sql supabase/migrations/202607140005_change_password_service.sql supabase/tests/change_password_service.test.sql app/pages/password/reset.vue tests/integration/identity/admin-auth.test.ts tests/integration/identity/recovery.test.ts
 git commit -m "feat: add administrator auth and recovery"
 ```
 

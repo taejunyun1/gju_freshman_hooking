@@ -80,7 +80,7 @@ describe('administrator route middleware', () => {
     vi.stubGlobal('createError', ({ statusCode, statusMessage }: { statusCode: number, statusMessage: string }) => (
       Object.assign(new Error(statusMessage), { statusCode, statusMessage })
     ))
-    const { default: adminAuthMiddleware } = await import('../../../server/middleware/admin-auth')
+    const { default: adminAuthMiddleware } = await import('../../../server/middleware/10-admin-auth')
 
     await expect(adminAuthMiddleware({ path: '/api/health', context: {} } as never)).resolves.toBeUndefined()
     await expect(adminAuthMiddleware({ path: '/admin/login', context: {} } as never)).resolves.toBeUndefined()

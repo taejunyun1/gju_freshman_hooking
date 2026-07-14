@@ -64,7 +64,7 @@ describe('administrator authentication', () => {
 
   it('protects admin APIs but permits the session bootstrap route to perform its own check', async () => {
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
-    const { createAdminAuthMiddleware } = await import('../../../server/middleware/admin-auth')
+    const { createAdminAuthMiddleware } = await import('../../../server/middleware/10-admin-auth')
     const calls: string[] = []
     const middleware = createAdminAuthMiddleware({
       requireAdmin: async () => {

@@ -29,7 +29,7 @@ describe('student browser mutation security', () => {
   })
 
   it('allows same-origin anonymous mutations without requiring session CSRF', async () => {
-    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
       getCsrf: event => (event as TestEvent).csrf,
       getMethod: event => (event as TestEvent).method,
@@ -51,7 +51,7 @@ describe('student browser mutation security', () => {
   it.each([undefined, 'https://cross-origin.example'])(
     'rejects missing or cross-origin browser mutations before route handling: %s',
     async (origin) => {
-      const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+      const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
       const middleware = createStudentRequestSecurityMiddleware({
         getCsrf: event => (event as TestEvent).csrf,
         getMethod: event => (event as TestEvent).method,
@@ -71,7 +71,7 @@ describe('student browser mutation security', () => {
   )
 
   it('rejects missing and wrong session CSRF but accepts the bound token for logout', async () => {
-    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const { deriveStudentCsrfToken } = await import('../../server/utils/student-request-security')
     const sessionToken = 'opaque-session-token'
     const csrf = await deriveStudentCsrfToken(sessionToken)
@@ -101,7 +101,7 @@ describe('student browser mutation security', () => {
     '/api/student/password/change///',
     '/api/student//logout',
   ])('requires session CSRF after canonicalizing a protected path: %s', async (path) => {
-    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
       getCsrf: event => (event as TestEvent).csrf,
       getMethod: event => (event as TestEvent).method,
@@ -121,7 +121,7 @@ describe('student browser mutation security', () => {
   })
 
   it('rejects percent-encoded student mutation paths before route dispatch', async () => {
-    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
       getCsrf: () => undefined,
       getMethod: event => (event as TestEvent).method,
@@ -139,8 +139,25 @@ describe('student browser mutation security', () => {
     })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
   })
 
+  it.each(['GET', 'HEAD', 'OPTIONS'])(
+    'does not apply mutation path rejection to a safe encoded request: %s',
+    async (method) => {
+      const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
+      const middleware = createStudentRequestSecurityMiddleware({
+        getCsrf: () => undefined,
+        getMethod: () => method,
+        getOrigin: () => undefined,
+        getPath: () => '/api/student/%73ession',
+        getRequestOrigin: () => 'https://photo-next.example',
+        getSessionToken: () => undefined,
+      })
+
+      await expect(middleware({})).resolves.toBeUndefined()
+    },
+  )
+
   it('does not apply browser mutation checks to the read-only session endpoint', async () => {
-    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/student-request-security')
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
       getCsrf: () => undefined,
       getMethod: event => (event as TestEvent).method,

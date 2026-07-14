@@ -15,18 +15,21 @@ type NitroAppWithErrorHook = {
 }
 
 const publicErrorMessage = 'Internal Server Error'
+const deliberatePublic403Messages = new Set([
+  'ADMIN_REQUIRED',
+  'MFA_REQUIRED',
+  'REAUTH_REQUIRED',
+  'REQUEST_FORBIDDEN',
+])
 
 const isDeliberatePublicError = (error: ErrorRecord): boolean => (
   error.statusCode === 403
-  && error.statusMessage === 'REQUEST_FORBIDDEN'
-  && error.message === 'REQUEST_FORBIDDEN'
+  && typeof error.statusMessage === 'string'
+  && deliberatePublic403Messages.has(error.statusMessage)
+  && error.message === error.statusMessage
 )
 
-const removeSensitiveErrorProperties = (error: ErrorRecord): void => {
-  error.message = publicErrorMessage
-  error.statusCode = 500
-  error.statusMessage = publicErrorMessage
-
+const removeSensitiveErrorDetails = (error: ErrorRecord): void => {
   try { delete error.cause }
   catch { error.cause = undefined }
   try { delete error.data }
@@ -35,11 +38,21 @@ const removeSensitiveErrorProperties = (error: ErrorRecord): void => {
   catch { error.stack = undefined }
 }
 
+const removeSensitiveErrorProperties = (error: ErrorRecord): void => {
+  error.message = publicErrorMessage
+  error.statusCode = 500
+  error.statusMessage = publicErrorMessage
+  removeSensitiveErrorDetails(error)
+}
+
 export const sanitizeUnhandledError = (error: ErrorRecord, event?: RequestEvent): string => {
   const context = event ? (event.context ??= {}) : undefined
   const requestId = typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
   if (context) context.requestId = requestId
-  if (isDeliberatePublicError(error)) return requestId
+  if (isDeliberatePublicError(error)) {
+    removeSensitiveErrorDetails(error)
+    return requestId
+  }
   removeSensitiveErrorProperties(error)
   return requestId
 }

@@ -2,6 +2,8 @@ import type { AdminContext } from '../modules/identity/admin-auth'
 import { getServerRequireAdmin } from '../modules/identity/admin-auth'
 import { toAppError } from '../utils/app-error'
 
+// This authentication guard intentionally follows 00-request-context.
+
 type AdminEvent = {
   path?: string
   context: Record<string, unknown>

@@ -24,7 +24,7 @@ describe('request context security headers', () => {
   })
 
   it('uses a request nonce for Nuxt scripts without allowing arbitrary inline scripts', async () => {
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const event: TestEvent = {
       context: {},
       path: '/start',
@@ -48,7 +48,7 @@ describe('request context security headers', () => {
       getRandomValues: vi.fn((bytes: Uint8Array) => bytes.fill(++fill)),
       randomUUID: vi.fn(() => `request-id-${fill}`),
     })
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const first: TestEvent = { context: {}, path: '/', responseHeaders: new Map() }
     const second: TestEvent = { context: {}, path: '/', responseHeaders: new Map() }
 
@@ -65,7 +65,7 @@ describe('request context security headers', () => {
   })
 
   it('allows Supabase TOTP data images only on the administrator login response', async () => {
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const loginEvent: TestEvent = {
       context: {},
       path: '/admin/login?redirect=/admin',
@@ -88,7 +88,7 @@ describe('request context security headers', () => {
     vi.stubGlobal('useRuntimeConfig', () => ({
       public: { supabaseUrl: 'https://project-ref.supabase.co/rest/v1' },
     }))
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const adminEvent: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
     const recoveryEvent: TestEvent = { context: {}, path: '/admin/recovery', responseHeaders: new Map() }
     const publicEvent: TestEvent = { context: {}, path: '/login', responseHeaders: new Map() }
@@ -111,7 +111,7 @@ describe('request context security headers', () => {
     'javascript:alert(1)',
   ])('rejects an unsafe administrator Supabase URL: %s', async (supabaseUrl) => {
     vi.stubGlobal('useRuntimeConfig', () => ({ public: { supabaseUrl } }))
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const event: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
 
     expect(() => requestContext(event as never)).toThrow('SUPABASE_URL_INVALID')
@@ -119,7 +119,7 @@ describe('request context security headers', () => {
 
   it('permits HTTP only for loopback administrator E2E origins', async () => {
     vi.stubGlobal('useRuntimeConfig', () => ({ public: { supabaseUrl: 'http://localhost:54321/auth/v1' } }))
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const event: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
 
     requestContext(event as never)
@@ -129,7 +129,7 @@ describe('request context security headers', () => {
   })
 
   it('preserves the existing response hardening headers', async () => {
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const event: TestEvent = {
       context: {},
       path: '/admin/login',
@@ -145,7 +145,7 @@ describe('request context security headers', () => {
   })
 
   it('prevents shared or private caching for student and administrator API responses only', async () => {
-    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const studentEvent: TestEvent = { context: {}, path: '/api/student/session', responseHeaders: new Map() }
     const adminEvent: TestEvent = { context: {}, path: '/api/admin/recovery', responseHeaders: new Map() }
     const healthEvent: TestEvent = { context: {}, path: '/api/health', responseHeaders: new Map() }
