@@ -14,6 +14,7 @@ type StudentRequestSecurityDependencies = {
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 const csrfProtectedPaths = new Set([
   '/api/student/logout',
+  '/api/student/assessment/validate',
   '/api/student/password/change',
 ])
 

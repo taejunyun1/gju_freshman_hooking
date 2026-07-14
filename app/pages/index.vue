@@ -1,3 +1,14 @@
+<script setup lang="ts">
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  void $fetch('/api/events', {
+    method: 'POST',
+    body: { eventName: 'landing_viewed' },
+  }).catch(() => undefined)
+})
+</script>
+
 <template>
   <div class="landing">
     <header class="landing__masthead">

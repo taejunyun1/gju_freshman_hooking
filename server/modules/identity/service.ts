@@ -16,6 +16,7 @@ const SESSION_IDLE_MILLISECONDS = 30 * 60 * 1000
 const SESSION_ABSOLUTE_MILLISECONDS = 12 * 60 * 60 * 1000
 
 export type IdentityRequestContext = {
+  anonymousId: string
   ip: string
   requestId: string
   campaignId?: number
@@ -215,9 +216,17 @@ const writeEventSafely = async (
   eventName: 'registration_started' | 'registration_completed' | 'login_succeeded' | 'login_failed',
   path: typeof REGISTER_ROUTE | typeof LOGIN_ROUTE,
   context: IdentityRequestContext,
+  prospectId?: number,
 ): Promise<void> => {
   try {
-    await writeEvent({ eventName, path, campaignId: context.campaignId, requestId: context.requestId })
+    await writeEvent({
+      anonymousId: context.anonymousId,
+      eventName,
+      path,
+      campaignId: context.campaignId,
+      ...(prospectId === undefined ? {} : { prospectId }),
+      requestId: context.requestId,
+    })
   }
   catch {
     // Product telemetry must not expose or interrupt identity flows.
@@ -253,7 +262,20 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
     })
     if (registered.kind === 'existing') return { kind: 'existing' }
 
-    await writeEventSafely(dependencies.writeEvent, 'registration_completed', REGISTER_ROUTE, context)
+    let prospectId: number | undefined
+    try {
+      prospectId = (await dependencies.findProspectByPhoneHmac(protectedPhone.hmac))?.id
+    }
+    catch {
+      // Registration succeeds even if telemetry attribution cannot be re-read.
+    }
+    await writeEventSafely(
+      dependencies.writeEvent,
+      'registration_completed',
+      REGISTER_ROUTE,
+      context,
+      prospectId,
+    )
     return { kind: 'created', nickname, initialPassword }
   }
 
@@ -305,7 +327,13 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
     })
     if (!completed) return fail()
 
-    await writeEventSafely(dependencies.writeEvent, 'login_succeeded', LOGIN_ROUTE, context)
+    await writeEventSafely(
+      dependencies.writeEvent,
+      'login_succeeded',
+      LOGIN_ROUTE,
+      context,
+      credential.prospectId,
+    )
     return { kind: 'authenticated', sessionToken: sessionToken.raw, expiresAt: completed.expiresAt.toISOString() }
   }
 

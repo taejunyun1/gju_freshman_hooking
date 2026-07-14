@@ -3,6 +3,7 @@ import type { ApiFailure, ApiSuccess, RegistrationResult } from '../../../shared
 import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
+import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
 
 type RegisterHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerIdentityService>, 'registerStudent'>
@@ -14,6 +15,7 @@ type RegisterHandlerDependencies = {
 const defaultContext = (event: unknown): IdentityRequestContext => {
   const requestEvent = event as { context?: { requestId?: unknown } }
   return {
+    anonymousId: getAnonymousVisitorId(event),
     ip: getTrustedClientIp(event),
     requestId: typeof requestEvent.context?.requestId === 'string' ? requestEvent.context.requestId : crypto.randomUUID(),
   }

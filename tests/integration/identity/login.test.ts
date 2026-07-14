@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryBackend } from './support'
 
+const anonymousId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
 describe('POST /api/student/login', () => {
   it('locks the account for 15 minutes after five failures', async () => {
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
@@ -9,7 +11,7 @@ describe('POST /api/student/login', () => {
     const { createLoginHandler } = await import('../../../server/api/student/login.post')
     const backend = createMemoryBackend()
     const identity = createIdentityService(backend.dependencies)
-    const getContext = () => ({ ip: '203.0.113.4', requestId: '22222222-2222-4222-8222-222222222222' })
+    const getContext = () => ({ anonymousId, ip: '203.0.113.4', requestId: '22222222-2222-4222-8222-222222222222' })
     const register = createRegisterHandler({
       identity,
       getContext,
@@ -44,7 +46,7 @@ describe('POST /api/student/login', () => {
     const { createLoginHandler } = await import('../../../server/api/student/login.post')
     const backend = createMemoryBackend()
     const identity = createIdentityService(backend.dependencies)
-    const getContext = () => ({ ip: '203.0.113.4', requestId: '33333333-3333-4333-8333-333333333333' })
+    const getContext = () => ({ anonymousId, ip: '203.0.113.4', requestId: '33333333-3333-4333-8333-333333333333' })
     const register = createRegisterHandler({
       identity,
       getContext,
@@ -86,7 +88,7 @@ describe('POST /api/student/login', () => {
     const { createLoginHandler, studentSessionCookie } = await import('../../../server/api/student/login.post')
     const backend = createMemoryBackend()
     const identity = createIdentityService(backend.dependencies)
-    const getContext = () => ({ ip: '203.0.113.4', requestId: '44444444-4444-4444-8444-444444444444' })
+    const getContext = () => ({ anonymousId, ip: '203.0.113.4', requestId: '44444444-4444-4444-8444-444444444444' })
     const register = createRegisterHandler({
       identity,
       getContext,
@@ -150,7 +152,7 @@ describe('POST /api/student/login', () => {
     const identity = createIdentityService(backend.dependencies)
     const register = createRegisterHandler({
       identity,
-      getContext: () => ({ ip: '203.0.113.4', requestId: '55555555-5555-4555-8555-555555555555' }),
+      getContext: () => ({ anonymousId, ip: '203.0.113.4', requestId: '55555555-5555-4555-8555-555555555555' }),
       readBody: async (event: { body: unknown }) => event.body,
       setStatus: () => undefined,
     })
@@ -164,11 +166,63 @@ describe('POST /api/student/login', () => {
 
     const result = await identity.loginStudent(
       { phone: '01012345678', password: registration.data.initialPassword },
-      { ip: '203.0.113.4', requestId: '66666666-6666-4666-8666-666666666666' },
+      { anonymousId, ip: '203.0.113.4', requestId: '66666666-6666-4666-8666-666666666666' },
     )
 
     expect(completionProof).toEqual({ passwordHash: verifiedHash, passwordSalt: verifiedSalt })
     expect(result).toEqual({ kind: 'failed' })
     expect(insertedSessions).toBe(0)
+  })
+
+  it('attributes successful login but leaves failed login prospect-unlinked under one anonymous ID', async () => {
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    const { createIdentityService } = await import('../../../server/modules/identity/service')
+    const { createRegisterHandler } = await import('../../../server/api/student/register.post')
+    const { createLoginHandler } = await import('../../../server/api/student/login.post')
+    const backend = createMemoryBackend()
+    const events: Array<Record<string, unknown>> = []
+    backend.dependencies.writeEvent = async event => { events.push(event as unknown as Record<string, unknown>) }
+    const identity = createIdentityService(backend.dependencies)
+    const getContext = () => ({
+      anonymousId,
+      ip: '203.0.113.4',
+      requestId: '77777777-7777-4777-8777-777777777771',
+    })
+    const register = createRegisterHandler({
+      identity,
+      getContext,
+      readBody: async (event: { body: unknown }) => event.body,
+      setStatus: () => undefined,
+    })
+    const login = createLoginHandler({
+      identity,
+      getContext,
+      readBody: async (event: { body: unknown }) => event.body,
+      setCookie: () => undefined,
+      setStatus: () => undefined,
+    })
+    const registration = await register({
+      body: { phone: '01012345678', schoolName: '광주고등학교', applicantStage: 'high3', region: 'gwangju' },
+    })
+    events.length = 0
+
+    const success = await login({
+      body: { phone: '01012345678', password: registration.data.initialPassword },
+    })
+    const failed = await login({ body: { phone: '01099999999', password: 'WRONG99' } })
+
+    expect(events[0]).toEqual(expect.objectContaining({
+      anonymousId,
+      eventName: 'login_succeeded',
+      path: '/api/student/login',
+      prospectId: 1,
+    }))
+    expect(events[1]).toEqual(expect.objectContaining({
+      anonymousId,
+      eventName: 'login_failed',
+      path: '/api/student/login',
+    }))
+    expect(events[1]).not.toHaveProperty('prospectId')
+    expect(JSON.stringify({ success, failed })).not.toContain(anonymousId)
   })
 })

@@ -147,14 +147,17 @@ describe('request context security headers', () => {
   it('prevents shared or private caching for student and administrator API responses only', async () => {
     const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const studentEvent: TestEvent = { context: {}, path: '/api/student/session', responseHeaders: new Map() }
+    const validateEvent: TestEvent = { context: {}, path: '/api/student/assessment/validate', responseHeaders: new Map() }
     const adminEvent: TestEvent = { context: {}, path: '/api/admin/recovery', responseHeaders: new Map() }
     const healthEvent: TestEvent = { context: {}, path: '/api/health', responseHeaders: new Map() }
 
     requestContext(studentEvent as never)
+    requestContext(validateEvent as never)
     requestContext(adminEvent as never)
     requestContext(healthEvent as never)
 
     expect(studentEvent.responseHeaders.get('cache-control')).toBe('private, no-store')
+    expect(validateEvent.responseHeaders.get('cache-control')).toBe('private, no-store')
     expect(adminEvent.responseHeaders.get('cache-control')).toBe('private, no-store')
     expect(healthEvent.responseHeaders.has('cache-control')).toBe(false)
   })

@@ -96,10 +96,37 @@ describe('student browser mutation security', () => {
     await expect(middleware({ ...base, csrf })).resolves.toBeUndefined()
   })
 
+  it('requires the session-bound CSRF token on the exact assessment validate path', async () => {
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
+    const { deriveStudentCsrfToken } = await import('../../server/utils/student-request-security')
+    const sessionToken = 'assessment-session-token'
+    const csrf = await deriveStudentCsrfToken(sessionToken)
+    const middleware = createStudentRequestSecurityMiddleware({
+      getCsrf: event => (event as TestEvent).csrf,
+      getMethod: event => (event as TestEvent).method,
+      getOrigin: event => (event as TestEvent).origin,
+      getPath: event => (event as TestEvent).path,
+      getRequestOrigin: event => (event as TestEvent).requestOrigin,
+      getSessionToken: event => (event as TestEvent).sessionToken,
+    })
+    const base = {
+      method: 'POST',
+      origin: 'https://photo-next.example',
+      path: '/api/student/assessment/validate',
+      requestOrigin: 'https://photo-next.example',
+      sessionToken,
+    }
+
+    await expect(middleware(base)).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+    await expect(middleware({ ...base, csrf: 'A'.repeat(43) })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+    await expect(middleware({ ...base, csrf })).resolves.toBeUndefined()
+  })
+
   it.each([
     '/api/student/logout/',
     '/api/student/password/change///',
     '/api/student//logout',
+    '/api/student/assessment//validate/',
   ])('requires session CSRF after canonicalizing a protected path: %s', async (path) => {
     const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
@@ -120,7 +147,10 @@ describe('student browser mutation security', () => {
     })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
   })
 
-  it('rejects percent-encoded student mutation paths before route dispatch', async () => {
+  it.each([
+    '/api/student/%6Cogout',
+    '/api/student/assessment/%76alidate',
+  ])('rejects percent-encoded student mutation paths before route dispatch: %s', async (path) => {
     const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
     const middleware = createStudentRequestSecurityMiddleware({
       getCsrf: () => undefined,
@@ -134,7 +164,7 @@ describe('student browser mutation security', () => {
     await expect(middleware({
       method: 'POST',
       origin: 'https://photo-next.example',
-      path: '/api/student/%6Cogout',
+      path,
       requestOrigin: 'https://photo-next.example',
     })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
   })

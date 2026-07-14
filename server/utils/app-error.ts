@@ -11,6 +11,8 @@ const publicMessages: Record<AppErrorCode, string> = {
   MFA_REQUIRED: '추가 인증이 필요합니다.',
   REAUTH_REQUIRED: '최근 인증이 필요합니다.',
   RECOVERY_INVALID: '복구 정보를 확인하거나 새 복구 코드를 요청해 주세요.',
+  ASSESSMENT_INVALID: '평가 응답을 다시 확인해 주세요.',
+  ASSESSMENT_CATALOG_STALE: '평가 선택지가 변경되었습니다. 다시 확인해 주세요.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -22,6 +24,8 @@ const statusCodes: Record<AppErrorCode, number> = {
   MFA_REQUIRED: 403,
   REAUTH_REQUIRED: 403,
   RECOVERY_INVALID: 401,
+  ASSESSMENT_INVALID: 422,
+  ASSESSMENT_CATALOG_STALE: 409,
 }
 
 export class AppError extends Error {

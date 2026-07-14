@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LandingPage from '../../../app/pages/index.vue'
 
 const NuxtLinkStub = {
@@ -9,6 +9,10 @@ const NuxtLinkStub = {
 }
 
 describe('landing page', () => {
+  beforeEach(() => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue(undefined))
+  })
+
   it('explains the four-stage connection in order', () => {
     const wrapper = mount(LandingPage, {
       global: { stubs: { NuxtLink: NuxtLinkStub } },
@@ -45,5 +49,32 @@ describe('landing page', () => {
     expect(brand.classes()).toContain('landing__brand')
     expect(source).toContain('min-inline-size: var(--touch-target)')
     expect(source).toContain('min-block-size: var(--touch-target)')
+  })
+
+  it('sends one non-blocking landing event with no client-derived metadata', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('$fetch', send)
+
+    mount(LandingPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+    await flushPromises()
+
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledWith('/api/events', {
+      method: 'POST',
+      body: { eventName: 'landing_viewed' },
+    })
+  })
+
+  it('swallows landing telemetry failure without removing primary navigation', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockRejectedValue(new Error('private upstream detail')))
+    const wrapper = mount(LandingPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('a[href="/start"]').text()).toBe('나의 연결 경로 찾기')
   })
 })

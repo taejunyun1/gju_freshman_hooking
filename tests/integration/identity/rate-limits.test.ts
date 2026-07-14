@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { createMemoryBackend } from './support'
 
 const requestId = '66666666-6666-4666-8666-666666666666'
-const requestContext = { ip: '203.0.113.7', requestId }
+const requestContext = {
+  anonymousId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  ip: '203.0.113.7',
+  requestId,
+}
 const genericFailure = {
   error: { code: 'AUTH_FAILED', message: '입력 정보를 확인하거나 잠시 후 다시 시도해 주세요.' },
   requestId,

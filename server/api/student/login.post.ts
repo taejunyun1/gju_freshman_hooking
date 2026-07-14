@@ -4,6 +4,7 @@ import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
 import { studentSessionCookie } from '../../utils/student-request-security'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
+import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
 
 export { studentSessionCookie } from '../../utils/student-request-security'
 
@@ -26,6 +27,7 @@ type LoginHandlerDependencies = {
 const defaultContext = (event: unknown): IdentityRequestContext => {
   const requestEvent = event as { context?: { requestId?: unknown } }
   return {
+    anonymousId: getAnonymousVisitorId(event),
     ip: getTrustedClientIp(event),
     requestId: typeof requestEvent.context?.requestId === 'string' ? requestEvent.context.requestId : crypto.randomUUID(),
   }
