@@ -58,11 +58,12 @@ PHOTO:NEXT는 지원 예정 학생이 하고 싶은 사진·영상 작업과 작
 ### 4.1 학생
 
 1. 캠페인 링크로 랜딩 페이지에 들어온다.
-2. 휴대전화 번호를 입력해 신규 계정을 만들거나 기존 계정 로그인으로 이동한다.
+2. 휴대전화 번호, 학교명, 현재 상태, 지역을 입력해 신규 계정을 만들거나 기존 계정 로그인으로 이동한다.
 3. 신규 가입 시 시스템이 닉네임과 임시 비밀번호를 생성한다.
-4. 4단계 관심사를 선택하고 결과를 제출한다.
-5. 연결 근거 타임라인, 추천 자원, 트랙 점수, 작품·진로·지원·교수 정보를 확인한다.
-6. 필요하면 상담을 신청하고 이력에서 최근 결과 3개를 다시 본다.
+4. 재방문 시 휴대전화 번호와 비밀번호로 로그인한다.
+5. 4단계 관심사를 선택하고 결과를 제출한다.
+6. 연결 근거 타임라인, 추천 자원, 트랙 점수, 작품·진로·지원·교수 정보를 확인한다.
+7. 필요하면 상담을 신청하고 이력에서 최근 결과 3개를 다시 본다.
 
 ### 4.2 관리자
 
@@ -80,7 +81,7 @@ PHOTO:NEXT는 지원 예정 학생이 하고 싶은 사진·영상 작업과 작
 | 경로 | 목적 |
 |---|---|
 | `/` | 캠페인 랜딩, 서비스 설명, 시작 CTA |
-| `/start` | 휴대전화 번호 입력 및 신규·기존 분기 |
+| `/start` | 휴대전화·학교·현재 상태·지역 입력 및 신규·기존 분기 |
 | `/credentials` | 신규 닉네임·임시 비밀번호 1회 표시 |
 | `/login` | 학생 로그인 |
 | `/password/reset` | 로그인 상태 비밀번호 변경 또는 관리자 지원 복구 요청 |
@@ -307,9 +308,13 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 #### `prospects`
 
 - `id`, `nickname`, `phone_hmac`, `phone_ciphertext`, `phone_iv`
+- `school_name`, `applicant_stage`, `region`
 - `status`, `last_active_at`, `created_at`, `updated_at`
 - `phone_hmac` unique
 - 닉네임은 형용사 + 사진/영상 명사 + 두 자리 숫자 규칙으로 생성하며 충돌 시 재시도
+- 학교명은 trim 후 1–40자, 현재 상태는 `high1`, `high2`, `high3`, `graduate`, `ged`, `other`
+- 지역은 `gwangju`, `jeonbuk`, `capital`, `chungcheong`, `gyeongsang`, `gangwon_jeju`, `overseas`, `other`
+- 학생 표시 레이블은 광주광역시, 전북, 수도권, 충청권, 경상권, 강원·제주, 해외, 기타를 사용
 
 #### `student_credentials`
 
@@ -341,8 +346,9 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 #### `assessment_responses`
 
 - `id`, `assessment_id`, `question_group`, `option_key`
-- `option_label_snapshot`, `weight_snapshot jsonb`, `created_at`
+- `option_label_snapshot`, `weight_snapshot jsonb`, `free_text`, `created_at`
 - `(assessment_id, question_group, option_key)` unique
+- `free_text`는 `career.explore` 응답에서만 허용하며 trim 후 최대 30자
 
 #### `resources`
 
@@ -387,12 +393,17 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 
 - `primary_faculty_id`, `specialist_faculty_id`, `tag_key`, `priority`, `explanation_template`
 - 전임교원 총괄과 겸임교원 전문 연계의 허용 조합을 관리
-- `(primary_faculty_id, specialist_faculty_id, tag_key)` unique
+- `primary_faculty_id`가 null이면 모든 활성 전임 총괄교수와 연결 가능한 학과 공통 전문 연계
+- `(primary_faculty_id, specialist_faculty_id, tag_key)` unique nulls not distinct
 
 #### `counseling_requests`
 
 - `id`, `prospect_id`, `assessment_id`, `status`
-- `assigned_faculty_id`, `admin_note`, `contacted_at`, `completed_at`, `closed_at`, `created_at`, `updated_at`
+- `contact_method`, `availability`, `inquiry`, `consent_given_at`
+- `assigned_faculty_id`, `admin_note`, `version`
+- `contacted_at`, `completed_at`, `closed_at`, `created_at`, `updated_at`
+- 상담 방식: `phone`, `text`, `visit`; 가능 시간: `weekday_morning`, `weekday_afternoon`, `weekday_evening`, `weekend`
+- 문의는 선택값이며 최대 200자, 정보 전달 동의는 필수
 
 #### `counseling_faculty_recommendations`
 
@@ -420,7 +431,7 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 
 - `admin_users`: Supabase Auth 사용자와 관리자 역할·활성 상태 연결
 - `audit_events`: 전화번호 공개, 복구 승인, 상담 재개, 내보내기 같은 민감 동작 기록
-- `export_jobs`: 필터 스냅샷, 상태, 생성자, 파일 경로, 오류 코드, 만료 시각
+- `export_jobs`: 필터 스냅샷, 상태, 생성자, 시트별 행 수, 오류 코드, 완료·다운로드 시각
 - `rate_limit_buckets`: HMAC 처리한 IP·번호 식별자, 경로, 윈도 시작, 횟수, 만료 시각
 
 ### 8.2 제약조건과 인덱스
@@ -472,12 +483,13 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 - 낮은 초기 비밀번호 엔트로피를 보완하기 위해 비밀번호는 Web Crypto PBKDF2-HMAC-SHA-256 600,000회, 레코드별 무작위 salt, 서버 비밀 `PASSWORD_PEPPER`로 파생해 저장한다.
 - 최초 로그인 후 비밀번호 변경을 강하게 안내하지만 평가 시작을 막지는 않는다.
 - 같은 번호로 다시 가입하면 새 계정을 만들지 않고 기존 사용자 로그인으로 이동한다.
+- 재방문 로그인 식별자는 휴대전화 번호이며 닉네임은 자격 정보 표시, 복구 확인과 관리자 식별에 사용한다.
 - SMS 인증이 없으므로 번호는 `verified`로 표시하지 않는다. 서비스 안에서 이 번호는 사용자가 입력한 연락 식별자이며, 실제 소유 확인은 상담 연락 또는 관리자 지원 복구 과정에서만 이뤄진다.
 
 ### 9.2 비밀번호 변경과 복구
 
 - 로그인 상태에서는 현재 비밀번호를 다시 확인한 뒤 즉시 새 비밀번호로 변경한다.
-- 로그인되지 않은 사용자는 휴대전화 번호와 닉네임으로 복구 요청을 남긴다. 응답은 일치 여부와 무관하게 동일하다.
+- 로그인되지 않은 사용자는 휴대전화 번호, 닉네임, 지역으로 복구 요청을 남긴다. 응답은 일치 여부와 무관하게 동일하다.
 - 관리자는 기존 학과 연락 절차로 본인을 확인하고, 15분 동안 한 번만 사용할 수 있는 무작위 128-bit 복구 코드를 발급한다.
 - 복구 코드는 SHA-256 해시만 저장하고, 관리자가 확인된 사용자에게 전화 등 기존 채널로 전달한다. 애플리케이션은 SMS를 발송하지 않는다.
 - 성공 시 모든 학생 세션과 기존 복구 코드를 폐기한다.
@@ -548,6 +560,8 @@ V1 교과목      V2 장비·시설      V3 비교과       OUT
 | 4 | 관심 진로 | 1–2개 | 20% |
 
 선택지는 관리자 코드 배포 없이 데이터로 관리하되, 활성화된 선택지의 키·레이블·트랙 가중치가 평가 응답에 스냅샷으로 저장된다. 각 선택지는 다큐멘터리, 예술사진, 광고사진, 영상 4개 트랙에 대해 0–3 가중치를 가진다.
+
+진로 선택지는 사진 제작, 영상 제작, 프로젝트 기획, 가능성 탐색의 문장형 카드다. 가능성 탐색을 선택한 경우에만 30자 이내의 선택 입력을 허용하며, 해당 텍스트는 결과 추천 근거로 직접 사용하지 않고 상담 맥락으로만 저장한다.
 
 ### 10.3 트랙 점수
 
@@ -725,11 +739,11 @@ MVP는 SMS나 카카오톡을 직접 발송하지 않는다. 관리자 상담 �
 
 파일은 다음 시트를 가진다.
 
-1. `학생목록`: 닉네임, 마스킹/승인된 원문 번호, 상위 트랙, 캠페인, 최근 참여일
-2. `참여이력`: 학생, 평가일, 선택 관심사, 트랙 점수, 환경 점수
-3. `상담현황`: 신청일, 상태, 추천 교수, 배정 교수, 처리일
+1. `학생목록`: 닉네임, 승인된 원문 번호, 학교, 현재 상태, 지역, 진로 1·2, 총 참여, 최근 결과, 추천·배정교수, 상담 상태
+2. `최근참여이력`: 회차, 참여일, 선택값, 4개 트랙 점수, 환경 점수, 추천 자원
+3. `상담현황`: 희망 방식, 가능 시간, 문의, 추천·배정교수, 연락일, 결과, 메모
 
-필터 조건과 생성자, 생성 시각을 파일 메타데이터와 감사 이벤트에 남긴다. 파일 생성은 진행 상태를 표시하고 실패 시 동일 조건으로 재시도할 수 있다. 대량 데이터는 1,000행 단위로 읽고 파일을 메모리에 무제한 축적하지 않는다.
+필터 조건과 생성자, 생성 시각을 파일 메타데이터와 감사 이벤트에 남긴다. 최근 재인증한 관리자 브라우저가 권한 검증된 API 데이터를 1,000행씩 받아 ExcelJS로 파일을 만들며 데이터베이스 자격증명과 복호화 키는 브라우저에 전달하지 않는다. 파일 생성은 진행 상태를 표시하고 실패 시 새 작업으로 동일 조건을 재시도한다. 한 작업은 최대 30,000행이며 초과하면 필터 범위를 좁히도록 안내한다. 원문 전화번호와 workbook 참조는 다운로드 후 브라우저 상태에서 즉시 제거한다.
 
 ## 14. 이벤트와 지표
 
