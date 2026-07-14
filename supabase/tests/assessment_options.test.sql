@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(19);
 
 select has_table('public'::name, 'assessment_options'::name);
 select col_type_is('public', 'assessment_options', 'id', 'bigint', 'catalog uses a bigint identity');
@@ -89,83 +89,6 @@ select throws_ok(
   '42501',
   null,
   'service role cannot write catalog rows'
-);
-
-create temporary table expected_assessment_options as
-select
-  question_group,
-  option_key,
-  label,
-  description,
-  visual_key,
-  track_weights,
-  interest_tags,
-  status,
-  sort_order
-from public.assessment_options
-where status = 'active';
-
-create function pg_temp.assert_assessment_catalog_matches()
-returns void
-language plpgsql
-set search_path = ''
-as $$
-begin
-  if exists (
-    select 1
-    from pg_temp.expected_assessment_options as expected
-    full outer join (
-      select
-        question_group,
-        option_key,
-        label,
-        description,
-        visual_key,
-        track_weights,
-        interest_tags,
-        status,
-        sort_order
-      from public.assessment_options
-      where status = 'active'
-    ) as active using (option_key)
-    where expected.option_key is null
-      or active.option_key is null
-      or expected.question_group is distinct from active.question_group
-      or expected.label is distinct from active.label
-      or expected.description is distinct from active.description
-      or expected.visual_key is distinct from active.visual_key
-      or expected.track_weights is distinct from active.track_weights
-      or expected.interest_tags is distinct from active.interest_tags
-      or expected.status is distinct from active.status
-      or expected.sort_order is distinct from active.sort_order
-  ) then
-    raise exception using message = 'assessment catalog manifest drift';
-  end if;
-end;
-$$;
-
-select lives_ok(
-  $$select pg_temp.assert_assessment_catalog_matches()$$,
-  'identical active catalog is an idempotent no-op'
-);
-
-update public.assessment_options
-set label = 'changed fixture'
-where option_key = 'work.photo_everyday';
-
-select throws_ok(
-  $$select pg_temp.assert_assessment_catalog_matches()$$,
-  'P0001',
-  'assessment catalog manifest drift',
-  'changed active catalog aborts'
-);
-
-select results_eq(
-  $$select count(*)::integer, max(label) filter (where option_key = 'work.photo_everyday')
-    from public.assessment_options
-    where status = 'active'$$,
-  $$values (28, 'changed fixture')$$,
-  'failed drift check leaves every active row untouched'
 );
 
 select * from finish();

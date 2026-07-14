@@ -30,15 +30,22 @@ const uniqueLimitedSelection = <T extends z.ZodType<string>>(
   .max(limits.max)
   .refine(values => new Set(values).size === values.length, '선택지는 중복할 수 없습니다.')
 
-const careerOtherSchema = z.union([z.string(), z.null()])
-  .transform(value => value === null || value.trim() === '' ? null : value.trim())
-
 const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/u
-const phonePattern = /(?:\+?82[-.\s]?)?(?:0\d{1,2})[-.\s)]?\d{3,4}[-.\s]?\d{4}/u
+const phonePattern = /(?:(?:\+?82)[-.\s]?(?:0)?\d{1,2}|0\d{1,2})[-.\s)]?\d{3,4}[-.\s]?\d{4}/u
 const containsControlCharacter = (value: string) => [...value].some((character) => {
   const codePoint = character.codePointAt(0) ?? 0
   return codePoint <= 31 || (codePoint >= 127 && codePoint <= 159)
 })
+const careerOtherSchema = z.union([z.string(), z.null()])
+  .superRefine((value, context) => {
+    if (typeof value === 'string' && containsControlCharacter(value)) {
+      context.addIssue({
+        code: 'custom',
+        message: '줄바꿈이나 제어문자는 입력할 수 없습니다.',
+      })
+    }
+  })
+  .transform(value => value === null || value.trim() === '' ? null : value.trim())
 
 export const assessmentSelectionsSchema = z.object({
   work: uniqueLimitedSelection(optionKeySchemas.work, selectionLimits.work),
@@ -71,8 +78,7 @@ export const assessmentSelectionsSchema = z.object({
   }
 
   if (
-    containsControlCharacter(selections.careerOther)
-    || emailPattern.test(selections.careerOther)
+    emailPattern.test(selections.careerOther)
     || phonePattern.test(selections.careerOther)
   ) {
     context.addIssue({

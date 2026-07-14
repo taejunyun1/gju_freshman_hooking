@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
   catalogGroupCounts,
   createCatalogRevision,
@@ -7,6 +7,16 @@ import {
   parseAssessmentCatalog,
 } from '../../../scripts/seed-assessment-options'
 import { assessmentSubmissionSchema, selectionLimits } from '../../../shared/schemas/assessment'
+import {
+  counselingStatuses,
+  facultyRoles,
+  resourceTypes,
+} from '../../../shared/types/domain'
+import type {
+  CounselingStatus,
+  FacultyRole,
+  ResourceType,
+} from '../../../shared/types/domain'
 
 const canonicalInput = () => JSON.parse(
   readFileSync('supabase/seed/assessment-options.json', 'utf8'),
@@ -106,9 +116,47 @@ describe('assessment catalog seed', () => {
   it('feeds the generated SQL directly to reset while retaining the operator include', () => {
     const config = readFileSync('supabase/config.toml', 'utf8')
     const rootSeed = readFileSync('supabase/seed.sql', 'utf8')
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+    }
 
     expect(config).toContain('sql_paths = ["./seed/assessment-options.sql"]')
     expect(rootSeed).toBe('\\ir seed/assessment-options.sql\n')
+    expect(packageJson.scripts['test:assessment-seed']).toBe(
+      'vitest run --project local-integration tests/local/assessment-seed-artifact.test.ts',
+    )
+    expect(packageJson.scripts['test:sql']).toContain('pnpm test:assessment-seed')
+  })
+})
+
+describe('implementation index domain contracts', () => {
+  it('keeps resource, faculty, and counseling unions exact', () => {
+    expect(resourceTypes).toEqual([
+      'course',
+      'equipment',
+      'facility',
+      'extracurricular',
+      'project',
+      'student_work',
+      'career',
+      'support',
+    ])
+    expect(facultyRoles).toEqual(['primary', 'backup', 'specialist'])
+    expect(counselingStatuses).toEqual(['new', 'assigned', 'contacted', 'completed', 'closed'])
+    expectTypeOf<ResourceType>().toEqualTypeOf<
+      | 'course'
+      | 'equipment'
+      | 'facility'
+      | 'extracurricular'
+      | 'project'
+      | 'student_work'
+      | 'career'
+      | 'support'
+    >()
+    expectTypeOf<FacultyRole>().toEqualTypeOf<'primary' | 'backup' | 'specialist'>()
+    expectTypeOf<CounselingStatus>().toEqualTypeOf<
+      'new' | 'assigned' | 'contacted' | 'completed' | 'closed'
+    >()
   })
 })
 
@@ -170,8 +218,15 @@ describe('assessment submission contract', () => {
   it('allows careerOther only for explore and rejects contact or control characters', () => {
     for (const careerOther of [
       '010-1234-5678',
+      '+82 10-1234-5678',
+      '82-10-1234-5678',
       'hello@example.com',
       'line\nbreak',
+      '\n드론 촬영',
+      '포토북\n',
+      '\t지역 기록',
+      '지역 기록\t',
+      `사진${String.fromCodePoint(0x85)}영상`,
       'a'.repeat(31),
     ]) {
       expect(() => assessmentSubmissionSchema.parse({
