@@ -1,4 +1,5 @@
 import type { ApplicantStage, Region } from '../schemas/identity'
+import type { QuestionGroup, TrackKey, VisualKey } from './domain'
 
 export type RegistrationInput = {
   phone: string
@@ -25,6 +26,28 @@ export type StudentSession = {
   prospectId: number
   nickname: string
   expiresAt: string
+}
+
+export type PublicAssessmentOption = {
+  key: string
+  label: string
+  description?: string
+  visualKey: VisualKey
+}
+
+export type PublicAssessmentCatalog = {
+  catalogRevision: string
+  groups: Array<{
+    key: QuestionGroup
+    options: PublicAssessmentOption[]
+  }>
+  limits: Record<QuestionGroup, { min: number, max: number }>
+}
+
+export type ScoredAssessment = {
+  trackScores: Record<TrackKey, number>
+  rankedTracks: TrackKey[]
+  interestVector: Record<string, number>
 }
 
 export type ApiSuccess<T> = {
