@@ -63,4 +63,29 @@ describe('design tokens', () => {
     expect(tokens).toContain('--color-canvas: #EEF1F6')
     expect(contrastRatio(footerText, hexToRgb('#EEF1F6'))).toBeGreaterThanOrEqual(4.5)
   })
+
+  it('keeps every sequence clip label at WCAG AA contrast on its tinted background', () => {
+    const page = readFileSync('app/pages/index.vue', 'utf8')
+    const clipLabel = page.match(/\.sequence__clip-label \{([\s\S]*?)\n\}/)?.[1]
+    const sequenceClip = page.match(/\.sequence__clip \{([\s\S]*?)\n\}/)?.[1]
+    const signalClip = page.match(/\.sequence__clip--signal \{([\s\S]*?)\n\}/)?.[1]
+    const labelOpacity = clipLabel?.match(/color: color-mix\(in srgb, var\(--color-ink\) (\d+)%, transparent\);/)
+    const sequenceTint = sequenceClip?.match(/background: color-mix\(in srgb, var\(--color-sequence\) (\d+)%, var\(--color-surface\)\);/)
+    const signalTint = signalClip?.match(/background: color-mix\(in srgb, var\(--color-signal\) (\d+)%, var\(--color-surface\)\);/)
+
+    expect(labelOpacity).toBeDefined()
+    expect(sequenceTint).toBeDefined()
+    expect(signalTint).toBeDefined()
+
+    const labelOpacityPercentage = Number(labelOpacity?.[1])
+    const clipBackgrounds = [
+      mix(hexToRgb('#6B43B5'), hexToRgb('#FFFFFF'), Number(sequenceTint?.[1])),
+      mix(hexToRgb('#C27628'), hexToRgb('#FFFFFF'), Number(signalTint?.[1])),
+    ]
+
+    for (const clipBackground of clipBackgrounds) {
+      const labelText = mix(hexToRgb('#151A22'), clipBackground, labelOpacityPercentage)
+      expect(contrastRatio(labelText, clipBackground)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
 })
