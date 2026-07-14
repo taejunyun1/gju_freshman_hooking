@@ -1,0 +1,37 @@
+{
+  "name": "photo-next-mvp",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "typecheck": "nuxi typecheck"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.3",
+    "@supabase/supabase-js": "^2.110.2",
+    "nuxt": "^4.4.8",
+    "vue": "^3.5.39",
+    "vue-router": "^5.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.16.0",
+    "@playwright/test": "^1.61.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "eslint": "^10.7.0",
+    "happy-dom": "^20.10.6",
+    "supabase": "^2.109.1",
+    "tsx": "^4.23.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.7",
+    "wrangler": "^4.110.0"
+  }
+}

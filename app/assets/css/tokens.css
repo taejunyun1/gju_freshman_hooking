@@ -1,0 +1,16 @@
+:root {
+  --color-surface: #FFFFFF;
+  --color-canvas: #EEF1F6;
+  --color-ink: #151A22;
+  --color-sequence: #6B43B5;
+  --color-resource: #2E7773;
+  --color-signal: #C27628;
+  --color-error: #B8423E;
+  --font-display: 'Wanted Sans Variable', sans-serif;
+  --font-body: 'Pretendard Variable', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --content: 720px;
+  --timeline: 1120px;
+  --admin: 1440px;
+  --touch-target: 44px;
+}
