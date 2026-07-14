@@ -14,9 +14,9 @@
    - `PHOTO_NEXT_LOCAL_ADMIN_PASSWORD`: 로컬 테스트 전용 비밀번호
 
 3. `pnpm tsx scripts/bootstrap-local-admin.ts`를 실행한다.
-4. 터미널에 한 번만 표시된 TOTP 등록 URI 또는 QR 페이로드를 인증 앱에 등록한다. 터미널 출력을 파일로 리다이렉트하거나 공유하지 않는다.
+4. 스크립트가 출력한 안내에 따라 `/admin/login`에서 처음 로그인한다. 브라우저에 표시된 Supabase Auth 생성 QR을 인증 앱에 등록하고 6자리 코드를 검증한다.
 
-스크립트는 Supabase Auth의 지원 API로 사용자를 만들고, 그 Auth UUID를 `admin_users`에 upsert한 뒤, 비밀번호로 로그인해 Supabase Auth가 생성한 TOTP 팩터를 등록한다. 비밀번호, TOTP secret, URI, QR 페이로드는 저장하지 않는다.
+스크립트는 Supabase Auth의 지원 API로 사용자를 만들고 비밀번호 로그인을 검증한 뒤 그 Auth UUID를 `admin_users`에 upsert한다. 스크립트는 TOTP 팩터를 만들지 않으며 등록 URI, QR 페이로드, secret, 비밀번호를 출력하거나 저장하지 않는다. 성공 시 브라우저 첫 로그인을 안내하는 비밀이 아닌 문장 하나만 출력한다. 따라서 CLI에서 검증되지 않은 팩터를 남기지 않고, 브라우저가 만든 하나의 팩터를 같은 흐름에서 challenge/verify까지 완료한다.
 
 ## 스테이징·프로덕션
 

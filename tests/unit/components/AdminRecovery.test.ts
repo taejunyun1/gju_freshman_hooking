@@ -112,4 +112,37 @@ describe('AdminRecovery', () => {
     expect(wrapper.text()).not.toContain('복구 코드:')
     expect(wrapper.emitted('code-cleared')).toEqual([[77]])
   })
+
+  it('discards a deferred approval response that resolves after unmount', async () => {
+    vi.useFakeTimers()
+    let resolveApproval!: (value: {
+      data: { code: string, expiresAt: string }
+      requestId: string
+    }) => void
+    const approvalResponse = new Promise<{
+      data: { code: string, expiresAt: string }
+      requestId: string
+    }>(resolve => {
+      resolveApproval = resolve
+    })
+    const fetch = vi.fn(() => approvalResponse)
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = mount(AdminRecovery, { props: { request: pendingRequest } })
+    const setupState = wrapper.vm.$.setupState as { code: string | null }
+
+    await wrapper.get('button[data-action="approve"]').trigger('click')
+    expect(fetch).toHaveBeenCalledOnce()
+    wrapper.unmount()
+
+    resolveApproval({
+      data: { code: approvedCode, expiresAt: '2026-07-14T10:15:00.000Z' },
+      requestId: 'trace-after-unmount',
+    })
+    await flushPromises()
+
+    expect(setupState.code).toBeNull()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(JSON.stringify(wrapper.emitted())).not.toContain(approvedCode)
+    expect(wrapper.emitted('code-cleared')).toBeUndefined()
+  })
 })

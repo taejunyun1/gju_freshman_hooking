@@ -6,14 +6,8 @@ type BootstrapInput = {
   supabaseUrl: string
 }
 
-type TotpEnrollment = {
-  qrCode: string
-  uri: string
-}
-
 export type LocalAdminBootstrapAdapter = {
   createUser: (email: string, password: string) => Promise<string>
-  enrollTotp: () => Promise<TotpEnrollment>
   signIn: (email: string, password: string) => Promise<void>
   upsertAdmin: (userId: string) => Promise<void>
 }
@@ -37,12 +31,10 @@ export const bootstrapLocalAdmin = async (
   if (!input.email || !input.password) throw new Error('LOCAL_ADMIN_INPUT_REQUIRED')
 
   const userId = await adapter.createUser(input.email, input.password)
-  await adapter.upsertAdmin(userId)
   await adapter.signIn(input.email, input.password)
-  const enrollment = await adapter.enrollTotp()
+  await adapter.upsertAdmin(userId)
 
-  write(`One-time TOTP enrollment URI: ${enrollment.uri}`)
-  write(`One-time TOTP QR payload: ${enrollment.qrCode}`)
+  write('Local administrator ready. Enroll TOTP on first browser login at /admin/login.')
 }
 
 const requiredEnvironmentValue = (name: string): string => {
@@ -75,14 +67,6 @@ const main = async (): Promise<void> => {
       })
       if (error || !data.user) throw new Error('LOCAL_ADMIN_CREATE_FAILED')
       return data.user.id
-    },
-    enrollTotp: async () => {
-      const { data, error } = await authClient.auth.mfa.enroll({
-        factorType: 'totp',
-        friendlyName: 'PHOTO:NEXT local administrator',
-      })
-      if (error || data.type !== 'totp') throw new Error('LOCAL_ADMIN_MFA_ENROLL_FAILED')
-      return { qrCode: data.totp.qr_code, uri: data.totp.uri }
     },
     signIn: async (userEmail, userPassword) => {
       const { error } = await authClient.auth.signInWithPassword({ email: userEmail, password: userPassword })

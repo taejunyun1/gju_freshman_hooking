@@ -27,6 +27,7 @@ const approving = ref(false)
 const copying = ref(false)
 const copied = ref(false)
 const approved = ref(false)
+let active = true
 let clearCodeTimer: ReturnType<typeof setTimeout> | undefined
 
 const clearCode = (notify = false): void => {
@@ -49,6 +50,7 @@ const approve = async (request: AdminRecoveryRequest): Promise<void> => {
       headers: adminSession.authorizationHeaders(),
       method: 'POST',
     })
+    if (!active) return
     clearCode()
     code.value = response.data.code
     codeExpiresAt.value = response.data.expiresAt
@@ -56,10 +58,10 @@ const approve = async (request: AdminRecoveryRequest): Promise<void> => {
     clearCodeTimer = setTimeout(() => clearCode(true), 60_000)
   }
   catch {
-    errorMessage.value = '승인하지 못했습니다. 다시 인증한 뒤 재시도하세요.'
+    if (active) errorMessage.value = '승인하지 못했습니다. 다시 인증한 뒤 재시도하세요.'
   }
   finally {
-    approving.value = false
+    if (active) approving.value = false
   }
 }
 
@@ -85,7 +87,10 @@ const copy = async (request: AdminRecoveryRequest): Promise<void> => {
   }
 }
 
-onBeforeUnmount(() => clearCode())
+onBeforeUnmount(() => {
+  active = false
+  clearCode()
+})
 </script>
 
 <template>

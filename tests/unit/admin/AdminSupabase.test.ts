@@ -41,18 +41,26 @@ describe('administrator-only Supabase Auth wrapper', () => {
 
   it('uses Auth-generated TOTP enrollment when no verified factor exists', async () => {
     const { beginAdminAuthentication } = await import('../../../app/utils/admin-supabase')
+    const unverifiedFactor = { factor_type: 'totp', id: 'unverified-factor', status: 'unverified' }
     const client = {
       auth: {
         mfa: {
           enroll: vi.fn(async () => ({
             data: {
               id: 'new-factor',
-              totp: { qr_code: '<svg>auth-qr</svg>', secret: 'auth-generated-secret', uri: 'otpauth://auth-generated' },
+              totp: {
+                qr_code: 'data:image/svg+xml;utf-8,%3Csvg%3Eauth-qr%3C%2Fsvg%3E',
+                secret: 'auth-generated-secret',
+                uri: 'otpauth://auth-generated',
+              },
               type: 'totp',
             },
             error: null,
           })),
-          listFactors: vi.fn(async () => ({ data: { all: [], phone: [], totp: [], webauthn: [] }, error: null })),
+          listFactors: vi.fn(async () => ({
+            data: { all: [unverifiedFactor], phone: [], totp: [], webauthn: [] },
+            error: null,
+          })),
         },
         signInWithPassword: vi.fn(async () => ({ data: {}, error: null })),
       },
@@ -60,7 +68,10 @@ describe('administrator-only Supabase Auth wrapper', () => {
 
     await expect(beginAdminAuthentication(client as never, 'admin@example.test', 'password-from-form')).resolves.toEqual({
       factorId: 'new-factor',
-      enrollment: { qrCode: '<svg>auth-qr</svg>', secret: 'auth-generated-secret' },
+      enrollment: {
+        qrCode: 'data:image/svg+xml;utf-8,%3Csvg%3Eauth-qr%3C%2Fsvg%3E',
+        secret: 'auth-generated-secret',
+      },
     })
     expect(client.auth.mfa.enroll).toHaveBeenCalledWith({
       factorType: 'totp',

@@ -1,7 +1,15 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAdminSessionStore } from '../../../app/stores/admin-session'
+
+const adminAuthMocks = vi.hoisted(() => ({
+  beginAdminAuthentication: vi.fn(),
+  getAdminSupabaseClient: vi.fn(() => ({ auth: { signOut: vi.fn() } })),
+  verifyAdminTotp: vi.fn(),
+}))
+
+vi.mock('../../../app/utils/admin-supabase', () => adminAuthMocks)
 
 const NuxtLinkStub = {
   props: ['to'],
@@ -14,6 +22,7 @@ const NuxtLayoutStub = {
 
 describe('administrator shell', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     sessionStorage.clear()
     setActivePinia(createPinia())
     vi.stubGlobal('definePageMeta', vi.fn())
@@ -29,6 +38,21 @@ describe('administrator shell', () => {
     expect(wrapper.find('input[type="password"]').attributes('autocomplete')).toBe('current-password')
     expect(wrapper.text()).toContain('2단계 인증')
     expect(wrapper.text()).not.toMatch(/회원가입|계정 만들기/u)
+  })
+
+  it('renders the full Supabase TOTP QR data URL without wrapping or re-encoding it', async () => {
+    const qrCode = 'data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M0%200h1v1H0z%22%2F%3E%3C%2Fsvg%3E'
+    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
+      enrollment: { qrCode, secret: 'auth-generated-secret' },
+      factorId: 'new-factor',
+    })
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('img').attributes('src')).toBe(qrCode)
   })
 
   it('uses AppState for the empty dashboard instead of invented metrics', async () => {

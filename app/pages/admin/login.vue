@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess } from '../../../shared/types/api'
 import AppButton from '../../components/common/AppButton.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
@@ -28,10 +28,6 @@ const errorMessage = ref('')
 const credentials = reactive({ email: '', password: '' })
 const totpCode = ref('')
 const authentication = ref<AdminAuthenticationStep | null>(null)
-
-const qrSource = computed(() => authentication.value?.enrollment
-  ? `data:image/svg+xml;utf-8,${encodeURIComponent(authentication.value.enrollment.qrCode)}`
-  : '')
 
 const safeRedirect = (): string => {
   const redirect = route.query.redirect
@@ -183,7 +179,7 @@ onBeforeUnmount(clearEnrollment)
           >
             <p>인증 앱에 새 계정을 등록한 뒤 표시된 6자리 코드를 입력하세요.</p>
             <img
-              :src="qrSource"
+              :src="authentication.enrollment.qrCode"
               alt="PHOTO:NEXT 관리자 TOTP 등록 QR 코드"
             >
             <label for="admin-totp-secret">
