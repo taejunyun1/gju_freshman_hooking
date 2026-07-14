@@ -17,6 +17,14 @@ const cryptoSecretInvalid = (): never => {
   throw new Error('CRYPTO_SECRET_INVALID')
 }
 
+const encryptionKeyInvalid = (): never => {
+  throw new Error('CRYPTO_ENCRYPTION_KEY_INVALID')
+}
+
+const requireAes256Key = (keyBytes: Uint8Array): void => {
+  if (keyBytes.byteLength !== 32) encryptionKeyInvalid()
+}
+
 export const randomBytes: RandomBytes = (length) => {
   const bytes = new Uint8Array(length)
   crypto.getRandomValues(bytes)
@@ -57,6 +65,7 @@ export const hmacSha256 = async (value: Uint8Array, keyBytes: Uint8Array): Promi
 }
 
 export const encryptAesGcm = async (value: Uint8Array, keyBytes: Uint8Array): Promise<EncryptedValue> => {
+  requireAes256Key(keyBytes)
   const iv = toCryptoBytes(randomBytes(12))
   const key = await crypto.subtle.importKey('raw', toCryptoBytes(keyBytes), { name: 'AES-GCM' }, false, ['encrypt'])
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, toCryptoBytes(value))
@@ -65,6 +74,7 @@ export const encryptAesGcm = async (value: Uint8Array, keyBytes: Uint8Array): Pr
 }
 
 export const decryptAesGcm = async ({ ciphertext, iv }: EncryptedValue, keyBytes: Uint8Array): Promise<Uint8Array> => {
+  requireAes256Key(keyBytes)
   const key = await crypto.subtle.importKey('raw', toCryptoBytes(keyBytes), { name: 'AES-GCM' }, false, ['decrypt'])
   const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: toCryptoBytes(iv) }, key, toCryptoBytes(ciphertext))
   return new Uint8Array(plaintext)

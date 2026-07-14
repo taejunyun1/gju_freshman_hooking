@@ -26,6 +26,22 @@ describe('phone identity domain', () => {
     await expect(revealPhone(protectedPhone, encryptionKey)).resolves.toBe('01012345678')
   })
 
+  it('rejects a 16-byte AES-128 key for phone protection and reveal', async () => {
+    const aes128Key = new Uint8Array(16).fill(22)
+    const protectedPhone = await protectPhone('01012345678', hmacKey, encryptionKey)
+
+    await expect(protectPhone('01012345678', hmacKey, aes128Key)).rejects.toThrowError('CRYPTO_ENCRYPTION_KEY_INVALID')
+    await expect(revealPhone(protectedPhone, aes128Key)).rejects.toThrowError('CRYPTO_ENCRYPTION_KEY_INVALID')
+  })
+
+  it('rejects a 33-byte key for phone protection and reveal', async () => {
+    const oversizedKey = new Uint8Array(33).fill(22)
+    const protectedPhone = await protectPhone('01012345678', hmacKey, encryptionKey)
+
+    await expect(protectPhone('01012345678', hmacKey, oversizedKey)).rejects.toThrowError('CRYPTO_ENCRYPTION_KEY_INVALID')
+    await expect(revealPhone(protectedPhone, oversizedKey)).rejects.toThrowError('CRYPTO_ENCRYPTION_KEY_INVALID')
+  })
+
   it('rejects tampered encrypted phone values', async () => {
     const protectedPhone = await protectPhone('01012345678', hmacKey, encryptionKey)
     const tamperedCiphertext = new Uint8Array(protectedPhone.ciphertext)

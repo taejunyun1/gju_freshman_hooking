@@ -1,7 +1,9 @@
-import { constantTimeEqual, utf8 } from '../../utils/web-crypto'
+import { utf8 } from '../../utils/web-crypto'
 import { normalizeKoreanPhone } from './phone'
 
 export const PASSWORD_PBKDF2_ITERATIONS = 600_000
+
+const PASSWORD_HASH_BYTES = 32
 
 export type PasswordHash = {
   hash: Uint8Array
@@ -13,6 +15,15 @@ const mixSaltWithPepper = (salt: Uint8Array, pepper: Uint8Array): Uint8Array => 
   mixed.set(salt)
   mixed.set(pepper, salt.length)
   return mixed
+}
+
+const passwordHashesMatch = (calculatedHash: Uint8Array, storedHash: Uint8Array): boolean => {
+  let difference = storedHash.length ^ PASSWORD_HASH_BYTES
+  for (let index = 0; index < PASSWORD_HASH_BYTES; index += 1) {
+    difference |= calculatedHash[index]! ^ (storedHash[index] ?? 0)
+  }
+
+  return difference === 0
 }
 
 export const hashPassword = async (password: string, salt: Uint8Array, pepper: Uint8Array): Promise<PasswordHash> => {
@@ -29,7 +40,7 @@ export const hashPassword = async (password: string, salt: Uint8Array, pepper: U
 
 export const verifyPassword = async (password: string, passwordHash: PasswordHash, pepper: Uint8Array): Promise<boolean> => {
   const calculated = await hashPassword(password, passwordHash.salt, pepper)
-  return constantTimeEqual(calculated.hash, passwordHash.hash)
+  return passwordHashesMatch(calculated.hash, passwordHash.hash)
 }
 
 export const generateInitialPassword = (phone: string, random: Uint8Array): string => {

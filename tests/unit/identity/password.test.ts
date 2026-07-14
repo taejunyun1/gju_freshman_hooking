@@ -21,4 +21,18 @@ describe('password identity domain', () => {
     await expect(verifyPassword('AB-5679', passwordHash, pepper)).resolves.toBe(false)
     await expect(verifyPassword('AB-5678', passwordHash, new Uint8Array(32).fill(34))).resolves.toBe(false)
   })
+
+  it('rejects a stored hash with a mismatched length after comparing all 32 PBKDF2 bytes', async () => {
+    const passwordHash = await hashPassword('AB-5678', salt, pepper)
+    const readIndexes: number[] = []
+    const truncatedHash = new Proxy(passwordHash.hash.slice(0, 31), {
+      get(target, property) {
+        if (typeof property === 'string' && /^\d+$/u.test(property)) readIndexes.push(Number(property))
+        return Reflect.get(target, property, target)
+      },
+    }) as unknown as Uint8Array
+
+    await expect(verifyPassword('AB-5678', { ...passwordHash, hash: truncatedHash }, pepper)).resolves.toBe(false)
+    expect(readIndexes).toEqual([...Array(32).keys()])
+  })
 })
