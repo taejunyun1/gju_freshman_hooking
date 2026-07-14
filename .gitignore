@@ -11,6 +11,7 @@ test-results/
 !.env.example
 .wrangler/
 .superpowers/
+.worktrees/
 .DS_Store
 /PHOTO_NEXT_MVP_*/
 /resource/curri-data.pdf
