@@ -120,6 +120,10 @@
 }
 
 .landing__brand {
+  min-inline-size: var(--touch-target);
+  min-block-size: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: 1.125rem;
@@ -366,7 +370,7 @@
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
-  color: color-mix(in srgb, var(--color-ink) 58%, transparent);
+  color: color-mix(in srgb, var(--color-ink) 64%, transparent);
   font-size: 0.5625rem;
 }
 

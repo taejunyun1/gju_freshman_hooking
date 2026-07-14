@@ -24,7 +24,7 @@ describe('AppButton', () => {
     expect(button.attributes('aria-busy')).toBe('true')
   })
 
-  it('connects its root class to the minimum touch target token', () => {
+  it('provides a 44px touch target on both axes', () => {
     const wrapper = mount(AppButton, {
       props: { variant: 'secondary' },
       slots: { default: '이전' },
@@ -32,6 +32,7 @@ describe('AppButton', () => {
     const source = readFileSync('app/components/common/AppButton.vue', 'utf8')
 
     expect(wrapper.get('button').classes()).toContain('app-button')
-    expect(source).toContain('min-height: var(--touch-target)')
+    expect(source).toContain('min-inline-size: var(--touch-target)')
+    expect(source).toContain('min-block-size: var(--touch-target)')
   })
 })

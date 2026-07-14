@@ -26,7 +26,8 @@ withDefaults(defineProps<{
 
 <style scoped>
 .app-button {
-  min-height: var(--touch-target);
+  min-inline-size: var(--touch-target);
+  min-block-size: var(--touch-target);
   display: inline-flex;
   align-items: center;
   justify-content: center;

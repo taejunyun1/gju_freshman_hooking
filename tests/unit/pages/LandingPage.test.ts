@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import LandingPage from '../../../app/pages/index.vue'
@@ -31,5 +32,18 @@ describe('landing page', () => {
     expect(startLinks).toHaveLength(1)
     expect(startLinks[0].text()).toBe('나의 연결 경로 찾기')
     expect(startLinks[0].classes()).toContain('landing__cta')
+  })
+
+  it('provides a labelled 44px home control in the masthead', () => {
+    const wrapper = mount(LandingPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+    const source = readFileSync('app/pages/index.vue', 'utf8')
+    const brand = wrapper.get('a[href="/"]')
+
+    expect(brand.attributes('aria-label')).toBe('PHOTO:NEXT 홈')
+    expect(brand.classes()).toContain('landing__brand')
+    expect(source).toContain('min-inline-size: var(--touch-target)')
+    expect(source).toContain('min-block-size: var(--touch-target)')
   })
 })
