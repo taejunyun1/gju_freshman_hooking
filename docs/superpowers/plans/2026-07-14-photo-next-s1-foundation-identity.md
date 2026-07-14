@@ -40,6 +40,9 @@
 - Create: `app/components/common/AppButton.vue`
 - Create: `app/components/common/AppState.vue`
 - Create: `tests/unit/design-tokens.test.ts`
+- Create: `tests/unit/components/AppButton.test.ts`
+- Create: `tests/unit/pages/LandingPage.test.ts`
+- Create: `tests/integration/health.test.ts`
 
 **Interfaces:**
 - Consumes: none
@@ -57,7 +60,7 @@ pnpm add -D vitest @vue/test-utils happy-dom @playwright/test @nuxt/eslint eslin
 
 Expected: Nuxt scaffold exists, dependencies install, and `pnpm-lock.yaml` pins resolved versions.
 
-- [ ] **Step 2: Write the failing design-token test**
+- [ ] **Step 2: Write the failing foundation behavior tests**
 
 ```ts
 // tests/unit/design-tokens.test.ts
@@ -74,11 +77,13 @@ describe('design tokens', () => {
 })
 ```
 
-- [ ] **Step 3: Run the test and verify the missing-token failure**
+Also write tests before implementation that mount `AppButton` and assert a native disabled state, `aria-busy="true"` while loading, a minimum 44px token/class contract, and a safe default `type="button"`. Mount the landing page with `NuxtLink` stubbed and assert the main heading, the four-stage order `관심 선택 → 4년 학습경로 → 작품·진로 → 교수 상담`, and the `/start` CTA. Add an integration test for `/api/health` that expects exactly the public keys `ok` and `commit` and verifies that no runtime secret key name or value appears in the serialized response.
 
-Run: `pnpm vitest run tests/unit/design-tokens.test.ts`
+- [ ] **Step 3: Run the tests and verify the missing foundation failures**
 
-Expected: FAIL because `app/assets/css/tokens.css` does not exist or lacks the colors.
+Run: `pnpm vitest run tests/unit/design-tokens.test.ts tests/unit/components/AppButton.test.ts tests/unit/pages/LandingPage.test.ts tests/integration/health.test.ts`
+
+Expected: FAIL because the design tokens, components, landing page contract, and health handler do not exist yet.
 
 - [ ] **Step 4: Configure Nuxt, Worker output, tokens, and base components**
 
@@ -112,14 +117,14 @@ Set `wrangler.jsonc` main to `.output/server/index.mjs`, assets directory to `.o
 
 Configure Vitest for `tests/unit/**/*.test.ts` in happy-dom and `tests/integration/**/*.test.ts` in node, Playwright base URL `http://127.0.0.1:3000` with Chromium, and Nuxt ESLint flat config from `.nuxt/eslint.config.mjs`. README commands are `pnpm install`, `supabase start`, `supabase db reset`, `pnpm dev`, `pnpm test:unit`, and `pnpm build`; link the design spec and implementation index and state that internal DOCX/PDF and secrets must not be committed.
 
-Implement `/` as a mobile-first PHOTO:NEXT landing page with the copy “하고 싶은 사진·영상 작업이 학과의 수업과 어떻게 이어지는지 확인해보세요”, the four-step explanation 관심 선택 → 4년 교과 → 장비·프로젝트 → 교수 상담, and one primary “나의 연결 경로 찾기” link to `/start`. Add `/api/health` returning `{ ok: true, commit: runtimeVersion }` without database or secret values.
+Implement `/` as a mobile-first PHOTO:NEXT landing page with the copy “하고 싶은 사진·영상 작업이 학과의 수업과 어떻게 이어지는지 확인해보세요”, the four-step explanation 관심 선택 → 4년 학습경로 → 작품·진로 → 교수 상담, and one primary “나의 연결 경로 찾기” link to `/start`. The landing page may mention equipment and facilities only as a short supporting proof that the learning path can be carried out, not as a primary step or hero statistic. Add `/api/health` returning `{ ok: true, commit: runtimeVersion }` without database or secret values.
 
 - [ ] **Step 5: Verify foundation**
 
 Run:
 
 ```bash
-pnpm vitest run tests/unit/design-tokens.test.ts
+pnpm vitest run tests/unit/design-tokens.test.ts tests/unit/components/AppButton.test.ts tests/unit/pages/LandingPage.test.ts tests/integration/health.test.ts
 pnpm nuxi typecheck
 pnpm nuxt build
 ```
@@ -129,7 +134,7 @@ Expected: PASS, type errors 0, `.output/server/index.mjs` exists.
 - [ ] **Step 6: Commit foundation**
 
 ```bash
-git add package.json pnpm-lock.yaml nuxt.config.ts wrangler.jsonc vitest.config.ts playwright.config.ts eslint.config.mjs README.md app server/api/health.get.ts tests/unit/design-tokens.test.ts
+git add package.json pnpm-lock.yaml nuxt.config.ts wrangler.jsonc vitest.config.ts playwright.config.ts eslint.config.mjs README.md app server/api/health.get.ts tests/unit/design-tokens.test.ts tests/unit/components/AppButton.test.ts tests/unit/pages/LandingPage.test.ts tests/integration/health.test.ts
 git commit -m "chore: scaffold Nuxt Worker application"
 ```
 

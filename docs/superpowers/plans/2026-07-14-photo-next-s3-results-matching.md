@@ -10,13 +10,13 @@
 
 ## Global Constraints
 
-- 교과 결과는 최대 5, 장비·시설 4, 비교과·프로젝트 3, 작품 3, 진로 4다.
+- 교과 결과는 최대 5, 장비·시설은 기본 2·펼침 시 최대 4, 비교과·프로젝트 3, 작품 3, 진로 4다.
 - 자원은 `active|next_year_confirmed`와 학생 공개 가능 상태만 후보가 된다.
 - 정렬은 적합도, 관리자 우선순위, source_date, ID 순이고 동일 주 태그는 범주당 최대 2개다.
 - 교육환경 점수는 교과 35%, 장비·시설 20%, 비교과·프로젝트 15%, 교수 15%, 진로·포트폴리오 15%다.
 - 교수 추천은 전임 총괄 1명, 전임 예비 1명, 전문 연계 0–2명이며 실제 배정이 아니다.
 - 결과 공개 ID는 UUID이고 서버가 학생 소유권을 검증한다.
-- 결과 화면은 점수보다 선택 관심사와 연결 근거를 먼저 보여준다.
+- 결과 화면은 점수보다 선택 관심사와 1–4학년 교과·프로젝트 학습경로, 결과물·진로를 먼저 보여준다. 장비·시설은 관련 단계의 실행 가능성을 뒷받침하는 보조 근거다.
 - 네 번째 완료 결과는 가장 오래된 상세만 삭제하고 익명 이벤트는 유지한다.
 
 ---
@@ -219,9 +219,10 @@ it('allows no more than two resources with one primary tag', () => {
 it('returns fewer than the cap instead of unrelated filler', () => {
   expect(rankResources(oneRelevantCourse).course).toHaveLength(1)
 })
-it('caps equipment and facilities at four combined cards', () => {
+it('shows two equipment or facility cards by default and caps expanded evidence at four', () => {
   const ranked = rankResources(manyEquipmentAndFacilities)
-  expect(ranked.equipment.length + ranked.facility.length).toBe(4)
+  expect(ranked.capabilityEvidence.slice(0, 2)).toHaveLength(2)
+  expect(ranked.capabilityEvidence).toHaveLength(4)
 })
 it('keeps support programs out of the environment score', () => {
   expect(computeEnvironmentScore({ course: 80, equipmentFacility: 70, extracurricularProject: 60, faculty: 90, careerPortfolio: 50, support: 100 })).toBe(72.0)
@@ -377,12 +378,13 @@ git add supabase/migrations/202607140004_results_matching.sql supabase/tests/com
 git commit -m "feat: complete and retain assessment results"
 ```
 
-### Task 6: Edit Timeline result and history UI
+### Task 6: Four-year learning-path result and history UI
 
 **Files:**
 - Create: `app/components/result/InterestClip.vue`
 - Create: `app/components/result/TimelineLane.vue`
 - Create: `app/components/result/LearningPath.vue`
+- Create: `app/components/result/CapabilityEvidence.vue`
 - Create: `app/components/result/ConnectionReason.vue`
 - Create: `app/components/result/ResourceCard.vue`
 - Create: `app/components/result/TrackScore.vue`
@@ -393,21 +395,22 @@ git commit -m "feat: complete and retain assessment results"
 - Create: `tests/unit/components/ResultTimeline.test.ts`
 
 **Interfaces:**
-- Produces: mobile vertical and desktop horizontal evidence timeline
+- Produces: mobile vertical and desktop horizontal four-year learning path with nested capability evidence
 - Consumes: immutable `ResultSnapshot`
 
 - [ ] **Step 1: Write failing content-order and role-label tests**
 
 ```ts
 expect(wrapper.findAll('[data-result-section]').map(x => x.attributes('data-result-section'))).toEqual([
-  'summary','interests','timeline','evidence','scores','outcomes','faculty','counseling',
+  'summary','interests','learning-path','outcomes','capability-evidence','scores','faculty','counseling',
 ])
+expect(wrapper.findAll('[data-capability-evidence]')).toHaveLength(2)
 expect(wrapper.text()).toContain('추천 총괄교수')
 expect(wrapper.text()).toContain('함께 연결되는 전문분야')
 expect(wrapper.text()).not.toContain('배정 완료')
 ```
 
-- [ ] **Step 2: Run and verify missing timeline components**
+- [ ] **Step 2: Run and verify missing learning-path components**
 
 Run: `pnpm vitest run tests/unit/components/ResultTimeline.test.ts`
 
@@ -415,7 +418,7 @@ Expected: FAIL because result components do not exist.
 
 - [ ] **Step 3: Implement the evidence-first responsive result**
 
-Render interest clips, V1 curriculum with four grade-year groups, V2 equipment/facilities, V3 extracurricular/projects, and OUT works/careers. Mobile uses vertical lanes; 1024px and above uses horizontal lanes. Each resource displays its reason and source date. Equipment cards show grouped verified quantity, department equipment room or fantasy lab, reservation or inquiry access, and the reservation-system link; they do not expose inventory codes. Facility cards show only administrator-verified operation notes. Empty categories say “확인된 학과 데이터를 준비 중입니다” without inventing recommendations.
+Render interest clips, the primary 1Y foundation → 2Y production/post → 3Y specialization/project → 4Y capstone/portfolio learning path, and OUT works/careers. Mobile uses a vertical path; 1024px and above uses a horizontal path. Each course or project displays its reason and source date. Attach equipment, facilities, faculty, and extracurricular resources beneath the related learning step as compact capability evidence instead of rendering equipment/facilities as a standalone main lane. Show the strongest one or two equipment/facility items initially and reveal up to four only after “이 제작을 가능하게 하는 기반 더보기” is activated. Equipment evidence shows grouped verified quantity, department equipment room or fantasy lab, reservation or inquiry access, and the reservation-system link; it never exposes inventory codes. Facility evidence shows only administrator-verified operation notes. Empty categories say “확인된 학과 데이터를 준비 중입니다” without inventing recommendations.
 
 Animate one playhead and reveal for no more than 500ms; card transitions are 160ms. Under `prefers-reduced-motion: reduce`, render the final state immediately. Faculty cards use “추천 총괄교수”, “예비 상담교수”, and “함께 연결되는 전문분야”. Public contacts render only when the snapshot field is public.
 
@@ -433,7 +436,7 @@ Expected: section order, faculty labels, reduced motion, empty state, and type c
 
 ```bash
 git add app/components/result app/pages/result app/pages/history.vue server/api/events.post.ts tests/unit/components/ResultTimeline.test.ts
-git commit -m "feat: add evidence timeline results"
+git commit -m "feat: add four-year learning path results"
 ```
 
 ### Task 7: S3 full-flow gate
