@@ -239,6 +239,33 @@ describe('result snapshot decoder', () => {
     expect(() => decodeResultSnapshot(duplicateRank)).toThrow()
   })
 
+  it('uses canonical one-decimal score precision and integer course credits', () => {
+    const canonical = clone(makeValidSnapshot())
+    canonical.trackScores = { documentary: 0.1, art_photo: 72.0, commercial: 99.9, video: 0 }
+    canonical.environmentScore = 72.0
+    canonical.resources.project[0]!.affinity = 99.9
+    expect(() => decodeResultSnapshot(canonical)).not.toThrow()
+
+    for (const invalidValue of [1e-100, 72.01, 99.99]) {
+      const trackScore = clone(makeValidSnapshot())
+      trackScore.trackScores.documentary = invalidValue
+      expect(() => decodeResultSnapshot(trackScore)).toThrow()
+
+      const environment = clone(makeValidSnapshot())
+      environment.environmentScore = invalidValue
+      expect(() => decodeResultSnapshot(environment)).toThrow()
+
+      const affinity = clone(makeValidSnapshot())
+      affinity.resources.project[0]!.affinity = invalidValue
+      expect(() => decodeResultSnapshot(affinity)).toThrow()
+    }
+
+    const fractionalCredits = clone(makeValidSnapshot())
+    fractionalCredits.resources.course[0]!.displayMetadata.credits = 2.5
+    fractionalCredits.learningPath[0]!.resources[0]!.displayMetadata.credits = 2.5
+    expect(() => decodeResultSnapshot(fractionalCredits)).toThrow()
+  })
+
   it('requires four ordered year buckets with course-only resources', () => {
     const wrongOrder = clone(makeValidSnapshot())
     wrongOrder.learningPath[0]!.year = 2
@@ -442,6 +469,18 @@ describe('result snapshot decoder', () => {
     const validEmoji = clone(makeValidSnapshot())
     validEmoji.resources.project[0]!.summary = '정상 이모지 📷와 🎬는 보존됩니다.'
     expect(() => decodeResultSnapshot(validEmoji)).not.toThrow()
+  })
+
+  it('rejects NUL, newline, and C0/C1 controls in bounded free text', () => {
+    for (const control of ['\0', '\n', '\t', '\u001F', '\u007F', '\u0085']) {
+      const snapshot = clone(makeValidSnapshot())
+      snapshot.resources.project[0]!.summary = `제어문자${control}포함`
+      expect(() => decodeResultSnapshot(snapshot)).toThrow()
+    }
+
+    const safeText = clone(makeValidSnapshot())
+    safeText.resources.project[0]!.summary = '안전한 한국어와 emoji 📷 🎬 텍스트입니다.'
+    expect(() => decodeResultSnapshot(safeText)).not.toThrow()
   })
 
   it('rejects a title-only connection reason unrelated to every selected interest label', () => {

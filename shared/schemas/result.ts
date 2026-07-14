@@ -30,14 +30,21 @@ const hasOnlyPairedUtf16Surrogates = (value: string) => {
   return true
 }
 
+const hasNoC0OrC1Controls = (value: string) => [...value].every((character) => {
+  const codePoint = character.codePointAt(0) ?? 0
+  return codePoint > 0x1F && (codePoint < 0x7F || codePoint > 0x9F)
+})
+
 const boundedText = (minimum: number, maximum: number) => z.string()
   .min(minimum)
   .max(maximum)
   .refine(value => value === value.trim(), '앞뒤 공백을 제거해 주세요.')
   .refine(hasOnlyPairedUtf16Surrogates, '짝이 맞지 않는 UTF-16 문자는 사용할 수 없습니다.')
+  .refine(hasNoC0OrC1Controls, '제어문자는 사용할 수 없습니다.')
 
 const safeIdSchema = z.number().int().positive().safe()
 const finiteScoreSchema = z.number().finite().min(0).max(100)
+  .refine(value => Number.isInteger(value * 10), '점수는 소수점 첫째 자리까지만 허용됩니다.')
 const tagKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u)
 const serializedUtf8ByteLength = (value: unknown) => {
   try {
@@ -118,7 +125,7 @@ const renderedReasonCheck = (
 const courseDisplayMetadataSchema = z.object({
   gradeYear: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   term: boundedText(1, 20),
-  credits: z.number().finite().min(0).max(30),
+  credits: z.number().int().min(0).max(30),
 }).strict()
 
 const equipmentDisplayMetadataBaseShape = {
