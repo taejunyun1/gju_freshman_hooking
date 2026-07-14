@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 type Rgb = readonly [number, number, number]
@@ -42,6 +43,52 @@ describe('design tokens', () => {
   it('defines the minimum touch target contract', () => {
     const css = readFileSync('app/assets/css/tokens.css', 'utf8')
     expect(css).toContain('--touch-target: 44px')
+  })
+
+  it('bundles the three approved OFL font packages through the Nuxt CSS build', () => {
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
+    const requiredPackages = {
+      'wanted-sans': {
+        version: '1.0.3',
+        assetPath: 'fonts/webfonts/variable/complete/woff2/WantedSansVariable.woff2',
+      },
+      pretendard: {
+        version: '1.3.9',
+        assetPath: 'dist/web/variable/woff2/PretendardVariable.woff2',
+      },
+      '@fontsource/ibm-plex-mono': {
+        version: '5.2.7',
+        assetPath: 'files/ibm-plex-mono-latin-400-normal.woff2',
+      },
+    }
+
+    expect(packageJson.dependencies).toMatchObject(Object.fromEntries(
+      Object.entries(requiredPackages).map(([packageName, contract]) => [packageName, contract.version]),
+    ))
+    expect(readFileSync('nuxt.config.ts', 'utf8')).toContain("'~/assets/css/fonts.css'")
+    expect(existsSync('app/assets/css/fonts.css')).toBe(true)
+
+    const fontCss = readFileSync('app/assets/css/fonts.css', 'utf8')
+    for (const [packageName, contract] of Object.entries(requiredPackages)) {
+      expect(fontCss).toContain(`${packageName}/${contract.assetPath}`)
+      const packageRoot = resolve('node_modules', packageName)
+      const fontPackage = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
+        license?: string
+      }
+      expect(fontPackage.license).toBe('OFL-1.1')
+      expect(existsSync(resolve(packageRoot, contract.assetPath))).toBe(true)
+      expect([
+        resolve(packageRoot, 'LICENSE'),
+        resolve(packageRoot, 'LICENSE.md'),
+        resolve(packageRoot, 'OFL.txt'),
+        resolve(packageRoot, 'fonts/OFL.txt'),
+        resolve(packageRoot, 'dist/LICENSE.txt'),
+      ].some(existsSync)).toBe(true)
+    }
+    expect(fontCss.match(/format\('woff2(?:-variations)?'\)/gu)).toHaveLength(4)
+    expect(fontCss).not.toContain("format('woff')")
   })
 
   it('keeps footer text at WCAG AA contrast against the canvas', () => {

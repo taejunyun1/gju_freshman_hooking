@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import type { ApiSuccess, StudentSession } from '../../shared/types/api'
 import type { QuestionGroup } from '../../shared/types/domain'
 import AssessmentProgress from '../components/assessment/AssessmentProgress.vue'
@@ -12,6 +12,7 @@ const session = ref<StudentSession | null>(null)
 const checkingSession = ref(true)
 const loggingOut = ref(false)
 const logoutError = ref('')
+const sequenceRoot = ref<HTMLElement | null>(null)
 
 const groupLabels: Record<QuestionGroup, string> = {
   work: '작업 선택',
@@ -69,6 +70,24 @@ const updateSelections = (values: string[]): void => {
   const changed = [...new Set([...current, ...values])]
     .find(key => current.includes(key) !== values.includes(key))
   if (changed) assessment.toggleOption(changed)
+}
+
+const focusCurrentStep = async (): Promise<void> => {
+  await nextTick()
+  const heading = sequenceRoot.value?.querySelector<HTMLElement>('legend')
+  if (!heading) return
+  const reducedMotion = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  heading.focus({ preventScroll: true })
+  heading.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })
+}
+
+const nextStep = async (): Promise<void> => {
+  if (assessment.next()) await focusCurrentStep()
+}
+
+const previousStep = async (): Promise<void> => {
+  if (assessment.previous()) await focusCurrentStep()
 }
 
 const validate = async (): Promise<void> => {
@@ -180,6 +199,7 @@ onMounted(loadSession)
 
         <section
           v-else-if="assessment.currentGroup && assessment.currentLimit"
+          ref="sequenceRoot"
           class="assessment-page__sequence"
           aria-labelledby="assessment-title"
         >
@@ -238,6 +258,7 @@ onMounted(loadSession)
             :limit="assessment.currentLimit"
             :model-value="assessment.currentSelected"
             :career-other="assessment.careerOther"
+            :disabled="flowBusy"
             @update:model-value="updateSelections"
             @update:career-other="assessment.setCareerOther"
           />
@@ -258,7 +279,7 @@ onMounted(loadSession)
               data-testid="assessment-previous"
               type="button"
               :disabled="assessment.step === 0 || flowBusy"
-              @click="assessment.previous"
+              @click="previousStep"
             >
               ← 이전
             </button>
@@ -268,7 +289,7 @@ onMounted(loadSession)
               class="assessment-page__primary-action"
               type="button"
               :disabled="!assessment.canAdvance || flowBusy"
-              @click="assessment.next"
+              @click="nextStep"
             >
               다음 →
             </button>
@@ -277,7 +298,7 @@ onMounted(loadSession)
               data-testid="assessment-validate"
               class="assessment-page__primary-action"
               type="button"
-              :disabled="!assessment.canAdvance || flowBusy"
+              :disabled="!assessment.isComplete || flowBusy"
               :aria-busy="assessment.status === 'validating' ? 'true' : undefined"
               @click="validate"
             >

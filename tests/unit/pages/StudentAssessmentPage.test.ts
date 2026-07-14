@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const revision = `sha256:${'a'.repeat(64)}`
 const storageKey = 'photo_next_assessment_v1'
@@ -27,6 +27,18 @@ const catalog = {
 }
 const success = <T>(data: T) => ({ data, requestId: 'request-id' })
 
+const validScoredResult = () => ({
+  trackScores: { documentary: 9, art_photo: 4, commercial: 2, video: 1 },
+  rankedTracks: ['documentary', 'art_photo', 'commercial', 'video'],
+  interestVector: { field: 0.2 },
+})
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}
+
 const mountPage = async () => {
   const { default: AssessmentPage } = await import('../../../app/pages/assessment.vue')
   return mount(AssessmentPage, {
@@ -39,6 +51,11 @@ describe('student assessment page', () => {
     vi.resetModules()
     vi.stubGlobal('navigateTo', vi.fn())
     sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('loads the session before the catalog and renders the first contact-sheet step', async () => {
@@ -111,7 +128,10 @@ describe('student assessment page', () => {
     expect(wrapper.text()).toContain('무엇을 해보고 싶나요?')
   })
 
-  it('disables next below the minimum, then advances and returns through four groups', async () => {
+  it('focuses and scrolls the new step heading after mobile next and previous navigation', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList)
     vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
       if (url === '/api/student/session') return success(session)
       if (url === '/api/assessment/options') return success(catalog)
@@ -127,9 +147,33 @@ describe('student assessment page', () => {
     await next.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('02 / 04')
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' })
+    expect(focus.mock.contexts.at(-1)).toBe(wrapper.get('legend').element)
 
     await wrapper.get('[data-testid="assessment-previous"]').trigger('click')
+    await flushPromises()
     expect(wrapper.text()).toContain('01 / 04')
+    expect(focus).toHaveBeenCalledTimes(2)
+    expect(scroll).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables final calculation until every assessment group is complete', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: { work: [], result: [], style: [], career: ['career.photo'] },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') return success(catalog)
+      return success({ accepted: true })
+    }))
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="assessment-validate"]').attributes('disabled')).toBeDefined()
   })
 
   it('validates the final step with memory-only CSRF and exposes a temporary primary track label', async () => {
@@ -149,11 +193,7 @@ describe('student assessment page', () => {
       if (url === '/api/assessment/options') return success(catalog)
       if (url === '/api/events') return success({ accepted: true })
       if (url === '/api/student/assessment/validate') {
-        return success({
-          trackScores: { documentary: 9, art_photo: 4, commercial: 2, video: 1 },
-          rankedTracks: ['documentary', 'art_photo', 'commercial', 'video'],
-          interestVector: { field: 2 },
-        })
+        return success(validScoredResult())
       }
       throw new Error(`unexpected ${url}`)
     })
@@ -172,6 +212,41 @@ describe('student assessment page', () => {
     const persisted = sessionStorage.getItem(storageKey) ?? ''
     expect(persisted).not.toContain('csrf-memory-token')
     expect(persisted).not.toContain('trackScores')
+  })
+
+  it('disables the assessment fieldset while validation is pending', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: {
+        work: ['work.photo'],
+        result: ['result.portfolio'],
+        style: ['style.solo'],
+        career: ['career.photo'],
+      },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    const pendingValidation = deferred<unknown>()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') return success(catalog)
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return pendingValidation.promise
+      throw new Error(`unexpected ${url}`)
+    }))
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    const before = sessionStorage.getItem(storageKey)
+    await wrapper.get('[data-key="career.photo"]').trigger('click')
+    expect(sessionStorage.getItem(storageKey)).toBe(before)
+
+    pendingValidation.resolve(success(validScoredResult()))
+    await flushPromises()
+    expect(wrapper.get('[data-testid="validated-primary-track"]').text()).toContain('다큐멘터리')
   })
 
   it('shows a distinct stale-catalog review state after validation reloads the options', async () => {
@@ -209,6 +284,59 @@ describe('student assessment page', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="assessment-stale"]').text()).toContain('선택을 다시 확인')
+  })
+
+  it('returns to visible stale review after a failed reload retry removes an earlier choice', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: {
+        work: ['work.photo'],
+        result: ['result.portfolio'],
+        style: ['style.solo'],
+        career: ['career.photo'],
+      },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    const stale = Object.assign(new Error('stale upstream'), {
+      data: { error: { code: 'ASSESSMENT_CATALOG_STALE', message: 'sanitized' } },
+      statusCode: 409,
+    })
+    let optionsLoads = 0
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') {
+        optionsLoads += 1
+        if (optionsLoads === 2) throw new Error('reload unavailable')
+        if (optionsLoads === 3) {
+          return success({
+            ...catalog,
+            catalogRevision: `sha256:${'b'.repeat(64)}`,
+            groups: catalog.groups.map(group => group.key === 'work'
+              ? { ...group, options: [{ key: 'work.video', label: '영상 촬영하기', visualKey: 'video_frame' }] }
+              : group),
+          })
+        }
+        return success(catalog)
+      }
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') throw stale
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="assessment-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="assessment-stale"]').text()).toContain('선택을 다시 확인')
+    expect(wrapper.text()).toContain('01 / 04')
+    expect(wrapper.text()).toContain('영상 촬영하기')
+    expect(wrapper.find('[data-testid="assessment-validate"]').exists()).toBe(false)
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/student/assessment/validate')).toHaveLength(1)
   })
 
   it('logs out through the API, clears assessment storage, and replaces the route with login', async () => {

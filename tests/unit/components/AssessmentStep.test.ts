@@ -59,6 +59,22 @@ describe('AssessmentStep', () => {
     expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
   })
 
+  it('disables the native fieldset and emits no mutation while the flow is busy', async () => {
+    const wrapper = mount(AssessmentStep, {
+      props: {
+        group: workGroup,
+        limit: { min: 1, max: 4 },
+        modelValue: ['work.photo'],
+        careerOther: '',
+        disabled: true,
+      },
+    })
+
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-key="work.photo"]').trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
   it('reveals a labeled 30-character career input with a counter and privacy boundary', () => {
     const wrapper = mount(AssessmentStep, {
       props: {
@@ -93,6 +109,9 @@ describe('AssessmentStep', () => {
 
     expect(input.attributes('aria-describedby')).toBe('career-other-privacy career-other-error')
     expect(wrapper.get('#career-other-error').exists()).toBe(true)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.findAll('[aria-live="polite"]')).toHaveLength(1)
+    expect(wrapper.get('[role="status"]').text()).toContain('전화번호나 이메일')
   })
 
   it.each([
@@ -112,7 +131,8 @@ describe('AssessmentStep', () => {
     await wrapper.get('input[name="careerOther"]').setValue(value)
 
     expect(wrapper.emitted('update:careerOther')).toBeUndefined()
-    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('[role="status"]').text()).toContain(message)
   })
 
   it('clears optional career text in the same turn when explore is deselected', async () => {

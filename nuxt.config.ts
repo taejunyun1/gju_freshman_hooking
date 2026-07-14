@@ -1,7 +1,7 @@
 export default defineNuxtConfig({
   compatibilityDate: '2026-07-14',
   modules: ['@pinia/nuxt', '@nuxt/eslint'],
-  css: ['~/assets/css/tokens.css', '~/assets/css/main.css'],
+  css: ['~/assets/css/fonts.css', '~/assets/css/tokens.css', '~/assets/css/main.css'],
   runtimeConfig: {
     supabaseSecretKey: '',
     phoneHmacKey: '',

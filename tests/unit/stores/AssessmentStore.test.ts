@@ -39,6 +39,22 @@ const catalog = (catalogRevision = revisionA) => ({
 
 const success = <T>(data: T) => ({ data, requestId: 'request-id' })
 
+const validScoredResult = () => ({
+  trackScores: { documentary: 8, art_photo: 5, commercial: 2, video: 1 },
+  rankedTracks: ['documentary', 'art_photo', 'commercial', 'video'],
+  interestVector: { field: 0.3 },
+})
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
+}
+
 const catalogWithoutCareer = () => {
   const value = catalog()
   value.groups.pop()
@@ -48,6 +64,14 @@ const catalogWithoutCareer = () => {
 const catalogWithChangedLimits = () => {
   const value = catalog()
   value.limits.work.max = 5
+  return value
+}
+
+const catalogWithExtraLimit = () => {
+  const value = catalog() as ReturnType<typeof catalog> & {
+    limits: ReturnType<typeof catalog>['limits'] & { equipment?: { min: number, max: number } }
+  }
+  value.limits.equipment = { min: 1, max: 1 }
   return value
 }
 
@@ -85,6 +109,28 @@ describe('assessment store', () => {
       method: 'POST',
     })
     expect(fetch.mock.calls.filter(([url]) => url === '/api/events')).toHaveLength(1)
+  })
+
+  it('resets assessment_started and completed-event lifecycle flags on clear', async () => {
+    const fetch = vi.fn(async (url: string, _options?: { body?: Record<string, unknown> }) => url === '/api/assessment/options'
+      ? success(catalog())
+      : success({ accepted: true }))
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+
+    await store.loadOptions()
+    store.toggleOption('work.photo')
+    expect(store.next()).toBe(true)
+    store.previous()
+    expect(store.next()).toBe(true)
+    store.clear()
+    await store.loadOptions()
+
+    const eventBodies = fetch.mock.calls
+      .filter(([url]) => url === '/api/events')
+      .map(([, options]) => options?.body)
+    expect(eventBodies.filter(body => body?.eventName === 'assessment_started')).toHaveLength(2)
+    expect(eventBodies.filter(body => body?.eventName === 'assessment_step_completed')).toHaveLength(1)
   })
 
   it('blocks over-limit selections and advances only after the exact minimum', async () => {
@@ -177,12 +223,8 @@ describe('assessment store', () => {
   })
 
   it('submits the exact revision and selections with memory-only CSRF and scored result', async () => {
-    const scored = {
-      trackScores: { documentary: 8, art_photo: 5, commercial: 2, video: 1 },
-      rankedTracks: ['documentary', 'art_photo', 'commercial', 'video'],
-      interestVector: { field: 3 },
-    }
-    const fetch = vi.fn(async (url: string) => {
+    const scored = validScoredResult()
+    const fetch = vi.fn(async (url: string, _options?: { body?: Record<string, unknown> }) => {
       if (url === '/api/assessment/options') return success(catalog())
       if (url === '/api/events') return success({ accepted: true })
       if (url === '/api/student/assessment/validate') return success(scored)
@@ -218,6 +260,148 @@ describe('assessment store', () => {
     expect(persisted).not.toContain('trackScores')
     expect(persisted).not.toContain('rankedTracks')
     expect(persisted).not.toContain('interestVector')
+  })
+
+  it('blocks public mutations while validation is pending and keeps the accepted result memory-only', async () => {
+    const pendingValidation = deferred<unknown>()
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') return success(catalog())
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return pendingValidation.promise
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    const validation = store.validate('csrf-memory-token')
+
+    expect(store.status).toBe('validating')
+    expect(store.toggleOption('work.video')).toBe(false)
+    expect(store.selections.work).toEqual(['work.photo'])
+    pendingValidation.resolve(success(validScoredResult()))
+
+    expect(await validation).toBe(true)
+    expect(store.validatedResult).toEqual(validScoredResult())
+    const persisted = sessionStorage.getItem(storageKey) ?? ''
+    expect(persisted).not.toContain('trackScores')
+    expect(persisted).not.toContain('csrf-memory-token')
+  })
+
+  it('ignores a late validation result when the selection fingerprint changes', async () => {
+    const pendingValidation = deferred<unknown>()
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') return success(catalog())
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return pendingValidation.promise
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    const validation = store.validate('csrf-memory-token')
+    store.selections.work.push('work.video')
+    pendingValidation.resolve(success(validScoredResult()))
+
+    expect(await validation).toBe(false)
+    expect(store.status).toBe('ready')
+    expect(store.validatedResult).toBeNull()
+  })
+
+  it('invalidates an in-flight options request when clear removes persisted state', async () => {
+    const pendingOptions = deferred<unknown>()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') return pendingOptions.promise
+      return success({ accepted: true })
+    }))
+    const store = useAssessmentStore()
+
+    const loading = store.loadOptions()
+    store.clear()
+    pendingOptions.resolve(success(catalog()))
+
+    expect(await loading).toBe(false)
+    expect(store.status).toBe('idle')
+    expect(store.groups).toEqual([])
+    expect(store.selections.work).toEqual([])
+    expect(sessionStorage.getItem(storageKey)).toBeNull()
+  })
+
+  it('invalidates an in-flight validation when clear removes persisted state', async () => {
+    const pendingValidation = deferred<unknown>()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') return success(catalog())
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return pendingValidation.promise
+      throw new Error(`unexpected ${url}`)
+    }))
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    const validation = store.validate('csrf-memory-token')
+    store.clear()
+    pendingValidation.resolve(success(validScoredResult()))
+
+    expect(await validation).toBe(false)
+    expect(store.status).toBe('ready')
+    expect(store.selections).toEqual({ work: [], result: [], style: [], career: [] })
+    expect(store.validatedResult).toBeNull()
+    expect(sessionStorage.getItem(storageKey)).toBeNull()
+  })
+
+  it.each([
+    ['extra envelope field', { ...success(validScoredResult()), debug: true }],
+    ['missing request id', { data: validScoredResult() }],
+    ['extra result field', success({ ...validScoredResult(), csrfToken: 'leak' })],
+    ['missing track score', success({ ...validScoredResult(), trackScores: { documentary: 8, art_photo: 5, commercial: 2 } })],
+    ['extra track score', success({ ...validScoredResult(), trackScores: { ...validScoredResult().trackScores, secret: 4 } })],
+    ['non-finite track score', success({ ...validScoredResult(), trackScores: { ...validScoredResult().trackScores, video: Number.NaN } })],
+    ['out-of-range track score', success({ ...validScoredResult(), trackScores: { ...validScoredResult().trackScores, video: 101 } })],
+    ['duplicate ranked track', success({ ...validScoredResult(), rankedTracks: ['documentary', 'art_photo', 'commercial', 'commercial'] })],
+    ['unknown ranked track', success({ ...validScoredResult(), rankedTracks: ['documentary', 'art_photo', 'commercial', 'secret'] })],
+    ['unsafe interest tag', success({ ...validScoredResult(), interestVector: { 'Field Contact': 0.3 } })],
+    ['out-of-range interest score', success({ ...validScoredResult(), interestVector: { field: 1.1 } })],
+  ])('rejects a malformed validation success with %s', async (_name, malformed) => {
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') return success(catalog())
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return malformed
+      throw new Error(`unexpected ${url}`)
+    }))
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    expect(await store.validate('csrf-memory-token')).toBe(false)
+    expect(store.status).toBe('error')
+    expect(store.retryAction).toBe('validate')
+    expect(store.errorMessage).toContain('다시 시도')
+    expect(store.errorMessage).not.toContain('leak')
+    expect(store.validatedResult).toBeNull()
+  })
+
+  it('emits the career completion event once when the final step is accepted', async () => {
+    const fetch = vi.fn(async (url: string, _options?: { body?: Record<string, unknown> }) => {
+      if (url === '/api/assessment/options') return success(catalog())
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') return success(validScoredResult())
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    expect(await store.validate('csrf-memory-token')).toBe(true)
+
+    expect(fetch.mock.calls.filter(([, options]) => (
+      options?.body?.eventName === 'assessment_step_completed'
+      && options.body.group === 'career'
+    ))).toHaveLength(1)
   })
 
   it('preserves safe choices and exposes validation retry after a network failure', async () => {
@@ -311,6 +495,50 @@ describe('assessment store', () => {
     expect(sessionStorage.getItem(storageKey)).toBeNull()
   })
 
+  it('preserves stale review through a failed reload and successful retry', async () => {
+    const stale = Object.assign(new Error('stale upstream'), {
+      data: { error: { code: 'ASSESSMENT_CATALOG_STALE', message: 'sanitized' } },
+      statusCode: 409,
+    })
+    let optionsLoads = 0
+    let validations = 0
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') {
+        optionsLoads += 1
+        if (optionsLoads === 2) throw new Error('reload unavailable')
+        const nextCatalog = catalog(optionsLoads === 1 ? revisionA : revisionB)
+        if (optionsLoads === 3) {
+          nextCatalog.groups[0]!.options = nextCatalog.groups[0]!.options
+            .filter(option => option.key !== 'work.photo')
+        }
+        return success(nextCatalog)
+      }
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') {
+        validations += 1
+        throw stale
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    expect(await store.validate('csrf-memory-token')).toBe(false)
+    expect(store.status).toBe('error')
+    expect(store.retryAction).toBe('load')
+
+    expect(await store.retry('csrf-memory-token')).toBe(true)
+    expect(store.status).toBe('stale')
+    expect(store.step).toBe(0)
+    expect(store.selections.work).toEqual([])
+    expect(store.isComplete).toBe(false)
+    expect(store.errorMessage).toContain('선택을 다시 확인')
+    expect(store.validatedResult).toBeNull()
+    expect(validations).toBe(1)
+  })
+
   it('uses the empty state when any required step has no options', async () => {
     const partialCatalog = catalog()
     partialCatalog.groups[3]!.options = []
@@ -326,6 +554,7 @@ describe('assessment store', () => {
   it.each([
     ['a missing step', catalogWithoutCareer],
     ['changed selection limits', catalogWithChangedLimits],
+    ['an extra limit group', catalogWithExtraLimit],
   ])('rejects a catalog with %s', async (_name, invalidCatalog) => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue(success(invalidCatalog())))
     const store = useAssessmentStore()

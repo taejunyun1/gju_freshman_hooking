@@ -2,9 +2,11 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
   questionGroups,
+  trackKeys,
   trackLabels,
   visualKeys,
   type QuestionGroup,
+  type TrackKey,
 } from '../../shared/types/domain'
 import type {
   ApiFailure,
@@ -39,6 +41,7 @@ type PersistedAssessment = {
 const revisionPattern = /^sha256:[a-f0-9]{64}$/u
 const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/u
 const phonePattern = /(?:(?:\+?82)[-.\s]?(?:0)?\d{1,2}|0\d{1,2})[-.\s)]?\d{3,4}[-.\s]?\d{4}/u
+const interestTagPattern = /^[a-z][a-z0-9_]{0,63}$/u
 const requiredLimits = {
   work: { min: 1, max: 4 },
   result: { min: 1, max: 3 },
@@ -98,6 +101,8 @@ const isCatalog = (value: unknown): value is PublicAssessmentCatalog => {
     || !Array.isArray(value.groups)
     || !isRecord(value.limits)) return false
 
+  if (!hasExactKeys(value.limits, [...questionGroups])) return false
+
   for (const group of questionGroups) {
     const limit = value.limits[group]
     const required = requiredLimits[group]
@@ -132,6 +137,40 @@ const isCatalog = (value: unknown): value is PublicAssessmentCatalog => {
   return true
 }
 
+const isApiSuccess = <T>(
+  value: unknown,
+  isData: (data: unknown) => data is T,
+): value is ApiSuccess<T> => isRecord(value)
+  && hasExactKeys(value, ['data', 'requestId'])
+  && typeof value.requestId === 'string'
+  && value.requestId.length > 0
+  && isData(value.data)
+
+const isScoredAssessment = (value: unknown): value is ScoredAssessment => {
+  if (!isRecord(value) || !hasExactKeys(value, ['trackScores', 'rankedTracks', 'interestVector'])) return false
+  const { interestVector, rankedTracks, trackScores } = value
+  if (!isRecord(trackScores)
+    || !hasExactKeys(trackScores, [...trackKeys])
+    || !Array.isArray(rankedTracks)
+    || rankedTracks.length !== trackKeys.length
+    || new Set(rankedTracks).size !== trackKeys.length
+    || !rankedTracks.every(track => trackKeys.includes(track as TrackKey))
+    || !isRecord(interestVector)) return false
+
+  if (!trackKeys.every((track) => {
+    const score = trackScores[track]
+    return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100
+  })) return false
+
+  return Object.entries(interestVector).every(([tag, score]) => (
+    interestTagPattern.test(tag)
+    && typeof score === 'number'
+    && Number.isFinite(score)
+    && score >= 0
+    && score <= 1
+  ))
+}
+
 export const useAssessmentStore = defineStore('assessment', () => {
   const status = ref<AssessmentStatus>('idle')
   const groups = ref<PublicAssessmentCatalog['groups']>([])
@@ -145,6 +184,9 @@ export const useAssessmentStore = defineStore('assessment', () => {
   const retryAction = ref<RetryAction>(null)
   const validatedResult = ref<ScoredAssessment | null>(null)
   const startedEmitted = ref(false)
+  const reviewRequired = ref(false)
+  const completedGroups = new Set<QuestionGroup>()
+  let requestGeneration = 0
 
   const currentGroup = computed(() => groups.value[step.value])
   const currentLimit = computed(() => currentGroup.value && limits.value
@@ -165,6 +207,39 @@ export const useAssessmentStore = defineStore('assessment', () => {
     const primary = validatedResult.value?.rankedTracks[0]
     return primary ? trackLabels[primary] : ''
   })
+
+  const fingerprint = (): string => JSON.stringify({
+    catalogRevision: catalogRevision.value,
+    selections: selections.value,
+    careerOther: careerOther.value,
+  })
+
+  const requestIsCurrent = (generation: number, startingFingerprint: string): boolean => (
+    generation === requestGeneration && startingFingerprint === fingerprint()
+  )
+
+  const mutationsLocked = (): boolean => status.value === 'loading' || status.value === 'validating'
+
+  const moveToFirstIncompleteGroup = (): void => {
+    if (!limits.value) return
+    const incompleteIndex = questionGroups.findIndex((group) => {
+      const count = selections.value[group].length
+      const limit = limits.value![group]
+      return count < limit.min || count > limit.max
+    })
+    if (incompleteIndex >= 0) step.value = incompleteIndex
+  }
+
+  const emitStepCompleted = (group: QuestionGroup, selectedCount: number): void => {
+    if (completedGroups.has(group)) return
+    completedGroups.add(group)
+    sendEvent({
+      eventName: 'assessment_step_completed',
+      catalogRevision: catalogRevision.value,
+      group,
+      selectedCount,
+    })
+  }
 
   const persist = (): void => {
     if (!catalogRevision.value) return
@@ -283,12 +358,15 @@ export const useAssessmentStore = defineStore('assessment', () => {
     }
     const previousCareerOther = careerOther.value
     const hadCatalog = Boolean(catalogRevision.value)
+    const generation = ++requestGeneration
+    const startingFingerprint = fingerprint()
     status.value = 'loading'
     errorMessage.value = ''
     retryAction.value = null
     try {
-      const response = await $fetch<ApiSuccess<PublicAssessmentCatalog>>('/api/assessment/options')
-      if (!isCatalog(response.data)) throw new Error('ASSESSMENT_OPTIONS_INVALID')
+      const response = await $fetch<unknown>('/api/assessment/options')
+      if (!requestIsCurrent(generation, startingFingerprint)) return false
+      if (!isApiSuccess(response, isCatalog)) throw new Error('ASSESSMENT_OPTIONS_INVALID')
       groups.value = response.data.groups
       limits.value = response.data.limits
       catalogRevision.value = response.data.catalogRevision
@@ -299,6 +377,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
         careerOther.value = ''
         step.value = 0
         removePersisted()
+        reviewRequired.value = false
         status.value = 'empty'
         return true
       }
@@ -312,7 +391,14 @@ export const useAssessmentStore = defineStore('assessment', () => {
         step.value = 0
         restore()
       }
-      status.value = 'ready'
+      if (reviewRequired.value) {
+        moveToFirstIncompleteGroup()
+        status.value = 'stale'
+        errorMessage.value = '선택지가 업데이트되었습니다. 선택을 다시 확인한 뒤 결과를 계산해 주세요.'
+      }
+      else {
+        status.value = 'ready'
+      }
       if (!startedEmitted.value) {
         startedEmitted.value = true
         sendEvent({ eventName: 'assessment_started', catalogRevision: catalogRevision.value })
@@ -320,6 +406,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
       return true
     }
     catch {
+      if (!requestIsCurrent(generation, startingFingerprint)) return false
       status.value = 'error'
       retryAction.value = 'load'
       errorMessage.value = '선택지를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.'
@@ -329,6 +416,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
 
   const invalidateResult = (): void => {
     validatedResult.value = null
+    reviewRequired.value = false
     if (status.value === 'validated' || status.value === 'error' || status.value === 'stale') {
       status.value = 'ready'
     }
@@ -337,6 +425,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const toggleOption = (optionKey: string): boolean => {
+    if (mutationsLocked()) return false
     const group = groups.value.find(candidate => candidate.options.some(option => option.key === optionKey))
     if (!group || !limits.value) return false
     const selected = selections.value[group.key]
@@ -361,6 +450,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const setCareerOther = (value: string): boolean => {
+    if (mutationsLocked()) return false
     if (!selections.value.career.includes('career.explore')) return false
     const issue = careerOtherDraftError(value)
     if (issue) {
@@ -375,6 +465,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const next = (): boolean => {
+    if (mutationsLocked()) return false
     const group = currentGroup.value
     const limit = currentLimit.value
     if (!group || !limit || currentSelected.value.length < limit.min) {
@@ -382,12 +473,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
       return false
     }
     if (step.value >= groups.value.length - 1) return false
-    sendEvent({
-      eventName: 'assessment_step_completed',
-      catalogRevision: catalogRevision.value,
-      group: group.key,
-      selectedCount: currentSelected.value.length,
-    })
+    emitStepCompleted(group.key, currentSelected.value.length)
     step.value += 1
     announcement.value = `${step.value + 1}단계로 이동했습니다.`
     persist()
@@ -395,6 +481,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const previous = (): boolean => {
+    if (mutationsLocked()) return false
     if (step.value <= 0) return false
     step.value -= 1
     announcement.value = `${step.value + 1}단계로 이동했습니다.`
@@ -403,47 +490,57 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const validate = async (csrfToken: string): Promise<boolean> => {
+    if (mutationsLocked()) return false
     if (!isComplete.value || !catalogRevision.value) {
       announcement.value = '각 단계의 최소 선택 수를 확인해 주세요.'
       return false
+    }
+    reviewRequired.value = false
+    emitStepCompleted('career', selections.value.career.length)
+    const generation = ++requestGeneration
+    const startingFingerprint = fingerprint()
+    const submission = {
+      catalogRevision: catalogRevision.value,
+      selections: {
+        work: [...selections.value.work],
+        result: [...selections.value.result],
+        style: [...selections.value.style],
+        career: [...selections.value.career],
+        careerOther: careerOther.value.trim() || null,
+      },
     }
     status.value = 'validating'
     errorMessage.value = ''
     retryAction.value = null
     validatedResult.value = null
     try {
-      const response = await $fetch<ApiSuccess<ScoredAssessment>>('/api/student/assessment/validate', {
-        body: {
-          catalogRevision: catalogRevision.value,
-          selections: {
-            work: [...selections.value.work],
-            result: [...selections.value.result],
-            style: [...selections.value.style],
-            career: [...selections.value.career],
-            careerOther: careerOther.value.trim() || null,
-          },
-        },
+      const response = await $fetch<unknown>('/api/student/assessment/validate', {
+        body: submission,
         headers: { 'x-photo-next-csrf': csrfToken },
         method: 'POST',
       })
+      if (!requestIsCurrent(generation, startingFingerprint)) {
+        if (generation === requestGeneration) status.value = 'ready'
+        return false
+      }
+      if (!isApiSuccess(response, isScoredAssessment)) {
+        throw new Error('ASSESSMENT_RESULT_INVALID')
+      }
       validatedResult.value = response.data
       status.value = 'validated'
       announcement.value = '결과 계산이 끝났습니다.'
       return true
     }
     catch (error) {
+      if (!requestIsCurrent(generation, startingFingerprint)) {
+        if (generation === requestGeneration) status.value = 'ready'
+        return false
+      }
       const code = publicErrorCode(error)
       if (code === 'ASSESSMENT_CATALOG_STALE') {
+        reviewRequired.value = true
         const reloaded = await loadOptions({ preserveSelections: true })
-        validatedResult.value = null
-        if (reloaded && groups.value.every(group => group.options.length > 0)) {
-          status.value = 'stale'
-          retryAction.value = null
-          errorMessage.value = '선택지가 업데이트되었습니다. 선택을 다시 확인한 뒤 결과를 계산해 주세요.'
-        }
-        else if (!reloaded) {
-          status.value = 'error'
-          retryAction.value = 'load'
+        if (!reloaded && reviewRequired.value) {
           errorMessage.value = '선택지가 업데이트되어 다시 불러와야 합니다. 다시 불러온 뒤 선택을 확인해 주세요.'
         }
         return false
@@ -473,6 +570,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const clear = (): void => {
+    requestGeneration += 1
     step.value = 0
     selections.value = emptySelections()
     careerOther.value = ''
@@ -480,11 +578,15 @@ export const useAssessmentStore = defineStore('assessment', () => {
     errorMessage.value = ''
     retryAction.value = null
     validatedResult.value = null
+    reviewRequired.value = false
+    startedEmitted.value = false
+    completedGroups.clear()
     status.value = groups.value.length ? 'ready' : 'idle'
     removePersisted()
   }
 
   const markUnauthenticated = (): void => {
+    requestGeneration += 1
     status.value = 'unauthenticated'
     errorMessage.value = '로그인 정보를 확인할 수 없습니다.'
     retryAction.value = null

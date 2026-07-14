@@ -5,12 +5,13 @@ import type { QuestionGroup } from '../../../shared/types/domain'
 import { careerOtherDraftError } from '../../stores/assessment'
 import OptionCard from './OptionCard.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   group: PublicAssessmentCatalog['groups'][number]
   limit: { min: number, max: number }
   modelValue: string[]
   careerOther: string
-}>()
+  disabled?: boolean
+}>(), { disabled: false })
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
@@ -33,6 +34,7 @@ watch(() => props.group.key, () => {
 })
 
 const toggle = (key: string): void => {
+  if (props.disabled) return
   if (props.modelValue.includes(key)) {
     emit('update:modelValue', props.modelValue.filter(value => value !== key))
     if (key === 'career.explore') emit('update:careerOther', '')
@@ -48,6 +50,7 @@ const toggle = (key: string): void => {
 }
 
 const updateCareerOther = (event: Event): void => {
+  if (props.disabled) return
   const value = (event.target as HTMLInputElement).value
   const issue = careerOtherDraftError(value)
   if (issue) {
@@ -62,8 +65,11 @@ const updateCareerOther = (event: Event): void => {
 </script>
 
 <template>
-  <fieldset class="assessment-step">
-    <legend>{{ groupCopy[group.key].legend }}</legend>
+  <fieldset
+    class="assessment-step"
+    :disabled="disabled"
+  >
+    <legend tabindex="-1">{{ groupCopy[group.key].legend }}</legend>
     <p class="assessment-step__eyebrow">{{ groupCopy[group.key].eyebrow }}</p>
     <p class="assessment-step__instruction">
       {{ limit.min }}–{{ limit.max }}개를 골라주세요.
@@ -103,7 +109,6 @@ const updateCareerOther = (event: Event): void => {
       <p
         v-if="careerError"
         id="career-other-error"
-        role="alert"
       >
         {{ careerError }}
       </p>
@@ -209,7 +214,7 @@ const updateCareerOther = (event: Event): void => {
   line-height: 1.5;
 }
 
-.assessment-step__career-other [role='alert'] {
+.assessment-step__career-other #career-other-error {
   color: var(--color-error);
   font-weight: 700;
 }
