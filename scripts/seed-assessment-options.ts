@@ -169,14 +169,16 @@ export const generateAssessmentSeedSql = (catalog: AssessmentOption[]) => {
 -- Catalog revision: ${revision}
 begin;
 
+select pg_catalog.pg_advisory_xact_lock(
+  pg_catalog.hashtextextended('photo_next.assessment_options.v1', 0)
+);
+
+lock table public.assessment_options in share row exclusive mode;
+
 do $seed$
 declare
   v_manifest constant jsonb := ${manifest};
 begin
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('photo_next.assessment_options.v1', 0)
-  );
-
   if not exists (select 1 from public.assessment_options) then
     insert into public.assessment_options (
       question_group,

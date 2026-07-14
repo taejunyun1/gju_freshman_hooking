@@ -107,10 +107,19 @@ describe('assessment catalog seed', () => {
     expect(secondSql).toBe(firstSql)
     expect(firstSql).toContain('begin;')
     expect(firstSql).toContain('pg_advisory_xact_lock')
+    expect(firstSql).toContain('lock table public.assessment_options in share row exclusive mode;')
     expect(firstSql).toContain('catalog manifest drift')
     expect(firstSql).toContain('commit;')
     expect(firstSql).not.toMatch(/delete\s+from\s+public\.assessment_options/iu)
     expect(firstSql).not.toMatch(/update\s+public\.assessment_options/iu)
+
+    const beginPosition = firstSql.indexOf('begin;')
+    const advisoryPosition = firstSql.indexOf('select pg_catalog.pg_advisory_xact_lock')
+    const tableLockPosition = firstSql.indexOf('lock table public.assessment_options')
+    const manifestPosition = firstSql.indexOf('do $seed$')
+    expect(beginPosition).toBeLessThan(advisoryPosition)
+    expect(advisoryPosition).toBeLessThan(tableLockPosition)
+    expect(tableLockPosition).toBeLessThan(manifestPosition)
   })
 
   it('feeds the generated SQL directly to reset while retaining the operator include', () => {
@@ -125,7 +134,12 @@ describe('assessment catalog seed', () => {
     expect(packageJson.scripts['test:assessment-seed']).toBe(
       'vitest run --project local-integration tests/local/assessment-seed-artifact.test.ts',
     )
-    expect(packageJson.scripts['test:sql']).toContain('pnpm test:assessment-seed')
+    expect(packageJson.scripts['test:assessment-seed']).not.toContain(
+      'PHOTO_NEXT_ALLOW_DESTRUCTIVE_ASSESSMENT_SEED_TESTS',
+    )
+    expect(packageJson.scripts['test:sql']).toContain(
+      'PHOTO_NEXT_ALLOW_DESTRUCTIVE_ASSESSMENT_SEED_TESTS=1 pnpm test:assessment-seed',
+    )
   })
 })
 

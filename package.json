@@ -10,7 +10,7 @@
     "postinstall": "nuxt prepare",
     "test": "vitest run --project unit --project integration",
     "test:assessment-seed": "vitest run --project local-integration tests/local/assessment-seed-artifact.test.ts",
-    "test:sql": "supabase db reset --local && supabase test db --local && pnpm test:assessment-seed",
+    "test:sql": "supabase db reset --local && supabase test db --local && PHOTO_NEXT_ALLOW_DESTRUCTIVE_ASSESSMENT_SEED_TESTS=1 pnpm test:assessment-seed",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:local-integration": "vitest run --project local-integration",
