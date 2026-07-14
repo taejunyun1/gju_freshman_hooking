@@ -1,14 +1,8 @@
-import { createHash } from 'node:crypto'
-import { expect, type Page, type TestInfo } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+export { uniqueAssessmentPhone } from './phone'
 
 type RegisteredStudent = {
   nickname: string
-}
-
-export const uniqueAssessmentPhone = (testInfo: Pick<TestInfo, 'testId'>): string => {
-  const digest = createHash('sha256').update(testInfo.testId).digest()
-  const suffix = (digest.readUInt32BE(0) % 10_000_000).toString().padStart(7, '0')
-  return `0108${suffix}`
 }
 
 export const registerAndLoginStudent = async (

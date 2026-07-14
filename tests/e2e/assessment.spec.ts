@@ -28,8 +28,51 @@ const selectCommercialPath = async (page: Page): Promise<void> => {
   await page.getByRole('checkbox', { name: /사진을 직접 촬영하고 보정해/u }).check()
 }
 
+const assertRuntimeTypography = async (page: Page): Promise<void> => {
+  const typography = await page.evaluate(async () => {
+    const fontContracts = [
+      { font: '700 16px "Wanted Sans Variable"', text: '무엇을 해보고 싶나요?' },
+      { font: '400 16px "Pretendard Variable"', text: '관심사 진단' },
+      { font: '700 16px "IBM Plex Mono"', text: '01 / 04' },
+    ]
+    const loadedFaceCounts = await Promise.all(fontContracts.map(async contract => (
+      await document.fonts.load(contract.font, contract.text)
+    ).length))
+    await document.fonts.ready
+
+    const display = document.querySelector<HTMLElement>('legend')
+    const mono = document.querySelector<HTMLElement>('.assessment-progress__readout span')
+    if (!display || !mono) throw new Error('ASSESSMENT_FONT_TARGET_MISSING')
+
+    const fontResources = performance.getEntriesByType('resource')
+      .map(entry => entry.name)
+      .filter(url => /\.woff2(?:\?|$)/u.test(url))
+    return {
+      computed: {
+        body: getComputedStyle(document.body).fontFamily,
+        display: getComputedStyle(display).fontFamily,
+        mono: getComputedStyle(mono).fontFamily,
+        monoWeight: getComputedStyle(mono).fontWeight,
+      },
+      fontResources,
+      loadedFaceCounts,
+      sameOriginResources: fontResources.every(url => new URL(url).origin === location.origin),
+    }
+  })
+
+  expect(typography.loadedFaceCounts.every(count => count > 0)).toBe(true)
+  expect(typography.computed.display).toContain('Wanted Sans Variable')
+  expect(typography.computed.body).toContain('Pretendard Variable')
+  expect(typography.computed.mono).toContain('IBM Plex Mono')
+  expect(typography.computed.monoWeight).toBe('700')
+  expect(typography.fontResources.length).toBeGreaterThanOrEqual(3)
+  expect(typography.sameOriginResources).toBe(true)
+}
+
 test('student completes four steps with commercial as the primary track', async ({ page }, testInfo) => {
   await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
+  await expect(page.getByRole('group', { name: '무엇을 해보고 싶나요?' })).toBeVisible()
+  await assertRuntimeTypography(page)
   await selectCommercialPath(page)
 
   await page.getByRole('button', { name: '결과 계산' }).click()
@@ -42,6 +85,9 @@ test('student completes four steps with commercial as the primary track', async 
 test('matching catalog revision restores only the safe assessment snapshot', async ({ page }, testInfo) => {
   await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
   await expect(page.getByRole('group', { name: '무엇을 해보고 싶나요?' })).toBeVisible()
+  const baselineLocalEntries = await page.evaluate(() => (
+    Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right))
+  ))
   await page.getByRole('checkbox', { name: /제품·패션·광고 이미지 만들기/u }).check()
   await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByRole('group', { name: '어떤 결과물을 만들고 싶나요?' })).toBeVisible()
@@ -55,23 +101,25 @@ test('matching catalog revision restores only the safe assessment snapshot', asy
     const sessionPayload = await sessionResponse.json() as { data: { csrfToken: string } }
     const sessionEntries = Object.entries(sessionStorage)
     const localEntries = Object.entries(localStorage)
-    const raw = JSON.stringify({ localEntries, sessionEntries })
+      .sort(([left], [right]) => left.localeCompare(right))
+    const rawValues = JSON.stringify([
+      ...localEntries.map(([, value]) => value),
+      ...sessionEntries.map(([, value]) => value),
+    ])
     const snapshotEntry = sessionEntries.find(([key]) => key === storageKey)
     return {
-      applicationLocalKeys: localEntries
-        .map(([key]) => key)
-        .filter(key => key.startsWith('photo_next_')),
-      csrfTokenStored: raw.includes(sessionPayload.data.csrfToken),
-      raw,
+      csrfTokenStored: rawValues.includes(sessionPayload.data.csrfToken),
+      localEntries,
+      rawValues,
       sessionKeys: sessionEntries.map(([key]) => key),
       snapshot: snapshotEntry ? JSON.parse(snapshotEntry[1]) as unknown : null,
     }
   }, assessmentStorageKey)
 
   expect(storageState.sessionKeys).toEqual([assessmentStorageKey])
-  expect(storageState.applicationLocalKeys).toEqual([])
+  expect(storageState.localEntries).toEqual(baselineLocalEntries)
   expect(storageState.csrfTokenStored).toBe(false)
-  expect(storageState.raw).not.toMatch(/csrf|token|session_material|trackScores|rankedTracks|interestVector/iu)
+  expect(storageState.rawValues).not.toMatch(/csrf|token|session|trackScores|rankedTracks|interestVector/iu)
   expect(storageState.snapshot).toEqual({
     careerOther: '',
     catalogRevision: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
@@ -133,46 +181,4 @@ test('first validation network failure preserves every choice and retries the re
   await expect(primaryTrack).toHaveText('광고사진')
   expect(validateRequests).toBe(2)
   expect(successfulStatuses).toEqual([200])
-})
-
-test('assessment loads the three approved font roles from same-origin WOFF2 assets', async ({ page }, testInfo) => {
-  await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
-  await expect(page.getByRole('group', { name: '무엇을 해보고 싶나요?' })).toBeVisible()
-
-  const typography = await page.evaluate(async () => {
-    const fontContracts = [
-      { font: '700 16px "Wanted Sans Variable"', text: '무엇을 해보고 싶나요?' },
-      { font: '400 16px "Pretendard Variable"', text: '관심사 진단' },
-      { font: '400 16px "IBM Plex Mono"', text: '01 / 04' },
-    ]
-    const loadedFaceCounts = await Promise.all(fontContracts.map(async contract => (
-      await document.fonts.load(contract.font, contract.text)
-    ).length))
-    await document.fonts.ready
-
-    const display = document.querySelector<HTMLElement>('legend')
-    const mono = document.querySelector<HTMLElement>('.assessment-progress__readout span')
-    if (!display || !mono) throw new Error('ASSESSMENT_FONT_TARGET_MISSING')
-
-    const fontResources = performance.getEntriesByType('resource')
-      .map(entry => entry.name)
-      .filter(url => /\.woff2(?:\?|$)/u.test(url))
-    return {
-      computed: {
-        body: getComputedStyle(document.body).fontFamily,
-        display: getComputedStyle(display).fontFamily,
-        mono: getComputedStyle(mono).fontFamily,
-      },
-      fontResources,
-      loadedFaceCounts,
-      sameOriginResources: fontResources.every(url => new URL(url).origin === location.origin),
-    }
-  })
-
-  expect(typography.loadedFaceCounts.every(count => count > 0)).toBe(true)
-  expect(typography.computed.display).toContain('Wanted Sans Variable')
-  expect(typography.computed.body).toContain('Pretendard Variable')
-  expect(typography.computed.mono).toContain('IBM Plex Mono')
-  expect(typography.fontResources.length).toBeGreaterThanOrEqual(3)
-  expect(typography.sameOriginResources).toBe(true)
 })
