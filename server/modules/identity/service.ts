@@ -94,6 +94,32 @@ const throwOnStoreError = (error: { code?: string } | null): void => {
   }
 }
 
+const readSupabaseStudentSession = async (
+  client: SupabaseClient,
+  tokenHash: Uint8Array,
+): Promise<StoredSession | null> => {
+  const { data, error } = await client.rpc('touch_student_session', {
+    p_token_hash: postgresByteaFromBytes(tokenHash),
+  })
+  throwOnStoreError(error)
+  const result = Array.isArray(data) ? data[0] : null
+  if (!result) return null
+
+  if (
+    typeof result.prospect_id !== 'number'
+    || typeof result.nickname !== 'string'
+    || typeof result.expires_at !== 'string'
+    || typeof result.idle_expires_at !== 'string'
+  ) throw new Error('IDENTITY_STORE_INVALID')
+
+  return {
+    prospectId: result.prospect_id,
+    nickname: result.nickname,
+    expiresAt: asDate(result.expires_at),
+    idleExpiresAt: asDate(result.idle_expires_at),
+  }
+}
+
 const createSupabaseDependencies = (
   client: SupabaseClient,
   secrets: Pick<IdentityDependencies, 'hmacKey' | 'encryptionKey' | 'passwordPepper'>,
@@ -178,28 +204,7 @@ const createSupabaseDependencies = (
     throwOnStoreError(error)
     return data === true ? { expiresAt } : null
   },
-  readSession: async (tokenHash) => {
-    const { data, error } = await client.rpc('touch_student_session', {
-      p_token_hash: postgresByteaFromBytes(tokenHash),
-    })
-    throwOnStoreError(error)
-    const result = Array.isArray(data) ? data[0] : null
-    if (!result) return null
-
-    if (
-      typeof result.prospect_id !== 'number'
-      || typeof result.nickname !== 'string'
-      || typeof result.expires_at !== 'string'
-      || typeof result.idle_expires_at !== 'string'
-    ) throw new Error('IDENTITY_STORE_INVALID')
-
-    return {
-      prospectId: result.prospect_id,
-      nickname: result.nickname,
-      expiresAt: asDate(result.expires_at),
-      idleExpiresAt: asDate(result.idle_expires_at),
-    }
-  },
+  readSession: tokenHash => readSupabaseStudentSession(client, tokenHash),
   revokeSession: async (tokenHash, now) => {
     const { error } = await client.from('student_sessions')
       .update({ revoked_at: now.toISOString() })
@@ -359,6 +364,18 @@ const createSessionTokenFromRaw = async (raw: string): Promise<Uint8Array> => {
   const { sha256, utf8 } = await import('../../utils/web-crypto')
   return sha256(utf8(raw))
 }
+
+export const createSupabaseStudentSessionReader = (client: SupabaseClient) => ({
+  getStudentSession: async (sessionToken: string): Promise<Omit<StudentSession, 'csrfToken'> | null> => {
+    if (!sessionToken) return null
+    const session = await readSupabaseStudentSession(client, await createSessionTokenFromRaw(sessionToken))
+    return session ? {
+      prospectId: session.prospectId,
+      nickname: session.nickname,
+      expiresAt: session.expiresAt.toISOString(),
+    } : null
+  },
+})
 
 export const getServerIdentityService = () => {
   const runtimeConfig = useRuntimeConfig()

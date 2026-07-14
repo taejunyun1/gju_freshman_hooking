@@ -67,4 +67,13 @@ describe('deployment and E2E safety contracts', () => {
       'node scripts/verify-env.mjs && node scripts/deploy-preview.mjs',
     )
   })
+
+  it('routes Wrangler through the checked-in body guard before generated Nitro output', () => {
+    const wrangler = readFileSync('wrangler.jsonc', 'utf8')
+    const worker = readFileSync('cloudflare/worker.mjs', 'utf8')
+
+    expect(wrangler).toMatch(/"main":\s*"cloudflare\/worker\.mjs"/u)
+    expect(worker).toContain("from '../.output/server/index.mjs'")
+    expect(worker).toContain('createBodyGuardWorker')
+  })
 })

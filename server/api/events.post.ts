@@ -1,10 +1,12 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { selectionLimits } from '../../shared/schemas/assessment'
 import type { ApiFailure, ApiSuccess } from '../../shared/types/api'
-import { getServerIdentityService } from '../modules/identity/service'
+import { createSupabaseStudentSessionReader } from '../modules/identity/service'
 import { createEventWriter, type EventWriter } from '../modules/metrics/events'
 import { getAnonymousVisitorId } from '../utils/anonymous-visitor'
 import { AppError, toApiFailure } from '../utils/app-error'
+import { RequestBodyLimitError, readBoundedRequestBody } from '../utils/bounded-request-body'
 import { studentSessionCookie } from '../utils/student-request-security'
 import { getServerSupabaseClient } from '../utils/supabase'
 import { getTrustedClientIp } from '../utils/trusted-client-ip'
@@ -146,43 +148,55 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
   catch (error) {
     const status = error instanceof EventOriginError
       ? 403
+      : error instanceof RequestBodyLimitError
+        ? 400
       : error instanceof AppError
         ? error.statusCode
         : 500
-    const publicError = error instanceof AppError ? error : error instanceof EventOriginError
-      ? new AppError('VALIDATION_FAILED')
-      : new AppError('INTERNAL_ERROR')
+    const publicError = error instanceof AppError
+      ? error
+      : error instanceof EventOriginError || error instanceof RequestBodyLimitError
+        ? new AppError('VALIDATION_FAILED')
+        : new AppError('INTERNAL_ERROR')
     dependencies.setStatus(event, status)
     return toApiFailure(publicError, requestId)
   }
 }
 
-const supabase = () => getServerSupabaseClient()
+export const createServerEventsHandler = (
+  client: SupabaseClient = getServerSupabaseClient(),
+  createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
+) => {
+  let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  return createEventsHandler({
+    consumeRateLimit: async ({ key, route, limit, window }) => {
+      const { data, error } = await client.rpc('consume_rate_limit', {
+        p_key: key,
+        p_limit: limit,
+        p_route: route,
+        p_window: window,
+      })
+      if (error) throw new Error('EVENT_STORE_UNAVAILABLE')
+      return data === true
+    },
+    getAnonymousId: getAnonymousVisitorId,
+    getContentType: requestEvent => getHeader(requestEvent as never, 'content-type'),
+    getIp: getTrustedClientIp,
+    getOrigin: requestEvent => getHeader(requestEvent as never, 'origin'),
+    getRequestId: (requestEvent) => {
+      const context = (requestEvent as { context?: { requestId?: unknown } }).context
+      return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
+    },
+    getRequestOrigin: requestEvent => getRequestURL(requestEvent as never).origin,
+    getSessionToken: requestEvent => getCookie(requestEvent as never, studentSessionCookie),
+    readRawBody: readBoundedRequestBody,
+    readStudentSession: sessionToken => (
+      sessionReader ??= createSessionReader(client)
+    ).getStudentSession(sessionToken),
+    setHeader: (requestEvent, name, value) => setResponseHeader(requestEvent as never, name, value),
+    setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),
+    writeEvent: createEventWriter(client),
+  })
+}
 
-export default defineEventHandler(event => createEventsHandler({
-  consumeRateLimit: async ({ key, route, limit, window }) => {
-    const { data, error } = await supabase().rpc('consume_rate_limit', {
-      p_key: key,
-      p_limit: limit,
-      p_route: route,
-      p_window: window,
-    })
-    if (error) throw new Error('EVENT_STORE_UNAVAILABLE')
-    return data === true
-  },
-  getAnonymousId: getAnonymousVisitorId,
-  getContentType: requestEvent => getHeader(requestEvent as never, 'content-type'),
-  getIp: getTrustedClientIp,
-  getOrigin: requestEvent => getHeader(requestEvent as never, 'origin'),
-  getRequestId: (requestEvent) => {
-    const context = (requestEvent as { context?: { requestId?: unknown } }).context
-    return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
-  },
-  getRequestOrigin: requestEvent => getRequestURL(requestEvent as never).origin,
-  getSessionToken: requestEvent => getCookie(requestEvent as never, studentSessionCookie),
-  readRawBody: requestEvent => readRawBody(requestEvent as never, 'utf8'),
-  readStudentSession: getServerIdentityService().getStudentSession,
-  setHeader: (requestEvent, name, value) => setResponseHeader(requestEvent as never, name, value),
-  setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),
-  writeEvent: createEventWriter(supabase()),
-})(event))
+export default defineEventHandler(event => createServerEventsHandler()(event))

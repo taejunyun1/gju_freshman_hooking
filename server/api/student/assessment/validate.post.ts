@@ -2,6 +2,7 @@ import type { ApiFailure, ApiSuccess } from '../../../../shared/types/api'
 import type { ScoredAssessment } from '../../../modules/assessment/types'
 import { getServerAssessmentService } from '../../../modules/assessment/service'
 import { AppError, toApiFailure } from '../../../utils/app-error'
+import { RequestBodyLimitError, readBoundedRequestBody } from '../../../utils/bounded-request-body'
 import { studentSessionCookie } from '../../../utils/student-request-security'
 import { getTrustedClientIp } from '../../../utils/trusted-client-ip'
 
@@ -54,7 +55,11 @@ export const createValidateAssessmentHandler = (
     }
   }
   catch (error) {
-    const appError = error instanceof AppError ? error : new AppError('INTERNAL_ERROR')
+    const appError = error instanceof AppError
+      ? error
+      : error instanceof RequestBodyLimitError
+        ? new AppError('ASSESSMENT_INVALID')
+        : new AppError('INTERNAL_ERROR')
     dependencies.setStatus(event, appError.statusCode)
     return toApiFailure(appError, context.requestId)
   }
@@ -71,6 +76,6 @@ export default defineEventHandler(event => createValidateAssessmentHandler({
       sessionToken: getCookie(requestEvent as never, studentSessionCookie) ?? '',
     }
   },
-  readRawBody: requestEvent => readRawBody(requestEvent as never, 'utf8'),
+  readRawBody: readBoundedRequestBody,
   setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),
 })(event))

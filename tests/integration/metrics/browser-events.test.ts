@@ -3,8 +3,9 @@ import {
   anonymousVisitorCookie,
   createAnonymousVisitorResolver,
 } from '../../../server/utils/anonymous-visitor'
-import { createEventsHandler } from '../../../server/api/events.post'
+import { createEventsHandler, createServerEventsHandler } from '../../../server/api/events.post'
 import { createEventWriter } from '../../../server/modules/metrics/events'
+import { RequestBodyLimitError } from '../../../server/utils/bounded-request-body'
 
 vi.hoisted(() => {
   Object.assign(globalThis, { defineEventHandler: (handler: unknown) => handler })
@@ -94,6 +95,62 @@ describe('anonymous visitor identity', () => {
 describe('POST /api/events', () => {
   beforeEach(() => {
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+  })
+
+  it('composes anonymous event handling without initializing student identity crypto', () => {
+    const sessionReaderFactory = vi.fn(() => { throw new Error('identity crypto is intentionally unavailable') })
+
+    expect(() => createServerEventsHandler({} as never, sessionReaderFactory)).not.toThrow()
+    expect(sessionReaderFactory).not.toHaveBeenCalled()
+  })
+
+  it('lazily reuses the route Supabase client for one optional session reader', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null })
+    const client = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
+    }
+    const getStudentSession = vi.fn().mockResolvedValue({
+      prospectId: 42,
+      nickname: '선명한프레임42',
+      expiresAt: '2026-07-15T12:00:00.000Z',
+    })
+    const sessionReaderFactory = vi.fn((_client?: unknown) => ({ getStudentSession }))
+    const request = new Request('https://photo-next.example/api/events', {
+      body: JSON.stringify({ eventName: 'landing_viewed' }),
+      headers: {
+        'cf-connecting-ip': '203.0.113.88',
+        'content-type': 'application/json',
+        cookie: `${anonymousVisitorCookie}=${anonymousId}; photo_next_session=valid-session`,
+        origin: 'https://photo-next.example',
+      },
+      method: 'POST',
+    })
+    const event = {
+      context: { cloudflare: {}, requestId },
+      status: undefined as number | undefined,
+      web: { request },
+    }
+    vi.stubGlobal('getHeader', (input: typeof event, name: string) => input.web.request.headers.get(name) ?? undefined)
+    vi.stubGlobal('getCookie', (_input: typeof event, name: string) => (
+      name === anonymousVisitorCookie ? anonymousId : name === 'photo_next_session' ? 'valid-session' : undefined
+    ))
+    vi.stubGlobal('getRequestIP', () => '203.0.113.88')
+    vi.stubGlobal('getRequestURL', (input: typeof event) => new URL(input.web.request.url))
+    vi.stubGlobal('setCookie', vi.fn())
+    vi.stubGlobal('setResponseHeader', vi.fn())
+    vi.stubGlobal('setResponseStatus', (_input: typeof event, status: number) => { _input.status = status })
+
+    const response = await createServerEventsHandler(
+      client as never,
+      sessionReaderFactory,
+    )(event)
+
+    expect(response).toEqual({ data: { accepted: true }, requestId })
+    expect(sessionReaderFactory).toHaveBeenCalledOnce()
+    expect(sessionReaderFactory).toHaveBeenCalledWith(client)
+    expect(getStudentSession).toHaveBeenCalledWith('valid-session')
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ prospect_id: 42 }))
   })
 
   it('maps the derived browser event to the exact private database insert', async () => {
@@ -228,6 +285,20 @@ describe('POST /api/events', () => {
     expect(event.status).toBe(400)
     expect(response.error.code).toBe('VALIDATION_FAILED')
     expect(rates).toEqual([])
+    expect(writes).toEqual([])
+  })
+
+  it('maps a pre-Nitro body overflow to the sanitized browser event envelope', async () => {
+    const { handler, writes } = createHandler({
+      readRawBody: async () => { throw new RequestBodyLimitError() },
+    })
+    const event: EventInput = { body: { eventName: 'landing_viewed' } }
+
+    const response = await handler(event)
+
+    expect(event.status).toBe(400)
+    expect(response.error.code).toBe('VALIDATION_FAILED')
+    expect(JSON.stringify(response)).not.toContain('REQUEST_BODY_TOO_LARGE')
     expect(writes).toEqual([])
   })
 

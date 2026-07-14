@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "photo-next-mvp",
-  "main": ".output/server/index.mjs",
+  "main": "cloudflare/worker.mjs",
   "compatibility_date": "2026-07-14",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {

@@ -38,6 +38,9 @@ begin
 end;
 $$;
 
+revoke execute on function public.is_sanitized_json_value(jsonb) from public, anon, authenticated;
+grant execute on function public.is_sanitized_json_value(jsonb) to service_role;
+
 revoke all privileges on table public.events from service_role;
 grant select, insert, update, delete on table public.events to service_role;
 

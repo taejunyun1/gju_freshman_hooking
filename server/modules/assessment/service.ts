@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/types/domain'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
-import { getServerIdentityService } from '../identity/service'
+import { createSupabaseStudentSessionReader } from '../identity/service'
 import { AssessmentScoringError, scoreAssessment } from './scoring'
 import { createAssessmentCatalogRevision } from './catalog-revision'
 import type { ScoredAssessment } from './types'
@@ -156,43 +156,51 @@ export const createAssessmentService = (dependencies: AssessmentServiceDependenc
   return { getOptions, validateAssessment }
 }
 
-const createSupabaseDependencies = (
-  client: SupabaseClient,
-): AssessmentServiceDependencies => ({
-  consumeRateLimit: async ({ key, route, limit, window }) => {
-    const { data, error } = await client.rpc('consume_rate_limit', {
-      p_key: key,
-      p_limit: limit,
-      p_route: route,
-      p_window: window,
-    })
-    if (error) throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
-    return data === true
-  },
-  getStudentSession: getServerIdentityService().getStudentSession,
-  loadActiveOptions: async () => {
-    const { data, error } = await client.from('assessment_options')
-      .select('question_group,option_key,label,description,visual_key,track_weights,interest_tags,status,sort_order')
-      .eq('status', 'active')
-      .order('question_group')
-      .order('sort_order')
-      .order('option_key')
-    if (error || !data) throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
+type StudentSessionReaderFactory = typeof createSupabaseStudentSessionReader
 
-    return data.map(row => ({
-      group: row.question_group,
-      optionKey: row.option_key,
-      label: row.label,
-      ...(row.description === null ? {} : { description: row.description }),
-      visualKey: row.visual_key,
-      trackWeights: row.track_weights,
-      interestTags: row.interest_tags,
-      status: row.status,
-      sortOrder: row.sort_order,
-    })) as AssessmentOption[]
-  },
-})
+export const createSupabaseAssessmentDependencies = (
+  client: SupabaseClient,
+  createSessionReader: StudentSessionReaderFactory = createSupabaseStudentSessionReader,
+): AssessmentServiceDependencies => {
+  let sessionReader: ReturnType<StudentSessionReaderFactory> | undefined
+  return {
+    consumeRateLimit: async ({ key, route, limit, window }) => {
+      const { data, error } = await client.rpc('consume_rate_limit', {
+        p_key: key,
+        p_limit: limit,
+        p_route: route,
+        p_window: window,
+      })
+      if (error) throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
+      return data === true
+    },
+    getStudentSession: sessionToken => (
+      sessionReader ??= createSessionReader(client)
+    ).getStudentSession(sessionToken),
+    loadActiveOptions: async () => {
+      const { data, error } = await client.from('assessment_options')
+        .select('question_group,option_key,label,description,visual_key,track_weights,interest_tags,status,sort_order')
+        .eq('status', 'active')
+        .order('question_group')
+        .order('sort_order')
+        .order('option_key')
+      if (error || !data) throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
+
+      return data.map(row => ({
+        group: row.question_group,
+        optionKey: row.option_key,
+        label: row.label,
+        ...(row.description === null ? {} : { description: row.description }),
+        visualKey: row.visual_key,
+        trackWeights: row.track_weights,
+        interestTags: row.interest_tags,
+        status: row.status,
+        sortOrder: row.sort_order,
+      })) as AssessmentOption[]
+    },
+  }
+}
 
 export const getServerAssessmentService = () => createAssessmentService(
-  createSupabaseDependencies(getServerSupabaseClient()),
+  createSupabaseAssessmentDependencies(getServerSupabaseClient()),
 )

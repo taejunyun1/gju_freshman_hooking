@@ -1,6 +1,6 @@
 begin;
 
-select plan(24);
+select plan(28);
 
 select has_table('public'::name, 'events'::name);
 select col_type_is('public', 'events', 'prospect_id', 'bigint', 'events can reference a prospect');
@@ -42,6 +42,38 @@ select sequence_privs_are(
   'service_role',
   array['SELECT', 'USAGE'],
   'the server retains only the existing event identity privileges'
+);
+select function_privs_are(
+  'public',
+  'is_sanitized_json_value',
+  array['jsonb'],
+  'public',
+  array[]::text[],
+  'the public role cannot execute the event sanitizer'
+);
+select function_privs_are(
+  'public',
+  'is_sanitized_json_value',
+  array['jsonb'],
+  'anon',
+  array[]::text[],
+  'anonymous clients cannot execute the event sanitizer'
+);
+select function_privs_are(
+  'public',
+  'is_sanitized_json_value',
+  array['jsonb'],
+  'authenticated',
+  array[]::text[],
+  'authenticated clients cannot execute the event sanitizer'
+);
+select function_privs_are(
+  'public',
+  'is_sanitized_json_value',
+  array['jsonb'],
+  'service_role',
+  array['EXECUTE'],
+  'only the server service role can execute the event sanitizer'
 );
 
 select lives_ok(

@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseAssessmentCatalog } from '../../../scripts/seed-assessment-options'
 import { createOptionsHandler } from '../../../server/api/assessment/options.get'
 import { createValidateAssessmentHandler } from '../../../server/api/student/assessment/validate.post'
-import { createAssessmentService } from '../../../server/modules/assessment/service'
+import {
+  createAssessmentService,
+  createSupabaseAssessmentDependencies,
+} from '../../../server/modules/assessment/service'
 import { createAssessmentCatalogRevision } from '../../../server/modules/assessment/catalog-revision'
+import { RequestBodyLimitError } from '../../../server/utils/bounded-request-body'
 import type { AssessmentOption, AssessmentSelections } from '../../../shared/types/domain'
 
 vi.hoisted(() => {
@@ -126,6 +130,41 @@ describe('GET /api/assessment/options', () => {
     }
     expect(serialized).not.toContain('private draft label')
   })
+
+  it('composes public options without initializing student identity crypto', async () => {
+    const sessionReaderFactory = vi.fn(() => { throw new Error('identity crypto is intentionally unavailable') })
+    const catalog = canonicalCatalog()
+    const order = vi.fn().mockReturnThis()
+    const eq = vi.fn().mockReturnValue({ order })
+    const select = vi.fn().mockReturnValue({ eq })
+    order.mockReturnValueOnce({ order }).mockReturnValueOnce({ order }).mockResolvedValueOnce({
+      data: catalog.map(option => ({
+        description: option.description ?? null,
+        interest_tags: option.interestTags,
+        label: option.label,
+        option_key: option.optionKey,
+        question_group: option.group,
+        sort_order: option.sortOrder,
+        status: option.status,
+        track_weights: option.trackWeights,
+        visual_key: option.visualKey,
+      })),
+      error: null,
+    })
+    const client = {
+      from: vi.fn().mockReturnValue({ select }),
+      rpc: vi.fn(),
+    }
+    const service = createAssessmentService(createSupabaseAssessmentDependencies(
+      client as never,
+      sessionReaderFactory,
+    ))
+
+    await expect(service.getOptions()).resolves.toEqual(expect.objectContaining({
+      catalogRevision: canonicalRevision,
+    }))
+    expect(sessionReaderFactory).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/student/assessment/validate', () => {
@@ -178,6 +217,27 @@ describe('POST /api/student/assessment/validate', () => {
     const serialized = JSON.stringify(response)
     expect(serialized).not.toContain('trackWeights')
     expect(serialized).not.toContain('interestTags')
+  })
+
+  it('lazily reuses the route Supabase client for one student session reader', async () => {
+    const client = { from: vi.fn(), rpc: vi.fn() }
+    const getStudentSession = vi.fn().mockResolvedValue({
+      prospectId: 42,
+      nickname: '선명한프레임42',
+      expiresAt: '2026-07-15T12:00:00.000Z',
+    })
+    const sessionReaderFactory = vi.fn((_client?: unknown) => ({ getStudentSession }))
+    const dependencies = createSupabaseAssessmentDependencies(
+      client as never,
+      sessionReaderFactory,
+    )
+
+    await dependencies.getStudentSession(sessionToken)
+    await dependencies.getStudentSession(sessionToken)
+
+    expect(sessionReaderFactory).toHaveBeenCalledOnce()
+    expect(sessionReaderFactory).toHaveBeenCalledWith(client)
+    expect(getStudentSession).toHaveBeenCalledTimes(2)
   })
 
   it.each([
@@ -308,5 +368,21 @@ describe('POST /api/student/assessment/validate', () => {
     expect(serviceCalls).toBe(0)
     expect(event.status).toBe(422)
     expect(response.error.code).toBe('ASSESSMENT_INVALID')
+  })
+
+  it('maps a pre-Nitro body overflow to the sanitized assessment envelope', async () => {
+    const handler = createValidate(undefined, {
+      readRawBody: async () => { throw new RequestBodyLimitError() },
+    })
+    const event = { rawBody: '{}', status: undefined as number | undefined }
+
+    const response = await handler(event)
+
+    expect(event.status).toBe(422)
+    expect(response).toEqual({
+      error: { code: 'ASSESSMENT_INVALID', message: expect.any(String) },
+      requestId,
+    })
+    expect(JSON.stringify(response)).not.toContain('REQUEST_BODY_TOO_LARGE')
   })
 })
