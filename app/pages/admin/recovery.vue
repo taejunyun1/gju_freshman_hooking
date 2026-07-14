@@ -6,7 +6,7 @@ import AppButton from '../../components/common/AppButton.vue'
 import AppState from '../../components/common/AppState.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
 
-definePageMeta({ middleware: 'admin' })
+definePageMeta({ layout: 'admin', middleware: 'admin' })
 
 const adminSession = useAdminSessionStore()
 const requests = ref<AdminRecoveryRequest[]>([])
@@ -38,51 +38,49 @@ onMounted(loadQueue)
 </script>
 
 <template>
-  <NuxtLayout name="admin">
-    <section class="recovery-queue" aria-labelledby="recovery-queue-title">
-      <header class="recovery-queue__header">
-        <div>
-          <p class="recovery-queue__eyebrow">ACCOUNT / RECOVERY</p>
-          <h1 id="recovery-queue-title">복구 대기열</h1>
-          <p>만료되지 않은 승인 대기 요청만 표시됩니다.</p>
-        </div>
-        <AppButton
-          variant="secondary"
-          :loading="loading"
-          @click="loadQueue"
-        >
-          새로고침
-        </AppButton>
-      </header>
-
-      <AppState
-        v-if="loading"
-        variant="loading"
-        message="복구 요청을 확인하고 있습니다."
-      />
-      <AppState
-        v-else-if="errorMessage"
-        variant="error"
-        :message="errorMessage"
-      />
-      <AppState
-        v-else-if="requests.length === 0"
-        variant="empty"
-        message="승인을 기다리는 복구 요청이 없습니다."
-      />
-      <div
-        v-else
-        class="recovery-queue__records"
-      >
-        <AdminRecovery
-          v-for="request in requests"
-          :key="request.id"
-          :request="request"
-          @code-cleared="removeRequest"
-        />
+  <section class="recovery-queue" aria-labelledby="recovery-queue-title">
+    <header class="recovery-queue__header">
+      <div>
+        <p class="recovery-queue__eyebrow">ACCOUNT / RECOVERY</p>
+        <h1 id="recovery-queue-title">복구 대기열</h1>
+        <p>만료되지 않은 승인 대기 요청만 표시됩니다.</p>
       </div>
-    </section>
-  </NuxtLayout>
+      <AppButton
+        variant="secondary"
+        :loading="loading"
+        @click="loadQueue"
+      >
+        새로고침
+      </AppButton>
+    </header>
+
+    <AppState
+      v-if="loading"
+      variant="loading"
+      message="복구 요청을 확인하고 있습니다."
+    />
+    <AppState
+      v-else-if="errorMessage"
+      variant="error"
+      :message="errorMessage"
+    />
+    <AppState
+      v-else-if="requests.length === 0"
+      variant="empty"
+      message="승인을 기다리는 복구 요청이 없습니다."
+    />
+    <div
+      v-else
+      class="recovery-queue__records"
+    >
+      <AdminRecovery
+        v-for="request in requests"
+        :key="request.id"
+        :request="request"
+        @code-cleared="removeRequest"
+      />
+    </div>
+  </section>
 </template>
 
 <style scoped>

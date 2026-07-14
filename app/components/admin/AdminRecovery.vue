@@ -225,7 +225,7 @@ onBeforeUnmount(() => {
 
 .recovery-record__details dt {
   margin-bottom: 0.375rem;
-  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
 }
 
 .recovery-record__details dd {

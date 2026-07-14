@@ -1,21 +1,19 @@
 <script setup lang="ts">
 import AppState from '../../components/common/AppState.vue'
 
-definePageMeta({ middleware: 'admin' })
+definePageMeta({ layout: 'admin', middleware: 'admin' })
 </script>
 
 <template>
-  <NuxtLayout name="admin">
-    <section class="admin-dashboard" aria-labelledby="admin-dashboard-title">
-      <p class="admin-dashboard__eyebrow">OPERATIONS / HOME</p>
-      <h1 id="admin-dashboard-title">운영 홈</h1>
-      <p class="admin-dashboard__intro">확인할 운영 작업을 선택하세요.</p>
-      <AppState
-        variant="empty"
-        message="운영 항목이 아직 없습니다. 복구 요청은 복구 대기열에서 확인하세요."
-      />
-    </section>
-  </NuxtLayout>
+  <section class="admin-dashboard" aria-labelledby="admin-dashboard-title">
+    <p class="admin-dashboard__eyebrow">OPERATIONS / HOME</p>
+    <h1 id="admin-dashboard-title">운영 홈</h1>
+    <p class="admin-dashboard__intro">확인할 운영 작업을 선택하세요.</p>
+    <AppState
+      variant="empty"
+      message="운영 항목이 아직 없습니다. 복구 요청은 복구 대기열에서 확인하세요."
+    />
+  </section>
 </template>
 
 <style scoped>

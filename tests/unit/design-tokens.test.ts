@@ -88,4 +88,23 @@ describe('design tokens', () => {
       expect(contrastRatio(labelText, clipBackground)).toBeGreaterThanOrEqual(4.5)
     }
   })
+
+  it('keeps the 10px secure-operations label at WCAG AA contrast on the login panel', () => {
+    const page = readFileSync('app/pages/admin/login.vue', 'utf8')
+    const tokens = readFileSync('app/assets/css/tokens.css', 'utf8')
+    const loginLabel = page.match(/\.admin-login__header > span \{(?<body>[\s\S]*?)\}/u)?.groups?.body
+    const panel = page.match(/\.admin-login__panel\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body
+    const labelMix = loginLabel?.match(/color:\s*color-mix\(in srgb, var\(--color-(?<name>[a-z-]+)\) (?<percentage>\d+)%, transparent\)/u)?.groups
+    const backgroundToken = panel?.match(/background:\s*var\(--color-(?<name>[a-z-]+)\)/u)?.groups?.name
+    const foreground = tokens.match(new RegExp(`--color-${labelMix?.name}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+    const background = tokens.match(new RegExp(`--color-${backgroundToken}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+
+    expect(labelMix?.percentage).toBeDefined()
+    expect(foreground).toBeDefined()
+    expect(background).toBeDefined()
+
+    const backgroundRgb = hexToRgb(background!)
+    const label = mix(hexToRgb(foreground!), backgroundRgb, Number(labelMix?.percentage))
+    expect(contrastRatio(label, backgroundRgb)).toBeGreaterThanOrEqual(4.5)
+  })
 })

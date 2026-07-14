@@ -5,6 +5,8 @@ test('administrator login CSP permits a Supabase-style TOTP data image to load',
   const csp = response?.headers()['content-security-policy']
 
   expect(csp).toContain("img-src 'self' data:")
+  await expect(page.getByRole('heading', { name: '관리자 접근' })).toBeVisible()
+  await expect(page.locator('.admin-shell')).toHaveCount(0)
 
   const image = await page.evaluate(async () => {
     const source = 'data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%222%22%20height%3D%222%22%3E%3Crect%20width%3D%222%22%20height%3D%222%22%2F%3E%3C%2Fsvg%3E'

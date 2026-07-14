@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,10 +18,6 @@ const NuxtLinkStub = {
   template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
 }
 
-const NuxtLayoutStub = {
-  template: '<div data-layout><slot /></div>',
-}
-
 describe('administrator shell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -29,6 +26,28 @@ describe('administrator shell', () => {
     vi.stubGlobal('definePageMeta', vi.fn())
     vi.stubGlobal('navigateTo', vi.fn())
     vi.stubGlobal('useRoute', () => ({ query: {} }))
+  })
+
+  it('renders page content through the canonical Nuxt layout outlet', () => {
+    const app = readFileSync('app/app.vue', 'utf8')
+
+    expect(app).toMatch(/<NuxtLayout>\s*<NuxtPage\s*\/>\s*<\/NuxtLayout>/u)
+  })
+
+  it('assigns the admin layout and middleware as protected-page metadata without manual wrappers', () => {
+    for (const pagePath of ['app/pages/admin/index.vue', 'app/pages/admin/recovery.vue']) {
+      const page = readFileSync(pagePath, 'utf8')
+
+      expect(page).toContain("definePageMeta({ layout: 'admin', middleware: 'admin' })")
+      expect(page).not.toContain('<NuxtLayout')
+    }
+  })
+
+  it('keeps the administrator login in the root outlet while retaining its redirect middleware', () => {
+    const login = readFileSync('app/pages/admin/login.vue', 'utf8')
+
+    expect(login).toContain("definePageMeta({ layout: false, middleware: 'admin' })")
+    expect(login).not.toContain('<NuxtLayout')
   })
 
   it('offers password plus explicit TOTP sign-in without public signup', async () => {
@@ -103,7 +122,7 @@ describe('administrator shell', () => {
 
   it('uses AppState for the empty dashboard instead of invented metrics', async () => {
     const { default: AdminDashboard } = await import('../../../app/pages/admin/index.vue')
-    const wrapper = mount(AdminDashboard, { global: { stubs: { NuxtLayout: NuxtLayoutStub } } })
+    const wrapper = mount(AdminDashboard)
 
     expect(wrapper.get('.app-state--empty').text()).toContain('운영 항목이 아직 없습니다')
     expect(wrapper.text()).not.toMatch(/전환율|신청자 수|성공률/u)

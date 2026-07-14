@@ -11,7 +11,7 @@ import {
   type AdminAuthenticationStep,
 } from '../../utils/admin-supabase'
 
-definePageMeta({ middleware: 'admin' })
+definePageMeta({ layout: false, middleware: 'admin' })
 
 type LoginStep = 'credentials' | 'totp'
 type AdminSessionResponse = {
@@ -310,7 +310,7 @@ onBeforeUnmount(clearEnrollment)
   letter-spacing: 0.08em;
 }
 
-.admin-login__header > span { color: color-mix(in srgb, var(--color-ink) 58%, transparent); }
+.admin-login__header > span { color: color-mix(in srgb, var(--color-ink) 62%, transparent); }
 
 .admin-login__body { padding: clamp(1.25rem, 6vw, 2.5rem); }
 

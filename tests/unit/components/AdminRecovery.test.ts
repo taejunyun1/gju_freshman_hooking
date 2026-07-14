@@ -16,15 +16,28 @@ const pendingRequest = {
 
 const approvedCode = 'BwcHBwcHBwcHBwcHBwcHBw'
 
-const relativeLuminance = (hex: string): number => {
-  const channels = hex.match(/[0-9a-f]{2}/giu)?.map(channel => Number.parseInt(channel, 16) / 255) ?? []
-  const [red = 0, green = 0, blue = 0] = channels.map(channel => (
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+type Rgb = readonly [number, number, number]
+
+const hexToRgb = (hex: string): Rgb => [
+  Number.parseInt(hex.slice(1, 3), 16),
+  Number.parseInt(hex.slice(3, 5), 16),
+  Number.parseInt(hex.slice(5, 7), 16),
+]
+
+const mix = (foreground: Rgb, background: Rgb, foregroundPercentage: number): Rgb => {
+  const alpha = foregroundPercentage / 100
+
+  return foreground.map((channel, index) => channel * alpha + background[index] * (1 - alpha)) as Rgb
+}
+
+const relativeLuminance = (color: Rgb): number => {
+  const [red = 0, green = 0, blue = 0] = color.map((channel) => (
+    channel / 255 <= 0.04045 ? channel / 255 / 12.92 : ((channel / 255 + 0.055) / 1.055) ** 2.4
   ))
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 }
 
-const contrastRatio = (foreground: string, background: string): number => {
+const contrastRatio = (foreground: Rgb, background: Rgb): number => {
   const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background))
   const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background))
   return (lighter + 0.05) / (darker + 0.05)
@@ -60,7 +73,28 @@ describe('AdminRecovery', () => {
 
     expect(foreground).toBeDefined()
     expect(background).toBeDefined()
-    expect(contrastRatio(foreground!, background!)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(hexToRgb(foreground!), hexToRgb(background!))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('keeps the 12px recovery detail labels at WCAG AA contrast on the record surface', () => {
+    const component = readFileSync('app/components/admin/AdminRecovery.vue', 'utf8')
+    const tokens = readFileSync('app/assets/css/tokens.css', 'utf8')
+    const recordRule = component.match(/\.recovery-record\s*\{(?<body>[\s\S]*?)\}/u)?.groups?.body
+    const detailRule = [...component.matchAll(/\.recovery-record__details dt\s*\{(?<body>[\s\S]*?)\}/gu)]
+      .map(match => match.groups?.body)
+      .find(rule => rule?.includes('color:'))
+    const foregroundMix = detailRule?.match(/color:\s*color-mix\(in srgb, var\(--color-(?<name>[a-z-]+)\) (?<percentage>\d+)%, transparent\)/u)?.groups
+    const backgroundToken = recordRule?.match(/background:\s*var\(--color-(?<name>[a-z-]+)\)/u)?.groups?.name
+    const foreground = tokens.match(new RegExp(`--color-${foregroundMix?.name}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+    const background = tokens.match(new RegExp(`--color-${backgroundToken}:\\s*(#[0-9A-F]{6})`, 'u'))?.[1]
+
+    expect(foregroundMix?.percentage).toBeDefined()
+    expect(foreground).toBeDefined()
+    expect(background).toBeDefined()
+
+    const backgroundRgb = hexToRgb(background!)
+    const labelRgb = mix(hexToRgb(foreground!), backgroundRgb, Number(foregroundMix?.percentage))
+    expect(contrastRatio(labelRgb, backgroundRgb)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('reveals a one-time code only after explicit approval', async () => {
