@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 const validRequest = { nickname: '빛의기록27', phone: '01012345678', region: 'gwangju' }
 
 describe('student password recovery', () => {
+  it('encodes and decodes PostgREST bytea values without changing the bytes', async () => {
+    const { bytesFromPostgresBytea, postgresByteaFromBytes } = await import('../../../server/modules/identity/password-recovery')
+    const bytes = Uint8Array.from([0, 1, 15, 16, 127, 128, 255])
+
+    expect(postgresByteaFromBytes(bytes)).toBe('\\x00010f107f80ff')
+    expect(bytesFromPostgresBytea('\\x00010f107f80ff')).toEqual(bytes)
+  })
+
   it('returns identical accepted responses for matching and unknown recovery identities', async () => {
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
     const { createRecoveryRequestHandler } = await import('../../../server/api/student/password/recovery/request.post')
@@ -28,12 +36,14 @@ describe('student password recovery', () => {
     expect(requested).toHaveLength(2)
   })
 
-  it('generates a 128-bit approval code, persists only its hash, and audits no secret values', async () => {
+  it('returns the one-time code only from an atomic approval transaction and audits no secret values', async () => {
     const { createPasswordRecoveryService } = await import('../../../server/modules/identity/password-recovery')
     const stored: Array<Record<string, unknown>> = []
     const auditEvents: Array<Record<string, unknown>> = []
+    const code = 'BwcHBwcHBwcHBwcHBwcHBw'
+    const expiresAt = new Date('2026-07-14T10:15:00.000Z')
     const recovery = createPasswordRecoveryService({
-      approveRequest: async (input: Record<string, unknown>) => { stored.push(input); return true },
+      approveRequest: async (input: Record<string, unknown>) => { stored.push(input); return { code, expiresAt } },
       createRequest: async () => undefined,
       findRecoveryProspect: async () => null,
       now: () => new Date('2026-07-14T10:00:00.000Z'),
@@ -41,22 +51,16 @@ describe('student password recovery', () => {
       random: (length: number) => new Uint8Array(length).fill(7),
       readCredentialByProspectId: async () => null,
       readStudentSession: async () => null,
-      revokeOtherStudentSessionsAndUpdatePassword: async () => false,
+      changeStudentPassword: async () => false,
       completeCredentialRecovery: async () => false,
       writeAuditEvent: async (input: Record<string, unknown>) => { auditEvents.push(input) },
     })
 
     const approved = await recovery.approve({ adminUserId: 'admin-1', requestId: 77, traceId: 'trace-1' })
 
-    expect(approved.code).toMatch(/^[A-Za-z0-9_-]{22}$/)
-    expect(approved.expiresAt).toBe('2026-07-14T10:15:00.000Z')
-    expect(stored).toEqual([expect.objectContaining({
-      adminUserId: 'admin-1',
-      codeHash: expect.any(Uint8Array),
-      expiresAt: new Date('2026-07-14T10:15:00.000Z'),
-      requestId: 77,
-    })])
-    expect((stored[0]!.codeHash as Uint8Array)).toHaveLength(32)
+    expect(approved.code).toBe(code)
+    expect(approved.expiresAt).toBe(expiresAt.toISOString())
+    expect(stored).toEqual([{ adminUserId: 'admin-1', requestId: 77 }])
     expect(JSON.stringify(stored)).not.toContain(approved.code)
     expect(auditEvents).toEqual([{
       action: 'credential_recovery_approved',
@@ -67,12 +71,34 @@ describe('student password recovery', () => {
     }])
   })
 
+  it('does not generate a code when the atomic approval transaction rejects an expired request', async () => {
+    const { createPasswordRecoveryService } = await import('../../../server/modules/identity/password-recovery')
+    let randomCalls = 0
+    const recovery = createPasswordRecoveryService({
+      approveRequest: async () => null,
+      createRequest: async () => undefined,
+      findRecoveryProspect: async () => null,
+      now: () => new Date('2026-07-14T10:00:00.000Z'),
+      passwordPepper: new Uint8Array(32).fill(9),
+      random: (length: number) => { randomCalls += 1; return new Uint8Array(length).fill(8) },
+      readCredentialByProspectId: async () => null,
+      readStudentSession: async () => null,
+      changeStudentPassword: async () => false,
+      completeCredentialRecovery: async () => false,
+      writeAuditEvent: async () => undefined,
+    })
+
+    await expect(recovery.approve({ adminUserId: 'admin-1', requestId: 77, traceId: 'trace-1' }))
+      .rejects.toMatchObject({ code: 'RECOVERY_INVALID' })
+    expect(randomCalls).toBe(0)
+  })
+
   it('completes recovery only through the atomic RPC and revokes every active session', async () => {
     const { createPasswordRecoveryService } = await import('../../../server/modules/identity/password-recovery')
     let activeSessionCount = 3
     const rpcInputs: Array<Record<string, unknown>> = []
     const recovery = createPasswordRecoveryService({
-      approveRequest: async () => false,
+      approveRequest: async () => null,
       createRequest: async () => undefined,
       findRecoveryProspect: async () => null,
       now: () => new Date('2026-07-14T10:00:00.000Z'),
@@ -80,7 +106,7 @@ describe('student password recovery', () => {
       random: (length: number) => new Uint8Array(length).fill(8),
       readCredentialByProspectId: async () => null,
       readStudentSession: async () => null,
-      revokeOtherStudentSessionsAndUpdatePassword: async () => false,
+      changeStudentPassword: async () => false,
       completeCredentialRecovery: async (input: Record<string, unknown>) => {
         rpcInputs.push(input)
         activeSessionCount = 0
@@ -100,11 +126,11 @@ describe('student password recovery', () => {
     expect(JSON.stringify(rpcInputs)).not.toContain('새비밀번호-88')
   })
 
-  it('requires an active student session and current password before changing the password', async () => {
+  it('verifies the current password before calling the recovery-safe change transaction', async () => {
     const { createPasswordRecoveryService } = await import('../../../server/modules/identity/password-recovery')
     const updates: Array<Record<string, unknown>> = []
     const recovery = createPasswordRecoveryService({
-      approveRequest: async () => false,
+      approveRequest: async () => null,
       createRequest: async () => undefined,
       findRecoveryProspect: async () => null,
       now: () => new Date('2026-07-14T10:00:00.000Z'),
@@ -117,7 +143,7 @@ describe('student password recovery', () => {
       readStudentSession: async (token: string) => token === 'active-session'
         ? { prospectId: 44, tokenHash: new Uint8Array(32).fill(5) }
         : null,
-      revokeOtherStudentSessionsAndUpdatePassword: async (input: Record<string, unknown>) => { updates.push(input); return true },
+      changeStudentPassword: async (input: Record<string, unknown>) => { updates.push(input); return true },
       completeCredentialRecovery: async () => false,
       verifyCurrentPassword: async (password: string) => password === '현재비밀번호-77',
       writeAuditEvent: async () => undefined,
@@ -133,6 +159,51 @@ describe('student password recovery', () => {
       newPassword: '새비밀번호-88',
       sessionToken: '',
     })).rejects.toMatchObject({ code: 'AUTH_FAILED' })
-    expect(updates).toEqual([expect.objectContaining({ prospectId: 44, sessionTokenHash: expect.any(Uint8Array) })])
+    expect(updates).toEqual([{
+      passwordHash: expect.any(Uint8Array),
+      passwordSalt: expect.any(Uint8Array),
+      sessionTokenHash: expect.any(Uint8Array),
+    }])
+  })
+
+  it('cannot overwrite recovery when recovery revokes the initiating session before mutation', async () => {
+    const { createPasswordRecoveryService } = await import('../../../server/modules/identity/password-recovery')
+    const recoveredPasswordHash = new Uint8Array(32).fill(9)
+    let storedPasswordHash = new Uint8Array(32).fill(4)
+    let initiatingSessionRevoked = false
+    const recovery = createPasswordRecoveryService({
+      approveRequest: async () => null,
+      changeStudentPassword: async (input) => {
+        if (initiatingSessionRevoked) return false
+        storedPasswordHash = input.passwordHash
+        return true
+      },
+      completeCredentialRecovery: async () => false,
+      createRequest: async () => undefined,
+      findRecoveryProspect: async () => null,
+      passwordPepper: new Uint8Array(32).fill(8),
+      random: length => new Uint8Array(length).fill(7),
+      readCredentialByProspectId: async () => ({
+        passwordHash: new Uint8Array(32).fill(4),
+        passwordSalt: new Uint8Array(16).fill(5),
+      }),
+      readStudentSession: async () => ({
+        prospectId: 44,
+        tokenHash: new Uint8Array(32).fill(6),
+      }),
+      verifyCurrentPassword: async () => {
+        initiatingSessionRevoked = true
+        storedPasswordHash = recoveredPasswordHash
+        return true
+      },
+      writeAuditEvent: async () => undefined,
+    })
+
+    await expect(recovery.changePassword({
+      currentPassword: '현재비밀번호-77',
+      newPassword: '새비밀번호-88',
+      sessionToken: 'active-before-recovery',
+    })).rejects.toMatchObject({ code: 'AUTH_FAILED' })
+    expect(storedPasswordHash).toEqual(recoveredPasswordHash)
   })
 })

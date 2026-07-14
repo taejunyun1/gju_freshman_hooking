@@ -1,12 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { AppError } from '../../utils/app-error'
-import { base64urlEncode, decodeBase64urlSecret, hmacSha256, randomBytes, sha256, utf8, type RandomBytes } from '../../utils/web-crypto'
+import { decodeBase64urlSecret, hmacSha256, randomBytes, sha256, utf8, type RandomBytes } from '../../utils/web-crypto'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { hashPassword, verifyPassword } from './password'
 import { normalizeKoreanPhone } from './phone'
 
-const APPROVAL_CODE_BYTES = 16
-const APPROVAL_CODE_TTL_MILLISECONDS = 15 * 60 * 1000
 const RECOVERY_REQUEST_TTL_MILLISECONDS = 24 * 60 * 60 * 1000
 
 type PasswordMaterial = {
@@ -21,7 +19,7 @@ export type PasswordRecoveryDependencies = {
   random?: RandomBytes
   findRecoveryProspect: (input: { phoneHmac: Uint8Array, nickname: string, region: string }) => Promise<{ id: number } | null>
   createRequest: (input: { prospectId: number, expiresAt: Date }) => Promise<void>
-  approveRequest: (input: { requestId: number, adminUserId: string, codeHash: Uint8Array, expiresAt: Date, verifiedAt: Date }) => Promise<boolean>
+  approveRequest: (input: { requestId: number, adminUserId: string }) => Promise<{ code: string, expiresAt: Date } | null>
   writeAuditEvent: (input: {
     adminUserId: string
     action: 'credential_recovery_approved'
@@ -33,22 +31,27 @@ export type PasswordRecoveryDependencies = {
   readStudentSession: (sessionToken: string) => Promise<{ prospectId: number, tokenHash: Uint8Array } | null>
   readCredentialByProspectId: (prospectId: number) => Promise<PasswordMaterial | null>
   verifyCurrentPassword?: (password: string, material: PasswordMaterial) => Promise<boolean>
-  revokeOtherStudentSessionsAndUpdatePassword: (input: {
-    prospectId: number
+  changeStudentPassword: (input: {
     sessionTokenHash: Uint8Array
     passwordHash: Uint8Array
     passwordSalt: Uint8Array
-    now: Date
   }) => Promise<boolean>
 }
 
-const base64FromBytes = (bytes: Uint8Array): string => {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
+export const postgresByteaFromBytes = (bytes: Uint8Array): string => (
+  `\\x${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`
+)
+
+export const bytesFromPostgresBytea = (value: string): Uint8Array => {
+  if (!/^\\x(?:[0-9a-f]{2})*$/i.test(value)) throw new Error('RECOVERY_STORE_INVALID')
+  return Uint8Array.from(value.slice(2).match(/.{2}/g) ?? [], byte => Number.parseInt(byte, 16))
 }
 
-const bytesFromBase64 = (value: string): Uint8Array => Uint8Array.from(atob(value), (character) => character.charCodeAt(0))
+const asDate = (value: string): Date => {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) throw new Error('RECOVERY_STORE_INVALID')
+  return parsed
+}
 
 const throwOnStoreError = (error: { code?: string } | null): void => {
   if (error && error.code !== 'PGRST116') throw new Error('RECOVERY_STORE_UNAVAILABLE')
@@ -62,7 +65,7 @@ const createSupabaseDependencies = (
   findRecoveryProspect: async ({ phoneHmac, nickname, region }) => {
     const { data, error } = await client.from('prospects')
       .select('id')
-      .eq('phone_hmac', base64FromBytes(phoneHmac))
+      .eq('phone_hmac', postgresByteaFromBytes(phoneHmac))
       .eq('nickname', nickname)
       .eq('region', region)
       .eq('status', 'active')
@@ -77,21 +80,15 @@ const createSupabaseDependencies = (
     })
     throwOnStoreError(error)
   },
-  approveRequest: async ({ requestId, adminUserId, codeHash, expiresAt, verifiedAt }) => {
-    const { data, error } = await client.from('credential_recovery_requests')
-      .update({
-        code_hash: base64FromBytes(codeHash),
-        expires_at: expiresAt.toISOString(),
-        status: 'verified',
-        verified_at: verifiedAt.toISOString(),
-        verified_by_admin_id: adminUserId,
-      })
-      .eq('id', requestId)
-      .eq('status', 'requested')
-      .select('id')
-      .maybeSingle()
+  approveRequest: async ({ requestId, adminUserId }) => {
+    const { data, error } = await client.rpc('approve_credential_recovery_request', {
+      p_admin_user_id: adminUserId,
+      p_request_id: requestId,
+    })
     throwOnStoreError(error)
-    return data?.id === requestId
+    const approved = Array.isArray(data) ? data[0] : null
+    if (!approved || typeof approved.code !== 'string' || typeof approved.expires_at !== 'string') return null
+    return { code: approved.code, expiresAt: asDate(approved.expires_at) }
   },
   writeAuditEvent: async (input) => {
     const { error } = await client.from('audit_events').insert({
@@ -106,9 +103,9 @@ const createSupabaseDependencies = (
   },
   completeCredentialRecovery: async ({ codeHash, passwordHash, passwordSalt }) => {
     const { data, error } = await client.rpc('complete_credential_recovery', {
-      p_code_hash: base64FromBytes(codeHash),
-      p_password_hash: base64FromBytes(passwordHash),
-      p_password_salt: base64FromBytes(passwordSalt),
+      p_code_hash: postgresByteaFromBytes(codeHash),
+      p_password_hash: postgresByteaFromBytes(passwordHash),
+      p_password_salt: postgresByteaFromBytes(passwordSalt),
     })
     throwOnStoreError(error)
     return data === true
@@ -116,7 +113,7 @@ const createSupabaseDependencies = (
   readStudentSession: async (sessionToken) => {
     if (!sessionToken) return null
     const tokenHash = await sha256(utf8(sessionToken))
-    const { data, error } = await client.rpc('touch_student_session', { p_token_hash: base64FromBytes(tokenHash) })
+    const { data, error } = await client.rpc('touch_student_session', { p_token_hash: postgresByteaFromBytes(tokenHash) })
     throwOnStoreError(error)
     const session = Array.isArray(data) ? data[0] : null
     return session && typeof session.prospect_id === 'number' ? { prospectId: session.prospect_id, tokenHash } : null
@@ -128,31 +125,16 @@ const createSupabaseDependencies = (
       .maybeSingle()
     throwOnStoreError(error)
     if (!data || typeof data.password_hash !== 'string' || typeof data.password_salt !== 'string') return null
-    return { passwordHash: bytesFromBase64(data.password_hash), passwordSalt: bytesFromBase64(data.password_salt) }
+    return { passwordHash: bytesFromPostgresBytea(data.password_hash), passwordSalt: bytesFromPostgresBytea(data.password_salt) }
   },
-  revokeOtherStudentSessionsAndUpdatePassword: async ({ prospectId, sessionTokenHash, passwordHash, passwordSalt, now }) => {
-    const { data: credential, error: credentialError } = await client.from('student_credentials')
-      .update({
-        failed_attempts: 0,
-        locked_until: null,
-        password_changed_at: now.toISOString(),
-        password_hash: base64FromBytes(passwordHash),
-        password_salt: base64FromBytes(passwordSalt),
-        updated_at: now.toISOString(),
-      })
-      .eq('prospect_id', prospectId)
-      .select('prospect_id')
-      .maybeSingle()
-    throwOnStoreError(credentialError)
-    if (credential?.prospect_id !== prospectId) return false
-
-    const { error: sessionsError } = await client.from('student_sessions')
-      .update({ revoked_at: now.toISOString() })
-      .eq('prospect_id', prospectId)
-      .neq('token_hash', base64FromBytes(sessionTokenHash))
-      .is('revoked_at', null)
-    throwOnStoreError(sessionsError)
-    return true
+  changeStudentPassword: async ({ sessionTokenHash, passwordHash, passwordSalt }) => {
+    const { data, error } = await client.rpc('change_student_password', {
+      p_password_hash: postgresByteaFromBytes(passwordHash),
+      p_password_salt: postgresByteaFromBytes(passwordSalt),
+      p_session_hash: postgresByteaFromBytes(sessionTokenHash),
+    })
+    throwOnStoreError(error)
+    return data === true
   },
 })
 
@@ -175,19 +157,12 @@ export const createPasswordRecoveryService = (dependencies: PasswordRecoveryDepe
   }
 
   const approve = async (input: { requestId: number, adminUserId: string, traceId: string }): Promise<{ code: string, expiresAt: string }> => {
-    const codeBytes = random(APPROVAL_CODE_BYTES)
-    if (codeBytes.length !== APPROVAL_CODE_BYTES) throw new Error('RECOVERY_CODE_RANDOM_INVALID')
-    const code = base64urlEncode(codeBytes)
-    const verifiedAt = now()
-    const expiresAt = new Date(verifiedAt.getTime() + APPROVAL_CODE_TTL_MILLISECONDS)
     const approved = await dependencies.approveRequest({
       requestId: input.requestId,
       adminUserId: input.adminUserId,
-      codeHash: await sha256(utf8(code)),
-      expiresAt,
-      verifiedAt,
     })
     if (!approved) throw new AppError('RECOVERY_INVALID')
+    if (!/^[A-Za-z0-9_-]{22}$/.test(approved.code)) throw new Error('RECOVERY_STORE_INVALID')
     await dependencies.writeAuditEvent({
       adminUserId: input.adminUserId,
       action: 'credential_recovery_approved',
@@ -195,7 +170,7 @@ export const createPasswordRecoveryService = (dependencies: PasswordRecoveryDepe
       targetId: String(input.requestId),
       targetType: 'credential_recovery_request',
     })
-    return { code, expiresAt: expiresAt.toISOString() }
+    return { code: approved.code, expiresAt: approved.expiresAt.toISOString() }
   }
 
   const complete = async (input: { code: string, newPassword: string }): Promise<{ ok: true }> => {
@@ -220,12 +195,10 @@ export const createPasswordRecoveryService = (dependencies: PasswordRecoveryDepe
     const passwordSalt = random(16)
     if (passwordSalt.length !== 16) throw new Error('PASSWORD_SALT_RANDOM_INVALID')
     const password = await hashPassword(input.newPassword, passwordSalt, dependencies.passwordPepper)
-    const changed = await dependencies.revokeOtherStudentSessionsAndUpdatePassword({
-      prospectId: session.prospectId,
+    const changed = await dependencies.changeStudentPassword({
       sessionTokenHash: session.tokenHash,
       passwordHash: password.hash,
       passwordSalt: password.salt,
-      now: now(),
     })
     if (!changed) throw new AppError('AUTH_FAILED')
     return { ok: true }
