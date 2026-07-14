@@ -7,6 +7,8 @@ import {
 } from '../types/domain'
 import type { ResultSnapshot } from '../types/result'
 
+export const resultSnapshotMaxBytes = 262_144
+
 const boundedText = (minimum: number, maximum: number) => z.string()
   .min(minimum)
   .max(maximum)
@@ -15,6 +17,17 @@ const boundedText = (minimum: number, maximum: number) => z.string()
 const safeIdSchema = z.number().int().positive().safe()
 const finiteScoreSchema = z.number().finite().min(0).max(100)
 const tagKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u)
+const serializedUtf8ByteLength = (value: unknown) => {
+  try {
+    const serialized = JSON.stringify(value)
+    return typeof serialized === 'string'
+      ? new TextEncoder().encode(serialized).byteLength
+      : null
+  }
+  catch {
+    return null
+  }
+}
 const safeRelativePathSchema = z.string()
   .min(1)
   .max(512)
@@ -86,9 +99,28 @@ const courseDisplayMetadataSchema = z.object({
   credits: z.number().finite().min(0).max(30),
 }).strict()
 
-const capabilityDisplayMetadataSchema = z.object({
+const equipmentDisplayMetadataBaseShape = {
   locationLabel: boundedText(1, 120),
-  accessLabel: boundedText(1, 120),
+  confirmedQuantity: z.number().int().min(1).max(999),
+  reservationUrl: z.literal('https://gjureserve.co.kr'),
+}
+
+const equipmentDisplayMetadataSchema = z.discriminatedUnion('accessMode', [
+  z.object({
+    ...equipmentDisplayMetadataBaseShape,
+    accessMode: z.literal('reservation'),
+    accessLabel: z.literal('예약 가능'),
+  }).strict(),
+  z.object({
+    ...equipmentDisplayMetadataBaseShape,
+    accessMode: z.literal('inquiry'),
+    accessLabel: z.literal('문의 전용'),
+  }).strict(),
+])
+
+const facilityDisplayMetadataSchema = z.object({
+  locationLabel: boundedText(1, 120),
+  operationNote: boundedText(1, 1000),
 }).strict()
 
 const studentWorkDisplayMetadataSchema = z.object({
@@ -107,13 +139,13 @@ export const courseResultResourceSchema = z.object({
 export const equipmentResultResourceSchema = z.object({
   ...resultResourceBaseShape,
   type: z.literal('equipment'),
-  displayMetadata: capabilityDisplayMetadataSchema,
+  displayMetadata: equipmentDisplayMetadataSchema,
 }).strict().superRefine(renderedReasonCheck)
 
 export const facilityResultResourceSchema = z.object({
   ...resultResourceBaseShape,
   type: z.literal('facility'),
-  displayMetadata: capabilityDisplayMetadataSchema,
+  displayMetadata: facilityDisplayMetadataSchema,
 }).strict().superRefine(renderedReasonCheck)
 
 export const extracurricularResultResourceSchema = z.object({
@@ -256,7 +288,7 @@ export const resultFacultySchema = z.object({
 })
 
 export const resultSnapshotSchema = z.object({
-  completedAt: z.iso.datetime({ offset: true }),
+  completedAt: z.iso.datetime({ offset: true }).max(32),
   selectedInterests: z.array(selectedInterestSchema).min(4).max(11),
   trackScores: trackScoresSchema,
   rankedTracks: z.tuple([
@@ -290,6 +322,27 @@ export const resultSnapshotSchema = z.object({
       })
     }
   }
+
+  const selectedLabels = snapshot.selectedInterests.map(interest => interest.label)
+  const canonicalResources = [
+    ...snapshot.resources.course,
+    ...snapshot.resources.equipment,
+    ...snapshot.resources.facility,
+    ...snapshot.resources.extracurricular,
+    ...snapshot.resources.project,
+    ...snapshot.resources.student_work,
+    ...snapshot.resources.career,
+    ...snapshot.resources.support,
+  ]
+  canonicalResources.forEach((resource) => {
+    if (!selectedLabels.some(label => resource.connectionReason.includes(label))) {
+      context.addIssue({
+        code: 'custom',
+        message: '연결 이유에는 선택한 관심사 문구가 정확히 포함되어야 합니다.',
+        path: ['resources', resource.type, 'connectionReason'],
+      })
+    }
+  })
 
   if (new Set(snapshot.rankedTracks).size !== trackKeys.length) {
     context.addIssue({
@@ -339,6 +392,14 @@ export const resultSnapshotSchema = z.object({
       })
       break
     }
+  }
+
+  const snapshotBytes = serializedUtf8ByteLength(snapshot)
+  if (snapshotBytes === null || snapshotBytes > resultSnapshotMaxBytes) {
+    context.addIssue({
+      code: 'custom',
+      message: `결과 스냅샷은 UTF-8 ${resultSnapshotMaxBytes}바이트 이하여야 합니다.`,
+    })
   }
 })
 

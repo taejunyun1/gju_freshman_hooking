@@ -19,9 +19,20 @@ export interface CourseDisplayMetadata {
   readonly credits: number
 }
 
-export interface CapabilityDisplayMetadata {
+interface EquipmentDisplayMetadataBase {
   readonly locationLabel: string
-  readonly accessLabel: string
+  readonly confirmedQuantity: number
+  readonly reservationUrl: 'https://gjureserve.co.kr'
+}
+
+export type EquipmentDisplayMetadata = Readonly<EquipmentDisplayMetadataBase & (
+  | { readonly accessMode: 'reservation', readonly accessLabel: '예약 가능' }
+  | { readonly accessMode: 'inquiry', readonly accessLabel: '문의 전용' }
+)>
+
+export interface FacilityDisplayMetadata {
+  readonly locationLabel: string
+  readonly operationNote: string
 }
 
 export interface StudentWorkDisplayMetadata {
@@ -44,8 +55,8 @@ interface ResultResourceBase<Type extends ResourceType, Metadata> {
 }
 
 export type CourseResultResource = ResultResourceBase<'course', CourseDisplayMetadata>
-export type EquipmentResultResource = ResultResourceBase<'equipment', CapabilityDisplayMetadata>
-export type FacilityResultResource = ResultResourceBase<'facility', CapabilityDisplayMetadata>
+export type EquipmentResultResource = ResultResourceBase<'equipment', EquipmentDisplayMetadata>
+export type FacilityResultResource = ResultResourceBase<'facility', FacilityDisplayMetadata>
 export type ExtracurricularResultResource = ResultResourceBase<'extracurricular', EmptyDisplayMetadata>
 export type ProjectResultResource = ResultResourceBase<'project', EmptyDisplayMetadata>
 export type StudentWorkResultResource = ResultResourceBase<'student_work', StudentWorkDisplayMetadata>

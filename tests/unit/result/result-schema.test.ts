@@ -10,7 +10,7 @@ const course = (id: number, gradeYear: 1 | 2 | 3 | 4) => ({
   sourceDate: '2026-07-14',
   affinity: 92,
   primaryTag: 'art_photo',
-  connectionReason: `${gradeYear}학년 사진 수업 ${id}에서 선택한 관심사를 작품으로 발전시킬 수 있습니다.`,
+  connectionReason: `${gradeYear}학년 사진 수업 ${id}에서 ‘예술사진을 만들고 싶다’ 관심을 작품으로 발전시킬 수 있습니다.`,
   displayMetadata: { gradeYear, term: '1학기', credits: 3 },
 })
 
@@ -25,12 +25,23 @@ const resource = (
   sourceDate: '2026-07-14',
   affinity: 81,
   primaryTag: 'visual_story',
-  connectionReason: `${type} 추천 ${id}은 선택한 관심 분야의 실습을 뒷받침합니다.`,
-  displayMetadata: type === 'equipment' || type === 'facility'
-    ? { locationLabel: '호심관', accessLabel: '예약 또는 문의' }
-    : type === 'student_work'
-      ? { imagePath: 'images/student-work/sample.webp', imageAlt: '학생 작품 예시' }
-      : {},
+  connectionReason: `${type} 추천 ${id}은 ‘예술사진을 만들고 싶다’ 관심 분야의 실습을 뒷받침합니다.`,
+  displayMetadata: type === 'equipment'
+    ? {
+        locationLabel: '호심관 기자재실',
+        accessMode: 'reservation' as const,
+        accessLabel: '예약 가능' as const,
+        confirmedQuantity: 2,
+        reservationUrl: 'https://gjureserve.co.kr' as const,
+      }
+    : type === 'facility'
+      ? {
+          locationLabel: '호심관 스튜디오 A',
+          operationNote: '관리자가 조명 장비와 호리존 이용 절차를 확인했습니다.',
+        }
+      : type === 'student_work'
+        ? { imagePath: 'images/student-work/sample.webp', imageAlt: '학생 작품 예시' }
+        : {},
 })
 
 const makeValidSnapshot = () => {
@@ -98,6 +109,100 @@ const makeValidSnapshot = () => {
 
 const clone = <T>(value: T): T => structuredClone(value)
 
+const snapshotByteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength
+
+const makeDenseKoreanSnapshot = (fillLength: number) => {
+  const snapshot = clone(makeValidSnapshot())
+  const interestLabel = '관'.repeat(200)
+  snapshot.selectedInterests = [
+    { group: 'work', key: 'work.art_photo', label: interestLabel },
+    { group: 'work', key: 'work.documentary', label: '록'.repeat(200) },
+    { group: 'work', key: 'work.commercial', label: '광'.repeat(200) },
+    { group: 'work', key: 'work.video', label: '영'.repeat(200) },
+    { group: 'result', key: 'result.exhibition', label: '결'.repeat(200) },
+    { group: 'result', key: 'result.portfolio', label: '포'.repeat(200) },
+    { group: 'result', key: 'result.project', label: '프'.repeat(200) },
+    { group: 'style', key: 'style.experimental', label: '표'.repeat(200) },
+    { group: 'style', key: 'style.story', label: '서'.repeat(200) },
+    { group: 'career', key: 'career.artist', label: '진'.repeat(200) },
+    { group: 'career', key: 'career.creator', label: '창'.repeat(200) },
+  ]
+
+  const courses = [
+    course(1, 1), course(2, 1), course(3, 2), course(4, 3), course(5, 4),
+  ]
+  snapshot.resources.course = courses
+  snapshot.resources.equipment = []
+  snapshot.resources.facility = [12, 13, 14, 15].map(id => resource(id, 'facility')) as never
+  snapshot.resources.extracurricular = [20, 21, 22].map(id => resource(id, 'extracurricular')) as never
+  snapshot.resources.project = [30, 31, 32].map(id => resource(id, 'project')) as never
+  snapshot.resources.student_work = [40, 41, 42].map(id => resource(id, 'student_work')) as never
+  snapshot.resources.career = [50, 51, 52, 53].map(id => resource(id, 'career')) as never
+  snapshot.resources.support = [60, 61, 62].map(id => resource(id, 'support')) as never
+  snapshot.learningPath = [
+    { year: 1, resources: courses.slice(0, 2) },
+    { year: 2, resources: courses.slice(2, 3) },
+    { year: 3, resources: courses.slice(3, 4) },
+    { year: 4, resources: courses.slice(4, 5) },
+  ] as never
+
+  type MutableResourceFixture = {
+    id: number
+    type: string
+    title: string
+    summary: string
+    primaryTag: string
+    connectionReason: string
+    displayMetadata: Record<string, unknown>
+  }
+  const canonicalResources = Object.values(snapshot.resources)
+    .flat() as unknown as MutableResourceFixture[]
+  const denseText = '가'.repeat(fillLength)
+  for (const item of canonicalResources) {
+    item.title = `자원${item.id}`.padEnd(200, '제')
+    item.summary = denseText
+    item.primaryTag = `a${'b'.repeat(63)}`
+    const reasonPrefix = `${item.title}${interestLabel}`
+    item.connectionReason = `${reasonPrefix}${'근'.repeat(Math.max(0, Math.min(fillLength, 1000 - reasonPrefix.length)))}`
+    if (item.type === 'facility') {
+      item.displayMetadata.locationLabel = '위'.repeat(120)
+      item.displayMetadata.operationNote = denseText
+    }
+    if (item.type === 'student_work') {
+      item.displayMetadata.imageAlt = '작'.repeat(200)
+      item.displayMetadata.imagePath = `images/${'a'.repeat(500)}.webp`
+    }
+    if (item.type === 'course') {
+      item.displayMetadata.term = '학'.repeat(20)
+    }
+  }
+
+  snapshot.learningPath = [
+    { year: 1, resources: snapshot.resources.course.slice(0, 2) },
+    { year: 2, resources: snapshot.resources.course.slice(2, 3) },
+    { year: 3, resources: snapshot.resources.course.slice(3, 4) },
+    { year: 4, resources: snapshot.resources.course.slice(4, 5) },
+  ] as never
+
+  snapshot.faculty.specialists.push({
+    ...clone(snapshot.faculty.specialists[0]!),
+    id: 104,
+  })
+  const faculty = [snapshot.faculty.primary, snapshot.faculty.backup, ...snapshot.faculty.specialists]
+  for (const person of faculty) {
+    person.name = '교'.repeat(100)
+    person.title = '직'.repeat(100)
+    person.expertise = denseText
+    person.reason = denseText
+    person.publicContacts.office = '실'.repeat(200)
+    person.publicContacts.phone = `+${'1'.repeat(39)}`
+    person.publicContacts.email = `${'a'.repeat(63)}@${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(50)}`
+    person.publicContacts.website = `https://example.com/${'a'.repeat(470)}`
+  }
+
+  return snapshot
+}
+
 describe('result snapshot decoder', () => {
   it('decodes the exact contract and deeply freezes the immutable snapshot', () => {
     const decoded = decodeResultSnapshot(makeValidSnapshot())
@@ -107,6 +212,8 @@ describe('result snapshot decoder', () => {
     expect(Object.isFrozen(decoded.resources)).toBe(true)
     expect(Object.isFrozen(decoded.resources.course)).toBe(true)
     expect(Object.isFrozen(decoded.resources.course[0]?.displayMetadata)).toBe(true)
+    expect(Object.isFrozen(decoded.resources.equipment[0]?.displayMetadata)).toBe(true)
+    expect(Object.isFrozen(decoded.resources.facility[0]?.displayMetadata)).toBe(true)
     expect(Object.isFrozen(decoded.faculty.primary.publicContacts)).toBe(true)
   })
 
@@ -253,5 +360,103 @@ describe('result snapshot decoder', () => {
       title: '서로 다른 제목',
     }
     expect(() => decodeResultSnapshot(staleCopy)).toThrow()
+  })
+
+  it('uses distinct public evidence metadata for equipment and facilities', () => {
+    const snapshot = clone(makeValidSnapshot())
+    snapshot.resources.equipment[0]!.displayMetadata = {
+      locationLabel: '호심관 기자재실',
+      accessMode: 'reservation',
+      accessLabel: '예약 가능',
+      confirmedQuantity: 2,
+      reservationUrl: 'https://gjureserve.co.kr',
+    } as never
+    snapshot.resources.facility[0]!.displayMetadata = {
+      locationLabel: '호심관 스튜디오 A',
+      operationNote: '관리자가 조명 장비와 호리존 이용 절차를 확인했습니다.',
+    } as never
+
+    expect(() => decodeResultSnapshot(snapshot)).not.toThrow()
+
+    for (const confirmedQuantity of [0, 1.5, 1000]) {
+      const invalidQuantity = clone(snapshot)
+      invalidQuantity.resources.equipment[0]!.displayMetadata.confirmedQuantity = confirmedQuantity
+      expect(() => decodeResultSnapshot(invalidQuantity)).toThrow()
+    }
+
+    const wrongReservationHost = clone(snapshot)
+    wrongReservationHost.resources.equipment[0]!.displayMetadata.reservationUrl = 'https://example.com' as never
+    expect(() => decodeResultSnapshot(wrongReservationHost)).toThrow()
+
+    const mismatchedAccessLabel = clone(snapshot)
+    mismatchedAccessLabel.resources.equipment[0]!.displayMetadata.accessLabel = '문의 전용'
+    expect(() => decodeResultSnapshot(mismatchedAccessLabel)).toThrow()
+
+    const inquiryOnly = clone(snapshot)
+    inquiryOnly.resources.equipment[0]!.displayMetadata.accessMode = 'inquiry'
+    inquiryOnly.resources.equipment[0]!.displayMetadata.accessLabel = '문의 전용'
+    expect(() => decodeResultSnapshot(inquiryOnly)).not.toThrow()
+
+    const nonCanonicalReservationUrl = clone(snapshot)
+    nonCanonicalReservationUrl.resources.equipment[0]!.displayMetadata.reservationUrl = 'https://gjureserve.co.kr/' as never
+    expect(() => decodeResultSnapshot(nonCanonicalReservationUrl)).toThrow()
+
+    const equipmentWithFacilityNote = clone(snapshot)
+    Object.assign(equipmentWithFacilityNote.resources.equipment[0]!.displayMetadata, { operationNote: '잘못된 필드' })
+    expect(() => decodeResultSnapshot(equipmentWithFacilityNote)).toThrow()
+
+    const facilityWithEquipmentData = clone(snapshot)
+    Object.assign(facilityWithEquipmentData.resources.facility[0]!.displayMetadata, {
+      accessMode: 'reservation',
+      accessLabel: '예약',
+      confirmedQuantity: 1,
+      reservationUrl: 'https://gjureserve.co.kr',
+    })
+    expect(() => decodeResultSnapshot(facilityWithEquipmentData)).toThrow()
+  })
+
+  it('bounds completedAt even when an ISO timestamp has an adversarial fractional part', () => {
+    const maximumPrecision = clone(makeValidSnapshot())
+    maximumPrecision.completedAt = '2026-07-15T08:30:00.123456+09:00'
+    expect(() => decodeResultSnapshot(maximumPrecision)).not.toThrow()
+
+    const beyondMaximumPrecision = clone(makeValidSnapshot())
+    beyondMaximumPrecision.completedAt = '2026-07-15T08:30:00.1234567+09:00'
+    expect(() => decodeResultSnapshot(beyondMaximumPrecision)).toThrow()
+
+    const snapshot = clone(makeValidSnapshot())
+    snapshot.completedAt = `2026-07-15T08:30:00.${'1'.repeat(1000)}+09:00`
+
+    expect(() => decodeResultSnapshot(snapshot)).toThrow()
+  })
+
+  it('rejects a title-only connection reason unrelated to every selected interest label', () => {
+    const snapshot = clone(makeValidSnapshot())
+    const project = snapshot.resources.project[0]!
+    project.connectionReason = `${project.title}에서 여러 제작 활동을 경험할 수 있습니다.`
+
+    expect(() => decodeResultSnapshot(snapshot)).toThrow()
+  })
+
+  it('enforces the 262144-byte UTF-8 snapshot boundary for dense Korean content', () => {
+    const maximumBytes = 262_144
+    let lower = 1
+    let upper = 1000
+    while (lower < upper) {
+      const middle = Math.floor((lower + upper) / 2)
+      if (snapshotByteLength(makeDenseKoreanSnapshot(middle)) <= maximumBytes) {
+        lower = middle + 1
+      }
+      else {
+        upper = middle
+      }
+    }
+
+    const withinBoundary = makeDenseKoreanSnapshot(lower - 1)
+    const oversized = makeDenseKoreanSnapshot(lower)
+    expect(snapshotByteLength(withinBoundary)).toBeLessThanOrEqual(maximumBytes)
+    expect(snapshotByteLength(oversized)).toBeGreaterThan(maximumBytes)
+    expect(() => decodeResultSnapshot(withinBoundary)).not.toThrow()
+    expect(() => decodeResultSnapshot(oversized)).toThrow()
   })
 })
