@@ -49,7 +49,7 @@ describe('AdminRecovery', () => {
     useAdminSessionStore().setVerifiedSession({
       accessToken: 'short-lived-access-token',
       authenticatedAt: '2026-07-14T10:00:00.000Z',
-      expiresAt: '2026-07-14T18:00:00.000Z',
+      expiresAt: '2099-07-14T18:00:00.000Z',
       userId: 'admin-1',
     })
     vi.stubGlobal('confirm', vi.fn(() => true))
