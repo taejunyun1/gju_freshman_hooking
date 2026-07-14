@@ -290,4 +290,3 @@ Expected: all commands exit 0 and student sees the administrator-assigned comple
 git add tests/e2e/counseling.spec.ts
 git commit -m "test: verify counseling vertical slice"
 ```
-
