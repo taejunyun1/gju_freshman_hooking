@@ -19,6 +19,7 @@
 - 학생 비밀번호는 PBKDF2-HMAC-SHA-256 600,000회, 레코드 salt와 Worker pepper로 저장한다.
 - 학생 세션은 256-bit 불투명 토큰, DB SHA-256 해시, `HttpOnly; Secure; SameSite=Lax` 쿠키를 사용한다.
 - 학생 세션은 30분 유휴, 12시간 절대 만료다. 관리자 세션은 8시간이며 TOTP MFA가 필수다.
+- 모든 브라우저 상태 변경 요청은 exact Origin을 검증하고, 인증된 학생 변경 요청은 세션 결합 CSRF까지 검증한다.
 - 평가 선택 비중은 작업 40%, 결과물 30%, 진로 20%, 작업 방식 10%다.
 - 교육환경 점수 비중은 교과 35%, 장비·시설 20%, 비교과·프로젝트 15%, 교수 15%, 진로·포트폴리오 15%다.
 - 최근 완료 결과 3개만 상세 보관하고 네 번째 완료 시 가장 오래된 상세를 같은 트랜잭션에서 삭제한다.
@@ -29,6 +30,7 @@
 - 실제 사실 데이터만 공개하고 교과·교수 연락처·작품은 관리자 검수와 공개 상태를 가진다.
 - 각 슬라이스는 loading, empty, error, unauthenticated 상태, 이벤트, 자동 테스트를 포함해야 완료다.
 - `.env`, PostgreSQL 비밀번호, Supabase 비밀키, 암호화 키, 쿠키와 토큰을 Git·로그·이벤트에 기록하지 않는다.
+- 마이그레이션 파일명은 계획 문서의 오래된 숫자를 그대로 재사용하지 않고 구현 시작 시 현재 HEAD의 마지막 번호 다음으로 배정한다.
 
 ---
 
@@ -44,6 +46,8 @@
 | S6 | `2026-07-14-photo-next-s6-operations-deployment.md` | 지표·보존·보안·접근성·부하·프로덕션 배포 | S5 |
 
 한 번에 한 슬라이스만 진행한다. 각 계획의 마지막 전체 검증과 커밋이 통과한 뒤 다음 계획으로 이동한다.
+
+> **2026-07-15 migration amendment:** S1 is complete through `202607140007_login_hardening.sql`, so S2 begins at `202607140008_assessment_options.sql`. Existing S3–S6 plan files contain pre-S1 placeholder filenames; every later migration must be renamed from the current branch's next available number before that slice starts.
 
 ## Specification Coverage
 
@@ -113,14 +117,21 @@ docs/content/                     # 검수 가능한 학과 콘텐츠 가이드
 `shared/types/api.ts`에서 전 슬라이스가 다음 계약을 사용한다.
 
 ```ts
-export type ApiSuccess<T> = { ok: true; data: T; requestId: string }
+export type ApiSuccess<T> = { data: T; requestId: string }
 export type ApiFailure = {
-  ok: false
-  error: { code: string; message: string; fieldErrors?: Record<string, string[]> }
+  error: {
+    code:
+      | 'AUTH_FAILED' | 'VALIDATION_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'
+      | 'ADMIN_REQUIRED' | 'MFA_REQUIRED' | 'REAUTH_REQUIRED' | 'RECOVERY_INVALID'
+      | 'ASSESSMENT_INVALID' | 'ASSESSMENT_CATALOG_STALE'
+    message: string
+  }
   requestId: string
 }
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure
 ```
+
+응답 envelope에는 `ok`나 `fieldErrors`를 추가하지 않는다. S2의 `ASSESSMENT_INVALID`는 HTTP 422, `ASSESSMENT_CATALOG_STALE`은 HTTP 409이며 나머지 S1 오류 상태는 기존 의미를 유지한다.
 
 `shared/types/domain.ts`의 고정 식별자와 역할은 다음과 같다.
 
@@ -146,7 +157,9 @@ pnpm typecheck
 pnpm test:unit
 pnpm test:integration
 pnpm test:sql
+pnpm test:local-integration
 pnpm test:e2e --project=chromium
+pnpm build
 git diff --check
 ```
 

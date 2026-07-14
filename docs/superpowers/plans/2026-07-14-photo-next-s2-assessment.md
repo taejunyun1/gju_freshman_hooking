@@ -8,6 +8,8 @@
 
 **Tech Stack:** Nuxt 4, Vue 3, Pinia, Zod, Supabase PostgreSQL, Vitest, Vue Test Utils, Playwright, pgTAP
 
+> **2026-07-15 amendment:** S1 is complete through migration `202607140007_login_hardening.sql`. This plan therefore starts at `202607140008`; later S3–S6 migration filenames in older plans are placeholders and must be assigned from the then-current HEAD instead of reusing their stale literals. S1's API envelope remains `{ data, requestId }` on success and `{ error, requestId }` on failure.
+
 ## Global Constraints
 
 - 질문 그룹과 비중은 작업 40%, 결과물 30%, 진로 20%, 작업 방식 10%다.
@@ -15,35 +17,48 @@
 - 선택지의 트랙 가중치는 다큐멘터리·예술사진·광고사진·영상 각각 0–3이다.
 - 진로 “가능성 탐색”만 30자 이내 선택 텍스트를 허용한다.
 - 점수는 선택 수로 정규화하고 한 자리 소수로 표시한다.
+- 관심 태그 벡터는 고정된 그룹 비중과 선택 비율로 계산하고 키 순서와 6자리 정밀도까지 재현 가능해야 한다.
 - 평가 UI는 이미지 카드형 모바일 흐름이며 선택 상태를 색만으로 전달하지 않는다.
 - 새로고침 전 네트워크 실패에는 선택을 유지하되 전화번호·토큰은 저장하지 않는다.
+- 인증된 평가 변경 요청은 S1의 exact-Origin 및 세션 결합 CSRF 경계를 통과해야 한다.
 
 ---
 
 ### Task 1: Assessment option schema and verified seed
 
 **Files:**
-- Create: `supabase/migrations/202607140002_assessment_options.sql`
+- Create: `supabase/migrations/202607140008_assessment_options.sql`
 - Create: `supabase/seed/assessment-options.json`
 - Create: `scripts/seed-assessment-options.ts`
+- Create: `supabase/seed/assessment-options.sql`
+- Create: `supabase/seed.sql`
 - Create: `supabase/tests/assessment_options.test.sql`
+- Create: `tests/unit/assessment/assessment-seed.test.ts`
 - Create: `shared/types/domain.ts`
 - Create: `shared/schemas/assessment.ts`
 
 **Interfaces:**
-- Produces: table `assessment_options`; `TrackKey`, `QuestionGroup`, `AssessmentOption`, `AssessmentSelections`; `assessmentSubmissionSchema`
+- Produces: table `assessment_options`; `TrackKey`, `QuestionGroup`, `AssessmentOption`, `AssessmentSelections`; `assessmentSubmissionSchema`; deterministic catalog revision
 - Consumes: default-deny RLS and server Supabase client from S1
 
 - [ ] **Step 1: Write the failing option constraint test**
 
 ```sql
 begin;
-select plan(3);
+select plan(7);
 select has_table('public', 'assessment_options');
 select col_is_unique('public', 'assessment_options', array['question_group','option_key']);
+select col_is_unique('public', 'assessment_options', array['question_group','sort_order']);
+select policies_are('public','assessment_options',array[]::text[],'browser roles have no policy');
+select table_privs_are('service_role','public','assessment_options',array['SELECT'],'service role can only read the catalog');
 select throws_ok(
-  $$insert into public.assessment_options(question_group, option_key, label, track_weights, interest_tags, status, sort_order)
-    values ('work','bad','bad','{"video":4}'::jsonb,'[]'::jsonb,'active',1)$$,
+  $$insert into public.assessment_options(question_group, option_key, label, visual_key, track_weights, interest_tags, status, sort_order)
+    values ('work','bad','bad','contact_sheet','{"video":4}'::jsonb,'[]'::jsonb,'active',1)$$,
+  '23514'
+);
+select throws_ok(
+  $$insert into public.assessment_options(question_group, option_key, label, visual_key, track_weights, interest_tags, status, sort_order)
+    values ('work','result.bad','bad','contact_sheet','{"documentary":1,"art_photo":1,"commercial":1,"video":1}'::jsonb,'["bad tag"]'::jsonb,'active',2)$$,
   '23514'
 );
 select * from finish();
@@ -52,7 +67,7 @@ rollback;
 
 - [ ] **Step 2: Run and verify missing table**
 
-Run: `supabase test db`
+Run: `pnpm exec supabase test db --local supabase/tests/assessment_options.test.sql`
 
 Expected: FAIL on `has_table('assessment_options')`.
 
@@ -69,7 +84,11 @@ export const selectionLimits = {
 } as const
 ```
 
-The SQL table stores `question_group`, `option_key`, Korean `label`, optional `description`, `track_weights jsonb`, `interest_tags jsonb`, `status`, `sort_order`, timestamps, and a unique `(question_group, option_key)`. A check function verifies all four track keys exist, every weight is integer 0–3, tags are nonempty strings, and status is `draft|active|archived`. Enable RLS with no public policy.
+The SQL table stores an internal bigint identity ID, `question_group`, fully prefixed `option_key`, Korean `label`, optional `description`, public non-sensitive `visual_key`, `track_weights jsonb`, `interest_tags jsonb`, `status`, `sort_order`, and timestamps. Enforce unique `(question_group, option_key)` and `(question_group, sort_order)`.
+
+The checks require `option_key` to start with its exact group prefix, `track_weights` to contain exactly the four track keys with integer values `0..3` and a positive total, and `interest_tags` to contain `1..8` unique strings matching `^[a-z][a-z0-9_]*$`. Status is `draft|active|archived`; `visual_key` is an allow-listed presentation key and contains no URL or licensed asset reference. Enable RLS with no policy. Grant `service_role` `SELECT` only, including no sequence or catalog write privilege; generated seed SQL runs as the database owner.
+
+Define `trackLabels` beside the fixed identifiers so the UI maps `commercial` to `광고사진` without ad hoc strings. `assessmentSubmissionSchema` accepts only fully prefixed option keys, trims `careerOther`, permits it only with `career.explore`, and rejects it when it contains phone-number patterns, email patterns, or control characters.
 
 - [ ] **Step 4: Add the complete 28-option seed**
 
@@ -139,25 +158,67 @@ career.planning           [planning,project,brand,local_culture,cultural_plannin
 career.explore            [exploration,photography,video,planning]
 ```
 
-The seed script validates the JSON with Zod before upsert and never deletes active options implicitly.
+Assign these exact public `visualKey` values in the same canonical JSON:
+
+```text
+work.photo_everyday       photo_frame
+work.video_scene          video_frame
+work.video_post           edit_timeline
+work.commercial_image     studio_still
+work.interview_life       interview_strip
+work.brand_region         location_board
+work.exhibition_install   gallery_grid
+work.music_shortform      music_cuts
+work.photobook            photobook_spread
+work.project_plan         project_board
+result.photo_portfolio    photo_frame
+result.exhibit_photobook  gallery_grid
+result.commercial_fashion studio_still
+result.documentary        interview_strip
+result.brand_video        video_frame
+result.shortform_mv       music_cuts
+result.video_showreel     edit_timeline
+result.project_proposal   project_board
+style.solo                photobook_spread
+style.team                project_board
+style.field               location_board
+style.studio              studio_still
+style.interview           interview_strip
+style.post                edit_timeline
+career.photo              photo_frame
+career.video              video_frame
+career.planning           project_board
+career.explore            contact_sheet
+```
+
+The JSON is the canonical catalog and includes `visualKey` for every option. `scripts/seed-assessment-options.ts` is a strict validator and deterministic generator, not a browser/runtime seeder. It must:
+
+- reject unknown JSON keys, duplicate option keys, duplicate group sort positions, invalid tag/weight manifests, and counts other than `10/8/6/4`;
+- preserve the exact group and option order above and compute a stable catalog revision from canonical content;
+- support a local write mode that generates `supabase/seed/assessment-options.sql` and a `--check` mode that fails when the checked-in SQL differs from the JSON;
+- never print weights, tags, environment values, or database secrets.
+
+`supabase/seed.sql` contains only the psql include `\ir seed/assessment-options.sql`. The generated seed starts one transaction, takes a transaction-scoped advisory lock, and compares the complete active database manifest with the generated manifest. An identical active catalog is an idempotent no-op. Any changed, missing, extra, or stale active row aborts the transaction instead of silently rewriting live content. The empty-catalog path inserts the exact 28-row manifest as database owner. There is no implicit deletion or update of active options.
 
 - [ ] **Step 5: Reset, seed, and verify**
 
 Run:
 
 ```bash
-supabase db reset
-pnpm tsx scripts/seed-assessment-options.ts
-supabase test db
+pnpm exec tsx scripts/seed-assessment-options.ts --write
+pnpm exec tsx scripts/seed-assessment-options.ts --check
+pnpm exec vitest run --project unit tests/unit/assessment/assessment-seed.test.ts
+pnpm test:sql
+pnpm test:sql
 ```
 
-Expected: 28 active options, each group count `10/8/6/4`, pgTAP passes.
+Expected: generated SQL matches canonical JSON; two consecutive reset/seed runs pass with the same revision; exactly 28 active options exist in `10/8/6/4` order; service-role writes fail; a fixture with a changed live active row aborts without partial mutation.
 
 - [ ] **Step 6: Commit options**
 
 ```bash
-git add supabase/migrations/202607140002_assessment_options.sql supabase/seed/assessment-options.json scripts/seed-assessment-options.ts supabase/tests/assessment_options.test.sql shared
-git commit -m "feat: add assessment option catalog"
+git add supabase/migrations/202607140008_assessment_options.sql supabase/seed/assessment-options.json supabase/seed/assessment-options.sql supabase/seed.sql scripts/seed-assessment-options.ts supabase/tests/assessment_options.test.sql tests/unit/assessment/assessment-seed.test.ts shared/types/domain.ts shared/schemas/assessment.ts
+git commit -m "feat: 2026-07-15 add verified assessment catalog"
 ```
 
 ### Task 2: Deterministic track and interest-vector scoring
@@ -176,7 +237,7 @@ git commit -m "feat: add assessment option catalog"
 ```ts
 it('applies group weights and returns one-decimal scores', () => {
   const scored = scoreAssessment(options, {
-    work: ['commercial_image'], result: ['commercial_fashion'], style: ['studio'], career: ['photo'], careerOther: null,
+    work: ['work.commercial_image'], result: ['result.commercial_fashion'], style: ['style.studio'], career: ['career.photo'], careerOther: null,
   })
   expect(scored.trackScores.commercial).toBe(100.0)
   expect(scored.rankedTracks[0]).toBe('commercial')
@@ -189,7 +250,7 @@ it('breaks ties by work, result, career, then fixed track order', () => {
 
 - [ ] **Step 2: Run and verify missing scorer**
 
-Run: `pnpm vitest run tests/unit/assessment/scoring.test.ts`
+Run: `pnpm exec vitest run --project unit tests/unit/assessment/scoring.test.ts`
 
 Expected: FAIL because `scoreAssessment` is missing.
 
@@ -200,13 +261,15 @@ const groupScore = (weights: number[]) => weights.reduce((a, b) => a + b, 0) / (
 const round1 = (value: number) => Math.round(value * 10) / 10
 ```
 
-For each track compute the four group scores and apply `0.40/0.30/0.10/0.20`. Rank with work score, result score, career score, then `['documentary','art_photo','commercial','video']`. Build each interest tag as the weighted mean of selected option tag strengths and clamp to 0–1. Reject inactive/unknown/duplicate options and selection counts outside the locked limits.
+For each track compute the raw four group scores and apply `0.40/0.30/0.10/0.20`. Return track scores rounded to one decimal, but rank by rounded total descending, then raw work score, raw result score, raw career score, then fixed `['documentary','art_photo','commercial','video']` order. Do not use style as an additional tie breaker.
+
+For every tag and group calculate `groupTag = selected options containing the tag / selected option count in that group`. Then calculate `interestVector[tag] = Σ(groupWeight × groupTag)`, round to six decimal places, and return keys in lexical order. This preserves each group's fixed influence when a student chooses several options. Reject inactive, unknown, wrong-prefix, or duplicate full option keys and selection counts outside the locked limits.
 
 - [ ] **Step 4: Verify property boundaries**
 
-Add tests asserting every generated track score is 0–100, tag values are 0–1, input objects are unchanged, and careerOther is rejected unless `career.explore` is selected.
+Add tests asserting every generated track score is `0..100`, tag values are `0..1`, repeated tags across groups follow the exact formula, selecting more options does not increase a group's total influence, interest keys are sorted, inputs are unchanged, and `careerOther` is rejected unless `career.explore` is selected. Assert email, phone-like text, and control characters are rejected even when length is at most 30.
 
-Run: `pnpm vitest run tests/unit/assessment/scoring.test.ts`
+Run: `pnpm exec vitest run --project unit tests/unit/assessment/scoring.test.ts`
 
 Expected: all scoring tests pass.
 
@@ -214,29 +277,42 @@ Expected: all scoring tests pass.
 
 ```bash
 git add server/modules/assessment tests/unit/assessment
-git commit -m "feat: add deterministic assessment scoring"
+git commit -m "feat: 2026-07-15 add deterministic assessment scoring"
 ```
 
 ### Task 3: Options, validation, and assessment event API
 
 **Files:**
+- Modify: `shared/types/api.ts`
+- Modify: `server/utils/app-error.ts`
 - Modify: `server/modules/metrics/events.ts`
+- Modify: `server/modules/identity/service.ts`
+- Modify: `server/api/student/register.post.ts`
+- Modify: `server/api/student/login.post.ts`
+- Modify: `server/middleware/20-student-request-security.ts`
+- Create: `server/utils/anonymous-visitor.ts`
 - Create: `server/modules/assessment/service.ts`
 - Create: `server/api/assessment/options.get.ts`
-- Create: `server/api/assessment/validate.post.ts`
+- Create: `server/api/student/assessment/validate.post.ts`
 - Create: `server/api/events.post.ts`
 - Modify: `app/pages/index.vue`
 - Create: `tests/integration/assessment/api.test.ts`
+- Create: `tests/integration/metrics/browser-events.test.ts`
+- Modify: `tests/integration/identity/register.test.ts`
+- Modify: `tests/integration/identity/login.test.ts`
+- Modify: `tests/integration/student-request-security.test.ts`
+- Create: `supabase/tests/assessment_events.test.sql`
 
 **Interfaces:**
-- Produces: `GET /api/assessment/options`; `POST /api/assessment/validate`; allow-listed `recordEvent`
-- Consumes: authenticated student session for validate; S1 events table and anonymous UUID cookie for pre-login events
+- Produces: `GET /api/assessment/options`; `POST /api/student/assessment/validate`; allow-listed browser event writer
+- Consumes: S1 student session/CSRF/origin boundary, trusted client IP, rate-limit RPC, events table, and a stable anonymous UUID cookie
 
 - [ ] **Step 1: Write failing API contract tests**
 
 ```ts
 it('returns active options grouped and sorted', async () => {
   const response = await getOptions()
+  expect(Object.keys(response.data)).toEqual(['catalogRevision','groups','limits'])
   expect(response.data.groups.map(g => [g.key, g.options.length])).toEqual([
     ['work',10], ['result',8], ['style',6], ['career',4],
   ])
@@ -244,27 +320,51 @@ it('returns active options grouped and sorted', async () => {
 it('rejects five work choices', async () => {
   expect((await validate({ ...valid, work: fiveKeys })).status).toBe(422)
 })
+it('rejects a stale catalog without scoring', async () => {
+  expect((await validate({ ...valid, catalogRevision: 'stale' })).status).toBe(409)
+})
 ```
 
 - [ ] **Step 2: Run and verify route failures**
 
-Run: `pnpm vitest run tests/integration/assessment/api.test.ts`
+Run: `pnpm exec vitest run --project integration tests/integration/assessment/api.test.ts tests/integration/metrics/browser-events.test.ts tests/integration/student-request-security.test.ts`
 
-Expected: FAIL with route-not-found responses.
+Expected: FAIL because the handler factories and browser event contracts do not exist.
 
 - [ ] **Step 3: Implement safe APIs and event storage**
 
-Options returns only active keys, labels, descriptions, tags needed for UI imagery, and selection limits; it never returns numeric weights. Validate loads active weights server-side and returns scored tracks plus normalized tags. Event API accepts only the explicit browser names `landing_viewed`, `assessment_started`, and `assessment_step_completed` in S2, strips keys matching `/phone|password|token|cookie|authorization|secret/i`, and limits properties to 4KB. Add a one-time `landing_viewed` call on the landing page with path and campaign context only.
+`GET /api/assessment/options` returns exactly grouped active option keys, labels, descriptions, `visualKey`, selection limits, and `catalogRevision`, sorted by group then `sort_order, option_key`. It never serializes weights, interest tags, draft rows, or internal IDs. The revision is derived from the same canonical active manifest used by the seed.
+
+`POST /api/student/assessment/validate` accepts a strict body no larger than 8 KiB containing selections and `catalogRevision`. Add this exact path to S1's CSRF-protected student mutation set. The request must have an active student session, exact Origin, the session-derived CSRF header, private no-store response headers, and a trusted client IP. Consume an exact `20/prospect/5 minutes` bucket before loading the catalog. A stale revision fails before scoring with `ASSESSMENT_CATALOG_STALE` and HTTP 409; invalid selections fail with `ASSESSMENT_INVALID` and HTTP 422. Scores and normalized tags are intended response data, but raw option weights and source tags must never be serialized, logged, or placed in an error.
+
+Keep the current API envelope: success is `{ data, requestId }`; failure is `{ error, requestId }`. Extend `shared/types/api.ts` and `server/utils/app-error.ts` only with `ASSESSMENT_INVALID` 422 and `ASSESSMENT_CATALOG_STALE` 409; do not add `ok` or `fieldErrors`.
+
+`POST /api/events` accepts `application/json` only, limits the full body to 8 KiB and event properties to 4 KiB, and uses a strict discriminated union with no unknown fields:
+
+- `{ eventName: 'landing_viewed' }`;
+- `{ eventName: 'assessment_started', catalogRevision }`;
+- `{ eventName: 'assessment_step_completed', catalogRevision, group, selectedCount }`.
+
+The server derives the canonical request path, request ID, optional authenticated prospect subject, and anonymous subject; callers cannot submit a path, prospect ID, anonymous ID, campaign ID, or arbitrary properties. Require exact Origin, then consume `60/IP/1 minute` followed by `30/anonymous-ID/1 minute` before insert. Campaign remains null until a validated campaign table exists.
+
+Create a stable UUID cookie helper used by the event, registration, and login handlers. The cookie is `HttpOnly; Secure; SameSite=Lax`, is validated as a canonical UUID before reuse, and is never exposed to client JavaScript. The database already has the required `anonymous_id` and nullable `prospect_id` columns and S2 event-name checks, so no S2 schema migration is required for this change. Modify the existing identity event writer to insert the stable anonymous ID on all identity events, and attach the prospect ID to `registration_completed` and `login_succeeded`. Registration may re-read the newly created prospect by its protected phone HMAC; do not expose or log it. pgTAP locks the existing event column/name/grant contract, while integration tests prove stable anonymous correlation and successful identity attribution.
+
+On the landing page, send one non-blocking `landing_viewed` event per page lifecycle with no client-provided path or campaign data. Event failure must not block navigation or reveal upstream detail.
 
 - [ ] **Step 4: Verify API contracts and commit**
 
-Run: `pnpm vitest run tests/integration/assessment/api.test.ts`
-
-Expected: sorted options, invalid count 422, unknown keys 422, no weights leaked.
+Run:
 
 ```bash
-git add server/modules/metrics server/modules/assessment/service.ts server/api/assessment server/api/events.post.ts app/pages/index.vue tests/integration/assessment/api.test.ts
-git commit -m "feat: expose validated assessment API"
+pnpm exec vitest run --project integration tests/integration/assessment/api.test.ts tests/integration/metrics/browser-events.test.ts tests/integration/identity/register.test.ts tests/integration/identity/login.test.ts tests/integration/student-request-security.test.ts
+pnpm exec supabase test db --local supabase/tests/assessment_events.test.sql
+```
+
+Expected: sorted public catalog without weights/tags, invalid/unknown choices 422, stale revision 409, missing Origin/CSRF/session 403 or 401 before scoring, fixed rate-limit order, strict event bodies, stable anonymous UUIDs, successful identity event attribution, and no sensitive event properties.
+
+```bash
+git add shared/types/api.ts server/utils/app-error.ts server/utils/anonymous-visitor.ts server/modules/metrics/events.ts server/modules/identity/service.ts server/modules/assessment/service.ts server/api/student/register.post.ts server/api/student/login.post.ts server/api/assessment/options.get.ts server/api/student/assessment/validate.post.ts server/api/events.post.ts server/middleware/20-student-request-security.ts app/pages/index.vue tests/integration/assessment tests/integration/metrics tests/integration/identity/register.test.ts tests/integration/identity/login.test.ts tests/integration/student-request-security.test.ts supabase/tests/assessment_events.test.sql
+git commit -m "feat: 2026-07-15 expose secure assessment APIs"
 ```
 
 ### Task 4: Four-step mobile assessment UI
@@ -274,11 +374,13 @@ git commit -m "feat: expose validated assessment API"
 - Create: `app/components/assessment/AssessmentProgress.vue`
 - Create: `app/components/assessment/OptionCard.vue`
 - Create: `app/components/assessment/AssessmentStep.vue`
-- Create: `app/pages/assessment.vue`
+- Modify: `app/pages/assessment.vue`
 - Create: `tests/unit/components/AssessmentStep.test.ts`
+- Create: `tests/unit/stores/AssessmentStore.test.ts`
+- Modify: `tests/unit/pages/StudentAssessmentPage.test.ts`
 
 **Interfaces:**
-- Produces: store actions `loadOptions`, `toggleOption`, `next`, `previous`, `validate`; selected keys persist in `sessionStorage` under `photo_next_assessment_v1`
+- Produces: store actions `loadOptions`, `toggleOption`, `next`, `previous`, `validate`, `clear`; current step, selected keys, optional text, and revision persist in `sessionStorage` under `photo_next_assessment_v1`
 - Consumes: S2 options and validate APIs; active student session from S1
 
 - [ ] **Step 1: Write failing selection-limit component tests**
@@ -294,44 +396,58 @@ it('announces and blocks a fifth selection', async () => {
 
 - [ ] **Step 2: Run and verify component failure**
 
-Run: `pnpm vitest run tests/unit/components/AssessmentStep.test.ts`
+Run: `pnpm exec vitest run --project unit tests/unit/components/AssessmentStep.test.ts`
 
 Expected: FAIL because assessment components do not exist.
 
 - [ ] **Step 3: Implement store and accessible cards**
 
-Use actual checkbox inputs inside label cards. Each card exposes selected state with check icon, `aria-checked`, border, and background. Progress displays “02 / 04” and a text label. Next is disabled below minimum; exceeding maximum leaves state unchanged and announces the limit. `career.explore` reveals a labeled 30-character input and counter.
+Preserve the existing S1 session bootstrap, unauthenticated redirect, logout action, and CSRF header in `app/pages/assessment.vue`; replace only its honest S2 placeholder with the assessment experience. Load the session before enabling the flow and keep its CSRF token in memory only.
 
-Store only option keys and `careerOther` in sessionStorage; clear them after S3 completion or logout. On validate network error preserve selections and show retry. Do not store scores as authority; always use server response.
+Use a `fieldset` and `legend` for every group and real checkbox inputs inside label cards. Each card exposes selected state with a check icon, explicit selected text, border, and background; color is never the only signal. Every interactive target is at least 44×44px, focus is plainly visible, limit/error changes use a polite `aria-live` region, reduced-motion disables nonessential transitions, and the contact-sheet layout remains usable from narrow mobile through desktop.
+
+Render CSS-only editorial film/contact-sheet visuals selected from the server's allow-listed `visualKey`. Do not fetch stock photography, hotlink an image, or introduce an unlicensed asset. Progress displays “02 / 04” and the Korean group label. Next is disabled below minimum; exceeding maximum leaves state unchanged and announces the exact limit.
+
+`career.explore` reveals a labeled 30-character input with counter and a privacy hint. The UI warns immediately and the schema rejects phone-like text, email-like text, and control characters. Deselecting `career.explore` clears the optional text synchronously.
+
+Model explicit `loading`, `empty`, `error`, `unauthenticated`, `retry`, `validating`, and `validated` states. A network failure during options load or validation preserves safe selections and exposes a retry action. A stale catalog response reloads options, explains that choices must be reviewed, and never silently scores against another revision.
+
+Persist only `{ step, selections, careerOther, catalogRevision }` to `sessionStorage`; validate its shape and revision before restore. Never persist CSRF, session data, track scores, ranked tracks, or interest vectors. Store the latest validated result in memory only. Clear persisted assessment state on successful logout and, in S3, successful completion.
 
 - [ ] **Step 4: Verify component and type checks**
 
-Run: `pnpm vitest run tests/unit/components/AssessmentStep.test.ts && pnpm nuxi typecheck`
+Run:
 
-Expected: limit, keyboard, other-text, previous/next tests pass; type errors 0.
+```bash
+pnpm exec vitest run --project unit tests/unit/components/AssessmentStep.test.ts tests/unit/stores/AssessmentStore.test.ts tests/unit/pages/StudentAssessmentPage.test.ts
+pnpm typecheck
+```
+
+Expected: selection limits, keyboard/native checkbox semantics, privacy text rejection, explore cleanup, previous/next, revision-safe restore, retry states, S1 logout/redirect regressions, and memory-only result/CSRF assertions pass; type errors 0.
 
 - [ ] **Step 5: Commit assessment UI**
 
 ```bash
-git add app/stores/assessment.ts app/components/assessment app/pages/assessment.vue tests/unit/components/AssessmentStep.test.ts
-git commit -m "feat: add four-step assessment experience"
+git add app/stores/assessment.ts app/components/assessment app/pages/assessment.vue tests/unit/components/AssessmentStep.test.ts tests/unit/stores/AssessmentStore.test.ts tests/unit/pages/StudentAssessmentPage.test.ts
+git commit -m "feat: 2026-07-15 add four-step assessment experience"
 ```
 
 ### Task 5: S2 end-to-end gate
 
 **Files:**
 - Create: `tests/e2e/assessment.spec.ts`
+- Create: `tests/e2e/support/student.ts`
 - Modify: `app/pages/assessment.vue`
 
 **Interfaces:**
 - Consumes: complete S2 flow
-- Produces: stable Playwright coverage for selection, refresh restore, validation retry
+- Produces: stable Playwright coverage for commercial-primary completion, refresh restore, validation retry, and S1 identity regression
 
 - [ ] **Step 1: Write the assessment E2E**
 
 ```ts
-test('student completes four assessment steps', async ({ page }) => {
-  await loginSeedStudent(page)
+test('student completes four steps with commercial as the primary track', async ({ page }) => {
+  await registerAndLoginStudent(page, uniqueAssessmentPhone())
   await page.goto('/assessment')
   await page.getByText('제품·패션·광고 이미지 만들기').click()
   await page.getByRole('button', { name: '다음' }).click()
@@ -345,6 +461,15 @@ test('student completes four assessment steps', async ({ page }) => {
 })
 ```
 
+Use a real local registration/login helper with a unique phone per test; no `loginSeedStudent` helper exists in S1. The helper must exercise the browser flow or same-origin endpoints, must not write credentials to disk/logs, and must not bypass session cookies, Origin, or CSRF.
+
+Add two independent tests in the same file:
+
+- select at least one option, advance, reload, and assert the current step and selections restore from the matching catalog revision while CSRF and scores are absent from storage;
+- intercept the first validate request with a network failure, assert all four groups remain selected and a retry action is announced, then retry and assert the commercial primary result appears once.
+
+Run the S1 identity E2E beside the new assessment tests. The existing Playwright global setup resets local Supabase before the run; Task 1's checked-in `supabase/seed.sql` must therefore recreate the exact 28-option catalog automatically. Do not add an out-of-band manual seed step to E2E.
+
 - [ ] **Step 2: Run the S2 gate**
 
 ```bash
@@ -353,14 +478,17 @@ pnpm typecheck
 pnpm test:unit
 pnpm test:integration
 pnpm test:sql
-pnpm playwright test tests/e2e/assessment.spec.ts --project=chromium
+pnpm test:local-integration
+pnpm exec playwright test tests/e2e/identity.spec.ts tests/e2e/assessment.spec.ts --project=chromium
+pnpm build
+git diff --check
 ```
 
-Expected: all commands exit 0 and the primary track is 광고사진.
+Expected: all commands exit 0; identity registration/login/logout remains intact; commercial-primary completion, revision-safe refresh restore, and network retry pass; build succeeds with no whitespace error.
 
 - [ ] **Step 3: Commit E2E coverage**
 
 ```bash
-git add tests/e2e/assessment.spec.ts app/pages/assessment.vue
-git commit -m "test: verify assessment vertical slice"
+git add tests/e2e/assessment.spec.ts tests/e2e/support/student.ts app/pages/assessment.vue
+git commit -m "test: 2026-07-15 verify assessment vertical slice"
 ```
