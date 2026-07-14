@@ -7,7 +7,10 @@ export default defineNuxtConfig({
     phoneHmacKey: '',
     phoneEncryptionKey: '',
     passwordPepper: '',
-    public: { supabaseUrl: '' },
+    public: {
+      supabasePublishableKey: '',
+      supabaseUrl: '',
+    },
   },
   nitro: { preset: 'cloudflare-module' },
   typescript: { strict: true, typeCheck: true },
