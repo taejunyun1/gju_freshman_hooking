@@ -14,6 +14,9 @@ vi.stubGlobal('setResponseHeader', (event: TestEvent, name: string, value: strin
 
 describe('request context security headers', () => {
   beforeEach(() => {
+    vi.stubGlobal('useRuntimeConfig', () => ({
+      public: { supabaseUrl: 'http://127.0.0.1:54321' },
+    }))
     vi.stubGlobal('crypto', {
       getRandomValues: vi.fn((bytes: Uint8Array) => bytes.fill(7)),
       randomUUID: vi.fn(() => 'request-id-1'),
@@ -81,6 +84,50 @@ describe('request context security headers', () => {
     expect(publicEvent.responseHeaders.get('content-security-policy')).not.toContain('data:')
   })
 
+  it('allows the exact validated Supabase Auth origin only on administrator documents', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({
+      public: { supabaseUrl: 'https://project-ref.supabase.co/rest/v1' },
+    }))
+    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const adminEvent: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
+    const recoveryEvent: TestEvent = { context: {}, path: '/admin/recovery', responseHeaders: new Map() }
+    const publicEvent: TestEvent = { context: {}, path: '/login', responseHeaders: new Map() }
+
+    requestContext(adminEvent as never)
+    requestContext(recoveryEvent as never)
+    requestContext(publicEvent as never)
+
+    expect(adminEvent.responseHeaders.get('content-security-policy'))
+      .toContain("connect-src 'self' https://project-ref.supabase.co")
+    expect(recoveryEvent.responseHeaders.get('content-security-policy'))
+      .toContain("connect-src 'self' https://project-ref.supabase.co")
+    expect(publicEvent.responseHeaders.get('content-security-policy')).not.toContain('connect-src')
+  })
+
+  it.each([
+    'ftp://project-ref.supabase.co',
+    'http://project-ref.supabase.co',
+    'https://user:password@project-ref.supabase.co',
+    'javascript:alert(1)',
+  ])('rejects an unsafe administrator Supabase URL: %s', async (supabaseUrl) => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ public: { supabaseUrl } }))
+    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const event: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
+
+    expect(() => requestContext(event as never)).toThrow('SUPABASE_URL_INVALID')
+  })
+
+  it('permits HTTP only for loopback administrator E2E origins', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ public: { supabaseUrl: 'http://localhost:54321/auth/v1' } }))
+    const { default: requestContext } = await import('../../server/middleware/request-context')
+    const event: TestEvent = { context: {}, path: '/admin/login', responseHeaders: new Map() }
+
+    requestContext(event as never)
+
+    expect(event.responseHeaders.get('content-security-policy'))
+      .toContain("connect-src 'self' http://localhost:54321")
+  })
+
   it('preserves the existing response hardening headers', async () => {
     const { default: requestContext } = await import('../../server/middleware/request-context')
     const event: TestEvent = {
@@ -93,6 +140,7 @@ describe('request context security headers', () => {
 
     expect(event.context.requestId).toBe('request-id-1')
     expect(event.responseHeaders.get('x-content-type-options')).toBe('nosniff')
+    expect(event.responseHeaders.get('referrer-policy')).toBe('no-referrer')
     expect(event.responseHeaders.get('x-request-id')).toBe('request-id-1')
   })
 })

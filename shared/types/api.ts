@@ -21,6 +21,7 @@ export type LoginResult =
   | { kind: 'failed' }
 
 export type StudentSession = {
+  csrfToken: string
   prospectId: number
   nickname: string
   expiresAt: string

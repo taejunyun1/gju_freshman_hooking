@@ -19,6 +19,13 @@ export default defineConfig({
           include: ['tests/integration/**/*.test.ts'],
         },
       },
+      {
+        test: {
+          name: 'local-integration',
+          environment: 'node',
+          include: ['tests/local/**/*.test.ts'],
+        },
+      },
     ],
   },
 })

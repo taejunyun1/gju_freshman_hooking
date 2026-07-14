@@ -9,7 +9,8 @@ const completeRecoverySchema = z.object({
 })
 
 type CompleteRecoveryHandlerDependencies = {
-  completeRecovery: (input: z.infer<typeof completeRecoverySchema>) => Promise<{ ok: true }>
+  completeRecovery: (input: z.infer<typeof completeRecoverySchema> & { ip: string }) => Promise<{ ok: true }>
+  getIp: (event: unknown) => string
   getRequestId: (event: unknown) => string
   readBody: (event: unknown) => Promise<unknown>
   setStatus: (event: unknown, status: number) => void
@@ -27,7 +28,7 @@ export const createCompleteRecoveryHandler = (dependencies: CompleteRecoveryHand
     catch {
       throw new AppError('RECOVERY_INVALID')
     }
-    return { data: await dependencies.completeRecovery(input), requestId }
+    return { data: await dependencies.completeRecovery({ ...input, ip: dependencies.getIp(event) }), requestId }
   }
   catch (error) {
     const failure = toApiFailure(error, requestId)
@@ -38,6 +39,7 @@ export const createCompleteRecoveryHandler = (dependencies: CompleteRecoveryHand
 
 export default defineEventHandler((event) => createCompleteRecoveryHandler({
   completeRecovery: getServerPasswordRecoveryService().complete,
+  getIp: requestEvent => getRequestIP(requestEvent as never, { xForwardedFor: true }) ?? 'unknown',
   getRequestId: (requestEvent) => {
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()

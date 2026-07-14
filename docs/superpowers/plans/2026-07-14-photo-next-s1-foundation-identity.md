@@ -472,6 +472,10 @@ Before implementing the authenticated change endpoint, write a failing pgTAP con
 
 The authenticated change endpoint verifies the current password, hashes the new password, and calls `change_student_password`. The anonymous request endpoint always returns HTTP 202 with `{ accepted: true }`. Admin approval generates 16 random bytes, stores only SHA-256, returns raw code once, and records an audit event; it may approve only a still-unexpired `requested` record and atomically marks an expired request before rejecting it. Complete consumes the code through `complete_credential_recovery`; it rejects used/expired codes, updates the password, marks consumed, and revokes all sessions atomically.
 
+Add the forward-only `202607140006_recovery_hardening.sql` migration. Recovery request rate limits are exactly 10/IP/hour followed by 3/phone-HMAC/hour. Completion limits are exactly 10/IP/5 minutes followed by 5/code-hash/15 minutes, both before the 600,000-round password derivation. Approval uses `approve_credential_recovery_request(bigint,uuid,uuid)` so the trace UUID audit row with `{}` metadata commits in the same transaction before the raw code is returned; the legacy two-argument signature has no service-role execute privilege. Approval and completion lock credentials first, then all recovery rows by ascending ID. Successful completion clears the matched code hash, expires and clears every other requested or verified code, and revokes all sessions.
+
+Every non-safe `/api/student/*` browser request requires an exact same-origin `Origin`. Anonymous registration, login, recovery request, and recovery completion require no session CSRF. Cookie-authenticated logout and password change additionally send `X-Photo-Next-CSRF`, a fixed-format HMAC-SHA-256 token derived from the opaque session and exposed only by `/api/student/session` for page-memory use.
+
 - [ ] **Step 5: Implement reset page states**
 
 The page renders `change` when logged in and `request` when logged out. It never claims that a text message was sent. Anonymous success copy is “요청을 접수했습니다. 학과 확인 절차가 필요한 경우 안내받은 연락 방식으로 복구 코드를 전달합니다.”
@@ -612,6 +616,7 @@ pnpm lint
 pnpm typecheck
 pnpm test:unit
 pnpm test:integration
+pnpm test:local-integration
 pnpm test:sql
 pnpm test:e2e --project=chromium
 pnpm build

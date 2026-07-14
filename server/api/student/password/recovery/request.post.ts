@@ -9,7 +9,8 @@ const recoveryRequestSchema = z.object({
 })
 
 type RecoveryRequestHandlerDependencies = {
-  requestRecovery: (input: z.infer<typeof recoveryRequestSchema>) => Promise<void>
+  requestRecovery: (input: z.infer<typeof recoveryRequestSchema> & { ip: string }) => Promise<void>
+  getIp: (event: unknown) => string
   readBody: (event: unknown) => Promise<unknown>
   getRequestId: (event: unknown) => string
   setStatus: (event: unknown, status: number) => void
@@ -21,7 +22,7 @@ export const createRecoveryRequestHandler = (dependencies: RecoveryRequestHandle
   void dependencies.getRequestId(event)
   try {
     const input = recoveryRequestSchema.parse(await dependencies.readBody(event))
-    await dependencies.requestRecovery(input)
+    await dependencies.requestRecovery({ ...input, ip: dependencies.getIp(event) })
   }
   catch {
     // Anonymous recovery deliberately reveals neither identity nor delivery outcomes.
@@ -31,6 +32,7 @@ export const createRecoveryRequestHandler = (dependencies: RecoveryRequestHandle
 }
 
 export default defineEventHandler((event) => createRecoveryRequestHandler({
+  getIp: requestEvent => getRequestIP(requestEvent as never, { xForwardedFor: true }) ?? 'unknown',
   getRequestId: (requestEvent) => {
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()

@@ -2,8 +2,9 @@ import { loginSchema } from '../../../shared/schemas/identity'
 import type { ApiFailure, ApiSuccess, LoginResult } from '../../../shared/types/api'
 import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
+import { studentSessionCookie } from '../../utils/student-request-security'
 
-export const studentSessionCookie = 'photo_next_session'
+export { studentSessionCookie } from '../../utils/student-request-security'
 
 const sessionCookieOptions = {
   httpOnly: true,

@@ -24,6 +24,7 @@ type AdminSessionResponse = {
 const route = useRoute()
 const adminSession = useAdminSessionStore()
 const step = ref<LoginStep>('credentials')
+const hydrated = ref(false)
 const submitting = ref(false)
 const errorMessage = ref('')
 const credentials = reactive({ email: '', password: '' })
@@ -136,6 +137,8 @@ const restart = async (): Promise<void> => {
 }
 
 onMounted(async () => {
+  hydrated.value = true
+  adminSession.restoreFromSessionStorage()
   if (adminSession.hasVerifiedSession()) await navigateTo(safeRedirect(), { replace: true })
 })
 
@@ -187,7 +190,7 @@ onBeforeUnmount(clearEnrollment)
           </label>
           <AppButton
             variant="primary"
-            :loading="submitting"
+            :loading="!hydrated || submitting"
             @click="submitCredentials"
           >
             비밀번호 확인
@@ -236,14 +239,14 @@ onBeforeUnmount(clearEnrollment)
           <div class="admin-login__actions">
             <AppButton
               variant="primary"
-              :loading="submitting"
+              :loading="!hydrated || submitting"
               @click="submitTotp"
             >
               2단계 인증 완료
             </AppButton>
             <AppButton
               variant="secondary"
-              :loading="submitting"
+              :loading="!hydrated || submitting"
               @click="restart"
             >
               다시 로그인

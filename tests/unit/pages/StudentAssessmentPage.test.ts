@@ -9,7 +9,7 @@ describe('student assessment handoff', () => {
 
   it('loads the current session and gives an honest S2 handoff', async () => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({
-      data: { expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
+      data: { csrfToken: 'csrf-memory-token', expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
       requestId: 'request-id',
     }))
     const { default: AssessmentPage } = await import('../../../app/pages/assessment.vue')
@@ -37,7 +37,7 @@ describe('student assessment handoff', () => {
   it('logs out through the API and replaces the route with login', async () => {
     vi.stubGlobal('$fetch', vi.fn()
       .mockResolvedValueOnce({
-        data: { expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
+        data: { csrfToken: 'csrf-memory-token', expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
         requestId: 'session-request',
       })
       .mockResolvedValueOnce({ data: { ok: true }, requestId: 'logout-request' }))
@@ -48,14 +48,17 @@ describe('student assessment handoff', () => {
     await wrapper.get('button').trigger('click')
     await flushPromises()
 
-    expect(globalThis.$fetch).toHaveBeenLastCalledWith('/api/student/logout', { method: 'POST' })
+    expect(globalThis.$fetch).toHaveBeenLastCalledWith('/api/student/logout', {
+      headers: { 'x-photo-next-csrf': 'csrf-memory-token' },
+      method: 'POST',
+    })
     expect(globalThis.navigateTo).toHaveBeenCalledWith('/login', { replace: true })
   })
 
   it('stays authenticated and restores an accessible error when logout fails', async () => {
     vi.stubGlobal('$fetch', vi.fn()
       .mockResolvedValueOnce({
-        data: { expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
+        data: { csrfToken: 'csrf-memory-token', expiresAt: '2026-07-14T12:00:00.000Z', nickname: '고요한프레임27', prospectId: 27 },
         requestId: 'session-request',
       })
       .mockRejectedValueOnce(new Error('sensitive upstream detail')))

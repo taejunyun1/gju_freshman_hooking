@@ -2,6 +2,7 @@ import type { ApiFailure, ApiSuccess, StudentSession } from '../../../shared/typ
 import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService } from '../../modules/identity/service'
 import { studentSessionCookie } from './login.post'
+import { deriveStudentCsrfToken } from '../../utils/student-request-security'
 
 type SessionHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerIdentityService>, 'getStudentSession'>
@@ -15,9 +16,10 @@ export const createSessionHandler = (dependencies: SessionHandlerDependencies) =
 ): Promise<ApiSuccess<StudentSession> | ApiFailure> => {
   const requestId = dependencies.getRequestId(event)
   try {
-    const session = await dependencies.identity.getStudentSession(dependencies.getCookie(event) ?? '')
+    const sessionToken = dependencies.getCookie(event) ?? ''
+    const session = await dependencies.identity.getStudentSession(sessionToken)
     if (!session) throw new AppError('AUTH_FAILED')
-    return { data: session, requestId }
+    return { data: { ...session, csrfToken: await deriveStudentCsrfToken(sessionToken) }, requestId }
   }
   catch (error) {
     const failure = toApiFailure(error, requestId)

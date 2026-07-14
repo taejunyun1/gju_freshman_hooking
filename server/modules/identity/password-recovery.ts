@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { AppError } from '../../utils/app-error'
-import { decodeBase64urlSecret, hmacSha256, randomBytes, sha256, utf8, type RandomBytes } from '../../utils/web-crypto'
+import { base64urlEncode, decodeBase64urlSecret, hmacSha256, randomBytes, sha256, utf8, type RandomBytes } from '../../utils/web-crypto'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { bytesFromPostgresBytea, postgresByteaFromBytes } from '../../utils/postgres-bytea'
 import { hashPassword, verifyPassword } from './password'
@@ -18,16 +18,11 @@ export type PasswordRecoveryDependencies = {
   phoneHmacKey?: Uint8Array
   now?: () => Date
   random?: RandomBytes
+  consumeRateLimit: (input: { key: string, route: string, limit: number, window: string }) => Promise<boolean>
+  derivePassword?: typeof hashPassword
   findRecoveryProspect: (input: { phoneHmac: Uint8Array, nickname: string, region: string }) => Promise<{ id: number } | null>
   createRequest: (input: { prospectId: number, expiresAt: Date }) => Promise<void>
-  approveRequest: (input: { requestId: number, adminUserId: string }) => Promise<{ code: string, expiresAt: Date } | null>
-  writeAuditEvent: (input: {
-    adminUserId: string
-    action: 'credential_recovery_approved'
-    targetType: 'credential_recovery_request'
-    targetId: string
-    requestId: string
-  }) => Promise<void>
+  approveRequest: (input: { requestId: number, adminUserId: string, traceId: string }) => Promise<{ code: string, expiresAt: Date } | null>
   completeCredentialRecovery: (input: { codeHash: Uint8Array, passwordHash: Uint8Array, passwordSalt: Uint8Array }) => Promise<boolean>
   readStudentSession: (sessionToken: string) => Promise<{ prospectId: number, tokenHash: Uint8Array } | null>
   readCredentialByProspectId: (prospectId: number) => Promise<PasswordMaterial | null>
@@ -56,6 +51,16 @@ const createSupabaseDependencies = (
   secrets: { passwordPepper: Uint8Array, phoneHmacKey: Uint8Array },
 ): PasswordRecoveryDependencies => ({
   ...secrets,
+  consumeRateLimit: async ({ key, route, limit, window }) => {
+    const { data, error } = await client.rpc('consume_rate_limit', {
+      p_key: key,
+      p_limit: limit,
+      p_route: route,
+      p_window: window,
+    })
+    throwOnStoreError(error)
+    return data === true
+  },
   findRecoveryProspect: async ({ phoneHmac, nickname, region }) => {
     const { data, error } = await client.from('prospects')
       .select('id')
@@ -74,26 +79,16 @@ const createSupabaseDependencies = (
     })
     throwOnStoreError(error)
   },
-  approveRequest: async ({ requestId, adminUserId }) => {
+  approveRequest: async ({ requestId, adminUserId, traceId }) => {
     const { data, error } = await client.rpc('approve_credential_recovery_request', {
       p_admin_user_id: adminUserId,
       p_request_id: requestId,
+      p_trace_id: traceId,
     })
     throwOnStoreError(error)
     const approved = Array.isArray(data) ? data[0] : null
     if (!approved || typeof approved.code !== 'string' || typeof approved.expires_at !== 'string') return null
     return { code: approved.code, expiresAt: asDate(approved.expires_at) }
-  },
-  writeAuditEvent: async (input) => {
-    const { error } = await client.from('audit_events').insert({
-      action: input.action,
-      admin_user_id: input.adminUserId,
-      metadata: {},
-      request_id: input.requestId,
-      target_id: input.targetId,
-      target_type: input.targetType,
-    })
-    throwOnStoreError(error)
   },
   completeCredentialRecovery: async ({ codeHash, passwordHash, passwordSalt }) => {
     const { data, error } = await client.rpc('complete_credential_recovery', {
@@ -135,13 +130,28 @@ const createSupabaseDependencies = (
 export const createPasswordRecoveryService = (dependencies: PasswordRecoveryDependencies) => {
   const now = dependencies.now ?? (() => new Date())
   const random = dependencies.random ?? randomBytes
+  const derivePassword = dependencies.derivePassword ?? hashPassword
   const verifyCurrentPassword = dependencies.verifyCurrentPassword ?? ((password, material) => (
     verifyPassword(password, { hash: material.passwordHash, salt: material.passwordSalt }, dependencies.passwordPepper)
   ))
 
-  const request = async (input: { phone: string, nickname: string, region: string }): Promise<void> => {
+  const request = async (input: { phone: string, nickname: string, region: string, ip: string }): Promise<void> => {
     if (!dependencies.phoneHmacKey) return
     const phoneHmac = await hmacSha256(utf8(normalizeKoreanPhone(input.phone)), dependencies.phoneHmacKey)
+    const ipAllowed = await dependencies.consumeRateLimit({
+      key: input.ip,
+      limit: 10,
+      route: '/api/student/password/recovery/request:ip',
+      window: '1 hour',
+    })
+    if (!ipAllowed) return
+    const phoneAllowed = await dependencies.consumeRateLimit({
+      key: base64urlEncode(phoneHmac),
+      limit: 3,
+      route: '/api/student/password/recovery/request:phone',
+      window: '1 hour',
+    })
+    if (!phoneAllowed) return
     const prospect = await dependencies.findRecoveryProspect({ phoneHmac, nickname: input.nickname, region: input.region })
     if (!prospect) return
     await dependencies.createRequest({
@@ -154,25 +164,35 @@ export const createPasswordRecoveryService = (dependencies: PasswordRecoveryDepe
     const approved = await dependencies.approveRequest({
       requestId: input.requestId,
       adminUserId: input.adminUserId,
+      traceId: input.traceId,
     })
     if (!approved) throw new AppError('RECOVERY_INVALID')
     if (!/^[A-Za-z0-9_-]{22}$/.test(approved.code)) throw new Error('RECOVERY_STORE_INVALID')
-    await dependencies.writeAuditEvent({
-      adminUserId: input.adminUserId,
-      action: 'credential_recovery_approved',
-      requestId: input.traceId,
-      targetId: String(input.requestId),
-      targetType: 'credential_recovery_request',
-    })
     return { code: approved.code, expiresAt: approved.expiresAt.toISOString() }
   }
 
-  const complete = async (input: { code: string, newPassword: string }): Promise<{ ok: true }> => {
+  const complete = async (input: { code: string, ip: string, newPassword: string }): Promise<{ ok: true }> => {
+    const codeHash = await sha256(utf8(input.code))
+    const ipAllowed = await dependencies.consumeRateLimit({
+      key: input.ip,
+      limit: 10,
+      route: '/api/student/password/recovery/complete:ip',
+      window: '5 minutes',
+    })
+    if (!ipAllowed) throw new AppError('RECOVERY_INVALID')
+    const codeAllowed = await dependencies.consumeRateLimit({
+      key: base64urlEncode(codeHash),
+      limit: 5,
+      route: '/api/student/password/recovery/complete:code',
+      window: '15 minutes',
+    })
+    if (!codeAllowed) throw new AppError('RECOVERY_INVALID')
+
     const passwordSalt = random(16)
     if (passwordSalt.length !== 16) throw new Error('PASSWORD_SALT_RANDOM_INVALID')
-    const password = await hashPassword(input.newPassword, passwordSalt, dependencies.passwordPepper)
+    const password = await derivePassword(input.newPassword, passwordSalt, dependencies.passwordPepper)
     const completed = await dependencies.completeCredentialRecovery({
-      codeHash: await sha256(utf8(input.code)),
+      codeHash,
       passwordHash: password.hash,
       passwordSalt: password.salt,
     })

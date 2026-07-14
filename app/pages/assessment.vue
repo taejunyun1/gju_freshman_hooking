@@ -21,7 +21,11 @@ const logout = async (): Promise<void> => {
   loggingOut.value = true
   logoutError.value = ''
   try {
-    await $fetch('/api/student/logout', { method: 'POST' })
+    if (!session.value) throw new Error('STUDENT_SESSION_REQUIRED')
+    await $fetch('/api/student/logout', {
+      headers: { 'x-photo-next-csrf': session.value.csrfToken },
+      method: 'POST',
+    })
     await navigateTo('/login', { replace: true })
   }
   catch {

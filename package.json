@@ -8,10 +8,11 @@
     "dev": "nuxt dev",
     "lint": "eslint .",
     "postinstall": "nuxt prepare",
-    "test": "vitest run",
+    "test": "vitest run --project unit --project integration",
     "test:sql": "supabase db reset --local && supabase test db --local",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:local-integration": "vitest run --project local-integration",
     "test:e2e": "playwright test",
     "typecheck": "nuxi typecheck"
   },

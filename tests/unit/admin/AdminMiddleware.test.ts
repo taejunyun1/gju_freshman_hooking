@@ -5,7 +5,11 @@ describe('administrator route middleware', () => {
     vi.stubGlobal('defineNuxtRouteMiddleware', (guard: unknown) => guard)
     vi.stubGlobal('navigateTo', vi.fn())
     const { createAdminRouteGuard } = await import('../../../app/middleware/admin')
-    const guard = createAdminRouteGuard({ clear: vi.fn(), isVerified: false }, navigateTo)
+    const guard = createAdminRouteGuard({
+      clear: vi.fn(),
+      hasVerifiedSession: () => false,
+      restoreFromSessionStorage: vi.fn(),
+    }, navigateTo, { server: false })
 
     await guard({ fullPath: '/admin/login', path: '/admin/login' })
 
@@ -16,7 +20,12 @@ describe('administrator route middleware', () => {
     vi.stubGlobal('defineNuxtRouteMiddleware', (guard: unknown) => guard)
     const navigate = vi.fn((target: unknown) => target)
     const { createAdminRouteGuard } = await import('../../../app/middleware/admin')
-    const guard = createAdminRouteGuard({ clear: vi.fn(), isVerified: false }, navigate)
+    const restoreFromSessionStorage = vi.fn()
+    const guard = createAdminRouteGuard({
+      clear: vi.fn(),
+      hasVerifiedSession: () => false,
+      restoreFromSessionStorage,
+    }, navigate, { server: false })
 
     await guard({ fullPath: '/admin/recovery?state=pending', path: '/admin/recovery' })
 
@@ -25,6 +34,40 @@ describe('administrator route middleware', () => {
       query: { redirect: '/admin/recovery?state=pending' },
       replace: true,
     })
+    expect(restoreFromSessionStorage).toHaveBeenCalledOnce()
+  })
+
+  it('does not restore browser state or redirect during server rendering', async () => {
+    vi.stubGlobal('defineNuxtRouteMiddleware', (guard: unknown) => guard)
+    const navigate = vi.fn()
+    const restoreFromSessionStorage = vi.fn()
+    const { createAdminRouteGuard } = await import('../../../app/middleware/admin')
+    const guard = createAdminRouteGuard({
+      clear: vi.fn(),
+      hasVerifiedSession: () => false,
+      restoreFromSessionStorage,
+    }, navigate, { server: true })
+
+    await guard({ fullPath: '/admin/recovery', path: '/admin/recovery' })
+
+    expect(restoreFromSessionStorage).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('restores a future allow-listed session before deciding the client redirect', async () => {
+    vi.stubGlobal('defineNuxtRouteMiddleware', (guard: unknown) => guard)
+    const navigate = vi.fn()
+    let restored = false
+    const { createAdminRouteGuard } = await import('../../../app/middleware/admin')
+    const guard = createAdminRouteGuard({
+      clear: vi.fn(),
+      hasVerifiedSession: () => restored,
+      restoreFromSessionStorage: () => { restored = true },
+    }, navigate, { server: false })
+
+    await guard({ fullPath: '/admin/recovery', path: '/admin/recovery' })
+
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('does not compose server administrator dependencies for public routes', async () => {

@@ -8,6 +8,7 @@ const pageState = ref<PageState>('checking')
 const submitting = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
+const csrfToken = ref('')
 
 const requestForm = reactive({
   nickname: '',
@@ -22,7 +23,8 @@ const changeForm = reactive({
 
 onMounted(async () => {
   try {
-    await $fetch<ApiSuccess<StudentSession>>('/api/student/session')
+    const response = await $fetch<ApiSuccess<StudentSession>>('/api/student/session')
+    csrfToken.value = response.data.csrfToken
     pageState.value = 'change'
   }
   catch {
@@ -54,7 +56,11 @@ const submitPasswordChange = async (): Promise<void> => {
   errorMessage.value = ''
   successMessage.value = ''
   try {
-    await $fetch('/api/student/password/change', { body: changeForm, method: 'POST' })
+    await $fetch('/api/student/password/change', {
+      body: { ...changeForm },
+      headers: { 'x-photo-next-csrf': csrfToken.value },
+      method: 'POST',
+    })
     successMessage.value = '비밀번호를 변경했습니다. 다른 기기에서 열린 세션은 종료되었습니다.'
     changeForm.currentPassword = ''
     changeForm.newPassword = ''

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 describe('GET /api/student/session', () => {
-  it('returns only prospect ID, nickname, and expiry for an active session', async () => {
+  it('returns public session fields plus a memory-only session-bound CSRF token', async () => {
     vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
     const { createSessionHandler } = await import('../../../server/api/student/session.get')
     const handler = createSessionHandler({
@@ -19,10 +19,12 @@ describe('GET /api/student/session', () => {
     const response = await handler({})
 
     expect(response.data).toEqual({
+      csrfToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
       prospectId: 42,
       nickname: '선명한프레임01',
       expiresAt: '2026-07-14T22:00:00.000Z',
     })
-    expect(Object.keys(response.data).sort()).toEqual(['expiresAt', 'nickname', 'prospectId'])
+    expect(Object.keys(response.data).sort()).toEqual(['csrfToken', 'expiresAt', 'nickname', 'prospectId'])
+    expect(JSON.stringify(response)).not.toContain('opaque-session-token')
   })
 })

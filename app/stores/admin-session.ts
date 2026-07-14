@@ -36,7 +36,11 @@ const readStoredSession = (): VerifiedAdminSession | null => {
 }
 
 export const useAdminSessionStore = defineStore('admin-session', () => {
-  const session = ref<VerifiedAdminSession | null>(readStoredSession())
+  const session = ref<VerifiedAdminSession | null>(null)
+
+  const restoreFromSessionStorage = (): void => {
+    session.value = readStoredSession()
+  }
 
   const hasVerifiedSession = (): boolean => (
     session.value !== null && Date.parse(session.value.expiresAt) > Date.now()
@@ -66,5 +70,5 @@ export const useAdminSessionStore = defineStore('admin-session', () => {
     return { Authorization: `Bearer ${session.value.accessToken}` }
   }
 
-  return { authorizationHeaders, clear, hasVerifiedSession, session, setVerifiedSession }
+  return { authorizationHeaders, clear, hasVerifiedSession, restoreFromSessionStorage, session, setVerifiedSession }
 })

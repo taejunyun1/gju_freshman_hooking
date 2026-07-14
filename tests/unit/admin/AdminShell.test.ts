@@ -60,6 +60,21 @@ describe('administrator shell', () => {
     expect(wrapper.text()).not.toMatch(/회원가입|계정 만들기/u)
   })
 
+  it('restores a valid browser session before redirecting away from the login route', async () => {
+    sessionStorage.setItem('photo_next_admin_session_v1', JSON.stringify({
+      accessToken: 'short-lived-token',
+      authenticatedAt: '2099-07-14T09:59:00.000Z',
+      expiresAt: '2099-07-14T11:00:00.000Z',
+      userId: 'admin-1',
+    }))
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+
+    mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+    await flushPromises()
+
+    expect(navigateTo).toHaveBeenCalledWith('/admin', { replace: true })
+  })
+
   it('renders the full Supabase TOTP QR data URL without wrapping or re-encoding it', async () => {
     const qrCode = 'data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M0%200h1v1H0z%22%2F%3E%3C%2Fsvg%3E'
     adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({

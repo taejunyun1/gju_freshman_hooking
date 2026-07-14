@@ -10,6 +10,7 @@ test-results/
 .env.*
 !.env.example
 .wrangler/
+/supabase/.temp/
 .superpowers/
 .worktrees/
 .DS_Store

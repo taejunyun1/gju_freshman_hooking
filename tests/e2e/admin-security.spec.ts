@@ -76,3 +76,46 @@ test('administrator login CSP permits a Supabase-style TOTP data image to load',
 
   expect(image).toEqual({ loaded: true, naturalHeight: 2, naturalWidth: 2 })
 })
+
+test('administrator login reaches local Supabase Auth for invalid credentials', async ({ page }) => {
+  const blockedRequests: string[] = []
+  page.on('requestfailed', (request) => {
+    if (request.url().includes('/auth/v1/')) blockedRequests.push(request.failure()?.errorText ?? 'failed')
+  })
+  const documentResponse = await page.goto('/admin/login')
+  expect(documentResponse?.headers()['content-security-policy'])
+    .toContain("connect-src 'self' http://127.0.0.1:54321")
+  await page.getByLabel('이메일').fill('missing-admin@example.test')
+  await page.getByLabel('비밀번호').fill('definitely-invalid-password')
+  await expect(page.getByRole('button', { name: '비밀번호 확인' })).toBeEnabled()
+
+  const authResponsePromise = page.waitForResponse(response => (
+    response.url().includes('/auth/v1/token') && response.request().method() === 'POST'
+  ))
+  await page.getByRole('button', { name: '비밀번호 확인' }).click()
+  const authResponse = await authResponsePromise
+
+  expect(authResponse.status()).toBeGreaterThanOrEqual(400)
+  expect(authResponse.status()).toBeLessThan(500)
+  expect(blockedRequests).toEqual([])
+  await expect(page.getByRole('alert')).toContainText('관리자 로그인 정보를 확인하세요.')
+})
+
+test('administrator recovery hard-load restores a future session before the client guard', async ({ page }) => {
+  await page.goto('/admin/login')
+  await page.evaluate(() => {
+    sessionStorage.setItem('photo_next_admin_session_v1', JSON.stringify({
+      accessToken: 'allow-listed-but-not-authorized-by-server',
+      authenticatedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      refreshToken: 'must-not-be-restored',
+      userId: '00000000-0000-4000-8000-000000000001',
+    }))
+  })
+
+  await page.goto('/admin/recovery')
+
+  await expect(page).toHaveURL('/admin/recovery')
+  await expect(page.getByRole('heading', { name: '복구 대기열' })).toBeVisible()
+  await expect(page.getByText('복구 대기열을 불러오지 못했습니다. 세션을 확인한 뒤 다시 시도하세요.')).toBeVisible()
+})

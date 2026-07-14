@@ -303,7 +303,7 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
     return { kind: 'authenticated', sessionToken: sessionToken.raw, expiresAt: completed.expiresAt.toISOString() }
   }
 
-  const getStudentSession = async (sessionToken: string): Promise<StudentSession | null> => {
+  const getStudentSession = async (sessionToken: string): Promise<Omit<StudentSession, 'csrfToken'> | null> => {
     if (!sessionToken) return null
     const tokenHash = (await createSessionTokenFromRaw(sessionToken))
     const session = await dependencies.readSession(tokenHash)

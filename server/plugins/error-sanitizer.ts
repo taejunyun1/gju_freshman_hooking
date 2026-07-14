@@ -16,6 +16,12 @@ type NitroAppWithErrorHook = {
 
 const publicErrorMessage = 'Internal Server Error'
 
+const isDeliberatePublicError = (error: ErrorRecord): boolean => (
+  error.statusCode === 403
+  && error.statusMessage === 'REQUEST_FORBIDDEN'
+  && error.message === 'REQUEST_FORBIDDEN'
+)
+
 const removeSensitiveErrorProperties = (error: ErrorRecord): void => {
   error.message = publicErrorMessage
   error.statusCode = 500
@@ -33,6 +39,7 @@ export const sanitizeUnhandledError = (error: ErrorRecord, event?: RequestEvent)
   const context = event ? (event.context ??= {}) : undefined
   const requestId = typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
   if (context) context.requestId = requestId
+  if (isDeliberatePublicError(error)) return requestId
   removeSensitiveErrorProperties(error)
   return requestId
 }

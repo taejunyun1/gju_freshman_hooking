@@ -31,9 +31,12 @@ describe('password reset page', () => {
   })
 
   it('shows a current-password change form only for an active student session', async () => {
-    vi.stubGlobal('$fetch', vi.fn(async () => ({
-      data: { expiresAt: '2026-07-14T22:00:00.000Z', nickname: '빛의기록27', prospectId: 44 },
-    })))
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({
+        data: { csrfToken: 'csrf-memory-token', expiresAt: '2026-07-14T22:00:00.000Z', nickname: '빛의기록27', prospectId: 44 },
+      })
+      .mockResolvedValueOnce({ data: { ok: true }, requestId: 'change-request' })
+    vi.stubGlobal('$fetch', fetch)
     const { default: PasswordResetPage } = await import('../../../app/pages/password/reset.vue')
     const wrapper = mount(PasswordResetPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
     await flushPromises()
@@ -41,5 +44,15 @@ describe('password reset page', () => {
     expect(wrapper.find('input[name="currentPassword"]').attributes('autocomplete')).toBe('current-password')
     expect(wrapper.find('input[name="newPassword"]').attributes('autocomplete')).toBe('new-password')
     expect(wrapper.find('input[name="phone"]').exists()).toBe(false)
+    await wrapper.find('input[name="currentPassword"]').setValue('현재비밀번호-77')
+    await wrapper.find('input[name="newPassword"]').setValue('새비밀번호-88')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetch).toHaveBeenLastCalledWith('/api/student/password/change', {
+      body: expect.objectContaining({ currentPassword: '현재비밀번호-77', newPassword: '새비밀번호-88' }),
+      headers: { 'x-photo-next-csrf': 'csrf-memory-token' },
+      method: 'POST',
+    })
   })
 })

@@ -59,7 +59,7 @@ describe('administrator session store', () => {
     expect(sessionStorage.getItem('photo_next_admin_session_v1')).toBeNull()
   })
 
-  it('drops unexpected secret fields when restoring the session', () => {
+  it('restores allow-listed fields only after an explicit client restoration step', () => {
     sessionStorage.setItem('photo_next_admin_session_v1', JSON.stringify({
       accessToken: 'short-lived-token',
       authenticatedAt: '2026-07-14T09:59:00.000Z',
@@ -69,11 +69,24 @@ describe('administrator session store', () => {
     }))
     setActivePinia(createPinia())
 
-    expect(useAdminSessionStore().session).toEqual({
+    const store = useAdminSessionStore()
+    expect(store.session).toBeNull()
+
+    store.restoreFromSessionStorage()
+
+    expect(store.session).toEqual({
       accessToken: 'short-lived-token',
       authenticatedAt: '2026-07-14T09:59:00.000Z',
       expiresAt: '2026-07-14T11:00:00.000Z',
       userId: 'admin-1',
     })
+  })
+
+  it('does not touch browser storage while creating the store', () => {
+    const storageRead = vi.spyOn(window.sessionStorage, 'getItem')
+
+    useAdminSessionStore()
+
+    expect(storageRead).not.toHaveBeenCalled()
   })
 })

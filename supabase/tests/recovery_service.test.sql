@@ -205,8 +205,8 @@ select is(
     pg_catalog.to_regprocedure('public.approve_credential_recovery_request(bigint,uuid)'),
     'execute'
   ), false),
-  true,
-  'service_role can execute recovery approval'
+  false,
+  'service_role cannot execute the legacy unaudited recovery approval signature'
 );
 
 insert into public.credential_recovery_requests (

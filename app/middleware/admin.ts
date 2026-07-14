@@ -7,7 +7,8 @@ type AdminRoute = {
 
 type AdminSessionGuard = {
   clear: () => void
-  isVerified: boolean
+  hasVerifiedSession: () => boolean
+  restoreFromSessionStorage: () => void
 }
 
 type AdminLoginTarget = {
@@ -25,11 +26,15 @@ const safeAdminRedirect = (route: AdminRoute): string => (
 export const createAdminRouteGuard = <NavigationResult>(
   session: AdminSessionGuard,
   navigate: (target: AdminLoginTarget) => NavigationResult,
+  runtime: { server: boolean },
 ) => (
   to: AdminRoute,
 ): NavigationResult | undefined => {
   if (to.path === '/admin/login') return
-  if (session.isVerified) return
+  if (runtime.server) return
+
+  session.restoreFromSessionStorage()
+  if (session.hasVerifiedSession()) return
 
   session.clear()
   return navigate({
@@ -43,6 +48,7 @@ export default defineNuxtRouteMiddleware((to) => {
   const session = useAdminSessionStore()
   return createAdminRouteGuard({
     clear: session.clear,
-    isVerified: session.hasVerifiedSession(),
-  }, navigateTo)({ fullPath: to.fullPath, path: to.path })
+    hasVerifiedSession: session.hasVerifiedSession,
+    restoreFromSessionStorage: session.restoreFromSessionStorage,
+  }, navigateTo, { server: import.meta.server })({ fullPath: to.fullPath, path: to.path })
 })
