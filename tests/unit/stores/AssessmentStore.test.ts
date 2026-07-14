@@ -539,6 +539,99 @@ describe('assessment store', () => {
     expect(validations).toBe(1)
   })
 
+  it('persists the first incomplete stale step so a new store restores the review position', async () => {
+    const stale = Object.assign(new Error('stale upstream'), {
+      data: { error: { code: 'ASSESSMENT_CATALOG_STALE', message: 'sanitized' } },
+      statusCode: 409,
+    })
+    let optionsLoads = 0
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/assessment/options') {
+        optionsLoads += 1
+        const nextCatalog = catalog(optionsLoads === 1 ? revisionA : revisionB)
+        if (optionsLoads >= 2) {
+          nextCatalog.groups[0]!.options = nextCatalog.groups[0]!.options
+            .filter(option => option.key !== 'work.photo')
+        }
+        return success(nextCatalog)
+      }
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') throw stale
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+    expect(store.next()).toBe(true)
+    expect(store.next()).toBe(true)
+    expect(store.next()).toBe(true)
+    expect(store.step).toBe(3)
+
+    expect(await store.validate('csrf-memory-token')).toBe(false)
+    expect(store.status).toBe('stale')
+    expect(store.step).toBe(0)
+    expect(store.selections).toEqual({
+      work: [],
+      result: ['result.portfolio'],
+      style: ['style.solo'],
+      career: ['career.photo'],
+    })
+    expect(JSON.parse(sessionStorage.getItem(storageKey) ?? '{}')).toMatchObject({
+      catalogRevision: revisionB,
+      step: 0,
+    })
+
+    setActivePinia(createPinia())
+    const restored = useAssessmentStore()
+    await restored.loadOptions()
+
+    expect(restored.step).toBe(0)
+    expect(restored.selections).toEqual(store.selections)
+    expect(restored.isComplete).toBe(false)
+  })
+
+  it('deduplicates step completion within a revision and emits again for a stale revision', async () => {
+    const stale = Object.assign(new Error('stale upstream'), {
+      data: { error: { code: 'ASSESSMENT_CATALOG_STALE', message: 'sanitized' } },
+      statusCode: 409,
+    })
+    let optionsLoads = 0
+    const fetch = vi.fn(async (url: string, _options?: { body?: Record<string, unknown> }) => {
+      if (url === '/api/assessment/options') {
+        optionsLoads += 1
+        const nextCatalog = catalog(optionsLoads === 1 ? revisionA : revisionB)
+        if (optionsLoads === 2) {
+          nextCatalog.groups[0]!.options = nextCatalog.groups[0]!.options
+            .filter(option => option.key !== 'work.photo')
+        }
+        return success(nextCatalog)
+      }
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/student/assessment/validate') throw stale
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const store = useAssessmentStore()
+    await store.loadOptions()
+    setCompleteSelections(store)
+
+    expect(store.next()).toBe(true)
+    expect(await store.validate('csrf-memory-token')).toBe(false)
+    expect(store.step).toBe(0)
+    expect(store.toggleOption('work.video')).toBe(true)
+    expect(store.next()).toBe(true)
+    expect(store.previous()).toBe(true)
+    expect(store.next()).toBe(true)
+
+    const workEvents = fetch.mock.calls
+      .filter(([url, options]) => url === '/api/events'
+        && options?.body?.eventName === 'assessment_step_completed'
+        && options.body.group === 'work')
+      .map(([, options]) => options?.body?.catalogRevision)
+    expect(workEvents).toEqual([revisionA, revisionB])
+  })
+
   it('uses the empty state when any required step has no options', async () => {
     const partialCatalog = catalog()
     partialCatalog.groups[3]!.options = []

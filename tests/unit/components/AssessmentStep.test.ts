@@ -114,6 +114,31 @@ describe('AssessmentStep', () => {
     expect(wrapper.get('[role="status"]').text()).toContain('전화번호나 이메일')
   })
 
+  it('clears an invalid career error when explore is deselected before reselecting', async () => {
+    const wrapper = mount(AssessmentStep, {
+      props: {
+        group: careerGroup,
+        limit: { min: 1, max: 2 },
+        modelValue: ['career.explore'],
+        careerOther: '',
+      },
+    })
+    await wrapper.get('input[name="careerOther"]').setValue('name@example.com')
+    expect(wrapper.get('#career-other-error').exists()).toBe(true)
+
+    await wrapper.get('[data-key="career.explore"]').trigger('click')
+    expect(wrapper.emitted('update:careerOther')).toEqual([['']])
+    await wrapper.setProps({ modelValue: [] })
+    await wrapper.get('[data-key="career.explore"]').trigger('click')
+    await wrapper.setProps({ modelValue: ['career.explore'] })
+
+    const input = wrapper.get('input[name="careerOther"]')
+    expect(input.attributes('aria-describedby')).toBe('career-other-privacy')
+    expect(wrapper.find('#career-other-error').exists()).toBe(false)
+    expect(wrapper.findAll('[aria-live="polite"]')).toHaveLength(1)
+    expect(wrapper.get('[role="status"]').text()).not.toContain('전화번호나 이메일')
+  })
+
   it.each([
     ['name@example.com', '전화번호나 이메일'],
     ['010-1234-5678', '전화번호나 이메일'],

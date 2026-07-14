@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 type Rgb = readonly [number, number, number]
@@ -49,18 +49,20 @@ describe('design tokens', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       dependencies?: Record<string, string>
     }
-    const requiredPackages = {
+    const dynamicPackages = {
       'wanted-sans': {
         version: '1.0.3',
-        assetPath: 'fonts/webfonts/variable/complete/woff2/WantedSansVariable.woff2',
+        cssPath: 'fonts/webfonts/variable/split/WantedSansVariable.css',
       },
       pretendard: {
         version: '1.3.9',
-        assetPath: 'dist/web/variable/woff2/PretendardVariable.woff2',
+        cssPath: 'dist/web/variable/pretendardvariable-dynamic-subset.css',
       },
+    }
+    const requiredPackages = {
+      ...dynamicPackages,
       '@fontsource/ibm-plex-mono': {
         version: '5.2.7',
-        assetPath: 'files/ibm-plex-mono-latin-400-normal.woff2',
       },
     }
 
@@ -71,14 +73,33 @@ describe('design tokens', () => {
     expect(existsSync('app/assets/css/fonts.css')).toBe(true)
 
     const fontCss = readFileSync('app/assets/css/fonts.css', 'utf8')
-    for (const [packageName, contract] of Object.entries(requiredPackages)) {
-      expect(fontCss).toContain(`${packageName}/${contract.assetPath}`)
+    for (const [packageName, contract] of Object.entries(dynamicPackages)) {
+      expect(fontCss).toContain(`@import '${packageName}/${contract.cssPath}';`)
+      const packageRoot = resolve('node_modules', packageName)
+      const subsetCssPath = resolve(packageRoot, contract.cssPath)
+      const subsetCss = readFileSync(subsetCssPath, 'utf8')
+      const subsetSources = [...subsetCss.matchAll(/src:\s*url\(["']?(?<path>[^"')]+\.woff2)/gu)]
+      const unicodeRanges = subsetCss.match(/unicode-range:/gu) ?? []
+
+      expect(subsetSources.length).toBeGreaterThanOrEqual(90)
+      expect(unicodeRanges).toHaveLength(subsetSources.length)
+      for (const source of subsetSources) {
+        expect(existsSync(resolve(dirname(subsetCssPath), source.groups!.path))).toBe(true)
+      }
+    }
+    expect(fontCss).not.toContain('/complete/')
+    expect(fontCss).not.toContain('PretendardVariable.woff2')
+    expect(fontCss).toContain('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2')
+    expect(fontCss).toContain('@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-700-normal.woff2')
+    expect(fontCss.match(/format\('woff2'\)/gu)).toHaveLength(2)
+    expect(fontCss).not.toContain("format('woff')")
+
+    for (const packageName of Object.keys(requiredPackages)) {
       const packageRoot = resolve('node_modules', packageName)
       const fontPackage = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
         license?: string
       }
       expect(fontPackage.license).toBe('OFL-1.1')
-      expect(existsSync(resolve(packageRoot, contract.assetPath))).toBe(true)
       expect([
         resolve(packageRoot, 'LICENSE'),
         resolve(packageRoot, 'LICENSE.md'),
@@ -87,8 +108,6 @@ describe('design tokens', () => {
         resolve(packageRoot, 'dist/LICENSE.txt'),
       ].some(existsSync)).toBe(true)
     }
-    expect(fontCss.match(/format\('woff2(?:-variations)?'\)/gu)).toHaveLength(4)
-    expect(fontCss).not.toContain("format('woff')")
   })
 
   it('keeps footer text at WCAG AA contrast against the canvas', () => {

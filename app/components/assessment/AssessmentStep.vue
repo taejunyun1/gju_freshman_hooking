@@ -37,7 +37,10 @@ const toggle = (key: string): void => {
   if (props.disabled) return
   if (props.modelValue.includes(key)) {
     emit('update:modelValue', props.modelValue.filter(value => value !== key))
-    if (key === 'career.explore') emit('update:careerOther', '')
+    if (key === 'career.explore') {
+      careerError.value = ''
+      emit('update:careerOther', '')
+    }
     announcement.value = `선택 ${props.modelValue.length - 1} / ${props.limit.max}`
     return
   }

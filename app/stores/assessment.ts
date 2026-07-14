@@ -185,7 +185,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
   const validatedResult = ref<ScoredAssessment | null>(null)
   const startedEmitted = ref(false)
   const reviewRequired = ref(false)
-  const completedGroups = new Set<QuestionGroup>()
+  const completedGroups = new Set<string>()
   let requestGeneration = 0
 
   const currentGroup = computed(() => groups.value[step.value])
@@ -231,8 +231,9 @@ export const useAssessmentStore = defineStore('assessment', () => {
   }
 
   const emitStepCompleted = (group: QuestionGroup, selectedCount: number): void => {
-    if (completedGroups.has(group)) return
-    completedGroups.add(group)
+    const completionKey = `${catalogRevision.value}:${group}`
+    if (completedGroups.has(completionKey)) return
+    completedGroups.add(completionKey)
     sendEvent({
       eventName: 'assessment_step_completed',
       catalogRevision: catalogRevision.value,
@@ -393,6 +394,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
       }
       if (reviewRequired.value) {
         moveToFirstIncompleteGroup()
+        persist()
         status.value = 'stale'
         errorMessage.value = '선택지가 업데이트되었습니다. 선택을 다시 확인한 뒤 결과를 계산해 주세요.'
       }
