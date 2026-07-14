@@ -246,3 +246,74 @@ The production build retains the known non-fatal `nuxt:module-preload-polyfill` 
 ### Concerns
 
 - The pre-existing Nuxt module-preload sourcemap warning remains during production builds; it does not prevent a successful build.
+
+## Accessibility review follow-up — sequence clip labels — 2026-07-14
+
+### Status
+
+DONE — the visible `SOURCE`, `Y1—Y4`, `OUTPUT`, and `NEXT` clip labels now meet WCAG 2.2 AA contrast on both existing tinted clip backgrounds. The sequence order, page hierarchy, palette roles, routes, dependencies, and concise supporting-evidence treatment remain unchanged.
+
+### Files changed
+
+- `app/pages/index.vue`
+- `tests/unit/design-tokens.test.ts`
+
+### TDD evidence
+
+#### RED
+
+The automated source-level contrast test was added before the production CSS change. It reads the actual `.sequence__clip-label`, `.sequence__clip`, and `.sequence__clip--signal` declarations; composites the configured ink alpha over each configured 7% tint in sRGB; and requires `>= 4.5:1` for both backgrounds.
+
+```text
+pnpm vitest run tests/unit/design-tokens.test.ts
+```
+
+Expected failure observed (exit 1):
+
+```text
+expected 4.1597114284507 to be greater than or equal to 4.5
+```
+
+This is the existing 58%-opacity ink label on the violet-tinted clip. The same calculation evaluates the amber-tinted clip at `4.1982:1`, also below AA.
+
+#### GREEN
+
+Only `.sequence__clip-label` changed: `var(--color-ink)` opacity increased from `58%` to `61%`. The final configured ratios are `4.5714:1` on the violet tint and `4.6182:1` on the amber tint.
+
+```text
+pnpm vitest run tests/unit/design-tokens.test.ts tests/unit/pages/LandingPage.test.ts
+```
+
+Passing result (exit 0):
+
+```text
+Test Files  2 passed (2)
+Tests       7 passed (7)
+```
+
+### Verification
+
+| Command | Result |
+|---|---|
+| affected Vitest command above | PASS — 2 files, 7 tests |
+| `pnpm nuxi typecheck` | PASS — exit 0, no output/errors |
+| `pnpm eslint .` | PASS — exit 0, no output/errors |
+| `pnpm nuxt build` | PASS — Cloudflare-module output generated, including `.output/server/index.mjs` |
+| `git diff --check` | PASS — no whitespace errors |
+
+The production build retains only the pre-existing, non-fatal `nuxt:module-preload-polyfill` sourcemap warning.
+
+### Self-review
+
+- The regression test exercises the production CSS declarations rather than a hard-coded replacement value, and will fail if either clip tint or label opacity is later changed below AA.
+- `SOURCE`/`Y1—Y4` share the tested violet background and `OUTPUT`/`NEXT` share the tested amber background, so all four visible labels are covered.
+- The foreground adjustment is the smallest whole-percentage change that clears AA on both backgrounds; no content, layout, sequence stage, or palette token changed.
+- Equipment and facilities remain a single supporting-evidence aside beneath the sequence, not a stage or hero claim.
+
+### Commit
+
+- `b339a0c` — `fix: 2026-07-14 clip label contrast`
+
+### Concerns
+
+- The known non-fatal Nuxt module-preload sourcemap warning remains during production builds; no new concerns were introduced.
