@@ -306,6 +306,8 @@ const primaryScore = track * .40 + activity * .25 + result * .15 + career * .15 
 const specialistScore = specialistTags * .50 + projects * .30 + careers * .20
 ```
 
+For specialist candidates, a scoring category with no positive-weight candidate tags is unavailable rather than a zero student match. Re-normalize the `.50/.30/.20` weights across categories present in that candidate's verified profile. A category that exists for the candidate but has no matching student signal remains zero. Apply the score-50 threshold after this candidate-category availability normalization; do not lower or bypass the threshold and do not invent missing career tags.
+
 Only active `full_time/primary` faculty with capacity above zero enter primary and backup. Fewer than two candidates returns `FACULTY_CONTENT_NOT_READY` instead of fabricating a backup. Only active `adjunct|practitioner/specialist` faculty linked to the chosen primary or a null-primary rule enter specialist ranking. Keep specialists scoring at least 50 and cap at two. Tie-break primary by open assignment count, priority, ID; specialist by priority, ID. Return Korean reason snapshots naming selected interest tags. Compute `facultyFit = min(100, (track*.40 + activity*.25 + result*.15 + career*.15) / .95)` before load adjustment and feed it to the environment score.
 
 - [ ] **Step 4: Verify all faculty-guide scenarios and commit**

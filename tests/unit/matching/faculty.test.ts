@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+import { parseAssessmentCatalog } from '../../../scripts/seed-assessment-options'
+import { scoreAssessment } from '../../../server/modules/assessment/scoring'
 import { recommendFaculty } from '../../../server/modules/matching/faculty'
+import type { AssessmentSelections } from '../../../shared/types/domain'
 
 type TrackKey = 'documentary' | 'art_photo' | 'commercial' | 'video'
 type TagCategory = 'track' | 'activity' | 'result' | 'career' | 'specialist'
@@ -221,10 +225,16 @@ const facultyFixture = (): FacultyCandidate[] => [
       tag('brand', '브랜드 이미지', 'specialist'),
       tag('studio', '스튜디오 촬영', 'specialist'),
       tag('lighting', '조명', 'specialist'),
+      tag('commercial_portfolio', '상업포트폴리오', 'specialist'),
       tag('commercial', '광고 포트폴리오', 'result', 2),
-      tag('fashion', '패션 화보', 'result', 2),
       tag('product', '제품광고 촬영', 'result', 2),
+      tag('fashion', '패션 화보', 'result', 2),
+      tag('beauty', '뷰티 화보', 'result', 2),
       tag('brand', '브랜드 캠페인', 'result', 2),
+      tag('studio', '스튜디오 조명 프로젝트', 'result', 2),
+      tag('lighting', '스튜디오 조명 프로젝트', 'result', 2),
+      tag('portfolio', '광고사진 포트폴리오', 'result', 2),
+      tag('photography', '광고사진 포트폴리오', 'result', 2),
     ],
   },
 ]
@@ -285,6 +295,34 @@ const videoDroneStudent = (): StudentEvidence =>
     },
   )
 
+const canonicalAssessmentCatalog = () => parseAssessmentCatalog(
+  JSON.parse(readFileSync('supabase/seed/assessment-options.json', 'utf8')) as unknown,
+)
+
+const commercialAssessmentStudent = (): StudentEvidence => {
+  const catalog = canonicalAssessmentCatalog()
+  const selections: AssessmentSelections = {
+    work: ['work.commercial_image'],
+    result: ['result.commercial_fashion'],
+    style: ['style.studio'],
+    career: ['career.photo'],
+    careerOther: null,
+  }
+  const scored = scoreAssessment(catalog, selections)
+  const selectedOptionKeys = new Set([
+    ...selections.work,
+    ...selections.result,
+    ...selections.style,
+    ...selections.career,
+  ])
+  const selectedLabels: Record<string, string> = {}
+  for (const option of catalog) {
+    if (!selectedOptionKeys.has(option.optionKey)) continue
+    for (const key of option.interestTags) selectedLabels[key] ??= option.label
+  }
+  return student(scored.trackScores, scored.interestVector, selectedLabels)
+}
+
 const recommend = (
   evidence: StudentEvidence,
   faculty = facultyFixture(),
@@ -342,23 +380,21 @@ describe('recommendFaculty', () => {
     expect(park?.reason).not.toMatch(/배정 완료|담당 교수/)
   })
 
-  it('광고·패션 관심은 선택된 총괄교수와 무관하게 null 링크로 곽동욱을 연계한다', () => {
-    const result = recommend(
-      student(
-        { ...zeroTracks(), commercial: 96 },
-        { commercial: 1, fashion: 1, product: 0.9, brand: 0.9, studio: 0.8 },
-        {
-          commercial: '광고사진',
-          fashion: '패션사진',
-          product: '제품사진',
-          brand: '브랜드 이미지',
-          studio: '스튜디오 촬영',
-        },
-      ),
-    )
+  it('공식 광고·패션 설문 선택은 career 태그가 없는 곽동욱과 null 링크로 연계한다', () => {
+    const evidence = commercialAssessmentStudent()
+    const result = recommend(evidence)
 
+    expect(evidence.interestVector).toMatchObject({
+      commercial: 1,
+      studio: 0.8,
+      fashion: 0.7,
+      brand: 0.7,
+      lighting: 0.5,
+      product: 0.4,
+    })
     expect(result.specialists.map(({ id }) => id)).toContain(6)
-    expect(result.specialists.find(({ id }) => id === 6)?.reason).toContain('광고사진')
+    expect(result.specialists.find(({ id }) => id === 6)?.reason)
+      .toContain('제품·패션·광고 이미지 만들기')
   })
 
   it('총괄 후보의 점수 공식·부하·동점 순서를 적용하고 facultyFit에서는 부하를 제외한다', () => {
@@ -426,7 +462,7 @@ describe('recommendFaculty', () => {
     )
   })
 
-  it('전문가 점수 50을 포함하고 2명으로 제한하며 다른 총괄교수 링크를 제외한다', () => {
+  it('결측 범주는 N/A로 정규화해 정확히 50을 포함하고 50 미만과 다른 총괄 링크를 제외한다', () => {
     const faculty = facultyFixture()
     const template = faculty[4]
     faculty.push(
@@ -435,45 +471,73 @@ describe('recommendFaculty', () => {
         id: 7,
         name: '50점 전문가 A',
         priority: 5,
-        tags: [tag('drone', '드론촬영', 'specialist')],
+        tags: [tag('exact', '정확히 50', 'specialist')],
       },
       {
         ...clone(template),
         id: 8,
         name: '50점 전문가 B',
         priority: 40,
-        tags: [tag('drone', '드론촬영', 'specialist')],
+        tags: [tag('exact', '정확히 50', 'specialist')],
       },
       {
         ...clone(template),
         id: 9,
-        name: '49점 전문가',
+        name: '49.9점 전문가',
         priority: 100,
-        tags: [tag('weak', '약한 연계', 'specialist')],
+        tags: [tag('below', '50 미만', 'specialist')],
       },
       {
         ...clone(template),
         id: 10,
         name: '다른 총괄교수 전용',
         priority: 100,
-        tags: [tag('drone', '드론촬영', 'specialist')],
+        tags: [tag('exact', '정확히 50', 'specialist')],
       },
     )
     const links = [
       ...specialistLinksFixture(),
-      { primaryFacultyId: 2, specialistFacultyId: 7, tagKey: 'drone', priority: 1 },
-      { primaryFacultyId: 2, specialistFacultyId: 8, tagKey: 'drone', priority: 1 },
-      { primaryFacultyId: 2, specialistFacultyId: 9, tagKey: 'weak', priority: 1 },
-      { primaryFacultyId: 1, specialistFacultyId: 10, tagKey: 'drone', priority: 1 },
+      { primaryFacultyId: 2, specialistFacultyId: 7, tagKey: 'exact', priority: 1 },
+      { primaryFacultyId: 2, specialistFacultyId: 8, tagKey: 'exact', priority: 1 },
+      { primaryFacultyId: 2, specialistFacultyId: 9, tagKey: 'below', priority: 1 },
+      { primaryFacultyId: 1, specialistFacultyId: 10, tagKey: 'exact', priority: 1 },
     ]
     const evidence = videoDroneStudent()
-    evidence.interestVector.weak = 0.98
-    evidence.selectedLabels.weak = '약한 연계'
+    evidence.interestVector.exact = 0.5
+    evidence.interestVector.below = 0.499
+    evidence.selectedLabels.exact = '정확히 50'
+    evidence.selectedLabels.below = '50 미만'
 
     const result = recommend(evidence, faculty, links)
     expect(result.specialists.map(({ id }) => id)).toEqual([4, 8])
     expect(result.specialists.map(({ id }) => id)).not.toContain(9)
     expect(result.specialists.map(({ id }) => id)).not.toContain(10)
+  })
+
+  it('후보에 있는 result 범주가 학생 신호 0이면 N/A가 아니라 0점으로 반영한다', () => {
+    const faculty = facultyFixture().slice(0, 3)
+    faculty.push({
+      ...clone(facultyFixture()[4]),
+      id: 71,
+      name: '미선택 결과 범주 전문가',
+      tags: [
+        tag('linked_signal', '연계 신호', 'specialist'),
+        tag('unselected_result', '미선택 결과', 'result'),
+      ],
+    })
+    const evidence = student(
+      { ...zeroTracks(), video: 100 },
+      { linked_signal: 0.6 },
+      { linked_signal: '연계 신호' },
+    )
+    const result = recommend(
+      evidence,
+      faculty,
+      [{ primaryFacultyId: 2, specialistFacultyId: 71, tagKey: 'linked_signal', priority: 1 }],
+    )
+
+    expect(result.primary.id).toBe(2)
+    expect(result.specialists.map(({ id }) => id)).not.toContain(71)
   })
 
   it('결과는 canonical 필드와 public 연락처만 노출하고 배정 표현을 쓰지 않는다', () => {

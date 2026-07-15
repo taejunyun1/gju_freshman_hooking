@@ -359,7 +359,19 @@ const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): Spec
   const specialist = categoryMatch(student, tags, 'specialist')
   const result = categoryMatch(student, tags, 'result')
   const career = categoryMatch(student, tags, 'career')
-  return { candidate, rawScore: specialist * 0.50 + result * 0.30 + career * 0.20 }
+  const components = [
+    { category: 'specialist' as const, score: specialist, weight: 0.50 },
+    { category: 'result' as const, score: result, weight: 0.30 },
+    { category: 'career' as const, score: career, weight: 0.20 },
+  ].filter(component => tags.some(tag => (
+    tag.category === component.category && tag.weight > 0
+  )))
+  const availableWeight = components.reduce((sum, component) => sum + component.weight, 0)
+  const weightedScore = components.reduce(
+    (sum, component) => sum + component.score * component.weight,
+    0,
+  )
+  return { candidate, rawScore: availableWeight === 0 ? 0 : weightedScore / availableWeight }
 }
 
 const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean => (
