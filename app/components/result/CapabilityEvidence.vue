@@ -6,11 +6,12 @@ import type {
 } from '../../../shared/types/result'
 import ConnectionReason from './ConnectionReason.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   equipment: readonly EquipmentResultResource[]
   facility: readonly FacilityResultResource[]
   resultPublicId: string
-}>()
+  telemetryEnabled?: boolean
+}>(), { telemetryEnabled: true })
 
 type CapabilityResource = EquipmentResultResource | FacilityResultResource
 
@@ -29,6 +30,7 @@ const visibleEvidence = computed(() => expanded.value
   : allEvidence.value.slice(0, 2))
 
 const recordResourceOpen = (resource: EquipmentResultResource): void => {
+  if (!props.telemetryEnabled) return
   void $fetch('/api/events', {
     method: 'POST',
     body: {

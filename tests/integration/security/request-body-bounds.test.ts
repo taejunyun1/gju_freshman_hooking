@@ -9,6 +9,7 @@ const guardedUrl = 'https://photo-next.example/api/events'
 const defaultMaxRequestBodyBytes = 65_536
 const importMaxRequestBodyBytes = 512 * 1024
 const imageMaxRequestBodyBytes = 8 * 1024 * 1024 + 64 * 1024
+const transitionMaxRequestBodyBytes = 1024
 
 const streamRequest = (
   chunks: Uint8Array[],
@@ -512,6 +513,38 @@ describe('bounded request bodies', () => {
 
     expect(received).toEqual([
       { bytes: maximum, marker: null },
+      { bytes: 2, marker: '1' },
+    ])
+  })
+
+  it.each([
+    '/api/admin/resources/42/publish',
+    '/api/admin/resources/42/archive',
+    '/api/admin/resources/%34%32/publish/',
+    '/api/admin/resources/%34%32/archive/',
+  ])('applies the small optimistic-transition body limit to %s', async (path) => {
+    const received: Array<{ bytes: number, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+
+    for (const size of [transitionMaxRequestBodyBytes, transitionMaxRequestBodyBytes + 1]) {
+      await worker.fetch(new Request(new URL(path, guardedUrl), {
+        body: new Uint8Array(size),
+        duplex: 'half',
+        headers: { 'content-length': String(size) },
+        method: 'POST',
+      } as RequestInit), {}, {})
+    }
+
+    expect(received).toEqual([
+      { bytes: transitionMaxRequestBodyBytes, marker: null },
       { bytes: 2, marker: '1' },
     ])
   })

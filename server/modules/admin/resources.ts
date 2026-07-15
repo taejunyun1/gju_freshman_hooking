@@ -6,6 +6,7 @@ import {
   adminEquipmentInventoryUpdateSchema,
   adminResourceSchema,
   adminResourceStatusSchema,
+  adminResourceTransitionSchema,
   adminResourceTypeSchema,
   adminResourceVisibilitySchema,
   adminResourceWriteSchema,
@@ -20,6 +21,17 @@ import { base64urlEncode } from '../../utils/web-crypto'
 
 const safeIdSchema = z.number().int().positive().safe()
 const timestampSchema = z.iso.datetime({ offset: true }).max(40)
+const timestampInstantPattern = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/u
+const timestampInstantToken = (value: string): string => {
+  const match = timestampInstantPattern.exec(value)
+  if (!match) throw new Error('ADMIN_RESOURCE_TIMESTAMP_INVALID')
+  const wholeSecond = Date.parse(`${match[1]}${match[3]}`)
+  if (!Number.isFinite(wholeSecond)) throw new Error('ADMIN_RESOURCE_TIMESTAMP_INVALID')
+  return `${wholeSecond / 1000}:${(match[2] ?? '').replace(/0+$/u, '')}`
+}
+const sameResourceVersion = (left: string, right: string): boolean => (
+  timestampInstantToken(left) === timestampInstantToken(right)
+)
 const storedText = (maximum: number) => z.string().min(1).max(maximum)
   .refine(value => value === value.trim())
   .refine(value => [...value].every((character) => {
@@ -196,6 +208,12 @@ export const parseAdminResourceWrite = (input: unknown): AdminResourceWrite => {
   return parsed.data
 }
 
+export const parseAdminResourceTransition = (input: unknown): { expectedUpdatedAt: string } => {
+  const parsed = adminResourceTransitionSchema.safeParse(input)
+  if (!parsed.success) throw new AppError('RESOURCE_INVALID')
+  return parsed.data
+}
+
 export const parseAdminResourceUpdate = (input: unknown): {
   expectedUpdatedAt: string
   resource: AdminResourceWrite
@@ -217,7 +235,7 @@ export const parseAdminResourceJsonBody = async (
   contentType: string | undefined,
   rawBody: string | undefined,
 ): Promise<unknown> => {
-  if (!contentType?.toLowerCase().startsWith('application/json') || rawBody === undefined) {
+  if (!contentType || !/^application\/json(?:\s*;\s*charset\s*=\s*utf-8\s*)?$/iu.test(contentType) || rawBody === undefined) {
     throw new AppError('RESOURCE_INVALID')
   }
   if (new TextEncoder().encode(rawBody).byteLength > 1_048_576) throw new AppError('RESOURCE_INVALID')
@@ -257,9 +275,13 @@ export type AdminResourcesServiceDependencies = {
   }) => Promise<{ kind: 'updated', resource: StoredAdminResource } | { kind: 'conflict', current: StoredAdminResource }>
   transitionResource: (input: ResourceMutationContext & {
     id: number
+    expectedUpdatedAt: string
     status: 'active' | 'archived'
     changedFields: ['status']
-  }) => Promise<StoredAdminResource>
+  }) => Promise<
+    | { kind: 'updated', resource: StoredAdminResource }
+    | { kind: 'conflict', current: StoredAdminResource }
+  >
   attachImage: (input: ResourceMutationContext & {
     id: number
     expectedUpdatedAt: string
@@ -309,10 +331,23 @@ const publicResource = async (
   dependencies: AdminResourcesServiceDependencies,
   resource: StoredAdminResource,
 ) => {
-  const inventory = resource.type === 'equipment'
-    ? parseInventory(await dependencies.listInventory({ resourceId: resource.id }), resource.id)
-    : []
-  return { resource: withInventoryTruth(resource, inventory), inventory }
+  let current = parseStoredResource(resource)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (current.type !== 'equipment') return { resource: current, inventory: [] }
+    const inventory = parseInventory(
+      await dependencies.listInventory({ resourceId: current.id }),
+      current.id,
+    )
+    const reloadedRaw = await dependencies.loadResource({ id: current.id })
+    if (reloadedRaw === null) throw new AppError('RESOURCE_NOT_FOUND')
+    const reloaded = parseStoredResource(reloadedRaw)
+    if (reloaded.id !== current.id) throw new Error('ADMIN_RESOURCE_STORE_INVALID')
+    if (sameResourceVersion(current.updatedAt, reloaded.updatedAt)) {
+      return { resource: withInventoryTruth(reloaded, inventory), inventory }
+    }
+    current = reloaded
+  }
+  throw new Error('ADMIN_RESOURCE_SNAPSHOT_UNSTABLE')
 }
 
 const loadResource = async (dependencies: AdminResourcesServiceDependencies, id: number) => {
@@ -321,6 +356,14 @@ const loadResource = async (dependencies: AdminResourcesServiceDependencies, id:
   const resource = parseStoredResource(raw)
   if (resource.id !== id) throw new Error('ADMIN_RESOURCE_STORE_INVALID')
   return resource
+}
+
+const assertExpectedResourceVersion = (
+  resource: AdminResource,
+  expectedUpdatedAt: string,
+): void => {
+  if (sameResourceVersion(resource.updatedAt, expectedUpdatedAt)) return
+  throw new ResourceConflictError(resource)
 }
 
 const splitWrite = (write: AdminResourceWrite) => {
@@ -440,29 +483,40 @@ export const createAdminResourcesService = (dependencies: AdminResourcesServiceD
       resourceUpdatedAt: resourceUpdatedAt.data,
     }
   },
-  publish: async (id: number, context: ResourceMutationContext) => {
-    const resource = await loadResource(dependencies, id)
-    const inventory = resource.type === 'equipment'
-      ? parseInventory(await dependencies.listInventory({ resourceId: id }), id)
-      : []
-    assertPublishable(resource, inventory)
-    const published = parseStoredResource(await dependencies.transitionResource({
-      id, status: 'active', changedFields: ['status'], ...context,
-    }))
-    const committedInventory = published.type === 'equipment'
-      ? parseInventory(await dependencies.listInventory({ resourceId: id }), id)
-      : []
-    return {
-      resource: withInventoryTruth(published, committedInventory),
-      inventory: committedInventory,
+  publish: async (id: number, expectedUpdatedAt: string, context: ResourceMutationContext) => {
+    const current = await publicResource(dependencies, await loadResource(dependencies, id))
+    assertExpectedResourceVersion(current.resource, expectedUpdatedAt)
+    assertPublishable(current.resource, current.inventory)
+    const transition = await dependencies.transitionResource({
+      id, expectedUpdatedAt, status: 'active', changedFields: ['status'], ...context,
+    })
+    if (transition.kind === 'conflict') {
+      const current = await publicResource(dependencies, parseStoredResource(transition.current))
+      throw new ResourceConflictError(current.resource)
     }
+    const published = parseStoredResource(transition.resource)
+    const committed = await publicResource(dependencies, published)
+    if (!sameResourceVersion(published.updatedAt, committed.resource.updatedAt)) {
+      throw new ResourceConflictError(committed.resource)
+    }
+    return committed
   },
-  archive: async (id: number, context: ResourceMutationContext) => {
-    await loadResource(dependencies, id)
-    const archived = parseStoredResource(await dependencies.transitionResource({
-      id, status: 'archived', changedFields: ['status'], ...context,
-    }))
-    return publicResource(dependencies, archived)
+  archive: async (id: number, expectedUpdatedAt: string, context: ResourceMutationContext) => {
+    const current = await publicResource(dependencies, await loadResource(dependencies, id))
+    assertExpectedResourceVersion(current.resource, expectedUpdatedAt)
+    const transition = await dependencies.transitionResource({
+      id, expectedUpdatedAt, status: 'archived', changedFields: ['status'], ...context,
+    })
+    if (transition.kind === 'conflict') {
+      const current = await publicResource(dependencies, parseStoredResource(transition.current))
+      throw new ResourceConflictError(current.resource)
+    }
+    const archived = parseStoredResource(transition.resource)
+    const committed = await publicResource(dependencies, archived)
+    if (!sameResourceVersion(archived.updatedAt, committed.resource.updatedAt)) {
+      throw new ResourceConflictError(committed.resource)
+    }
+    return committed
   },
   uploadImage: async (
     id: number,
@@ -563,6 +617,12 @@ const resourceMutationErrorCodeSchema = z.enum([
 const mutationOutcomeSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('updated') }).strict(),
   z.object({ status: z.literal('conflict') }).strict(),
+  z.object({ status: z.literal('not_found') }).strict(),
+  z.object({ status: z.literal('validation_error'), code: resourceMutationErrorCodeSchema }).strict(),
+])
+const transitionOutcomeSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('updated'), resourceUpdatedAt: timestampSchema }).strict(),
+  z.object({ status: z.literal('conflict'), resourceUpdatedAt: timestampSchema }).strict(),
   z.object({ status: z.literal('not_found') }).strict(),
   z.object({ status: z.literal('validation_error'), code: resourceMutationErrorCodeSchema }).strict(),
 ])
@@ -701,17 +761,23 @@ export const createSupabaseAdminResourcesDependencies = (
     transitionResource: async (input) => {
       const { data, error } = await client.rpc('transition_admin_resource', {
         p_admin_user_id: input.adminUserId,
+        p_expected_updated_at: input.expectedUpdatedAt,
         p_request_id: input.requestId,
         p_resource_id: input.id,
         p_status: input.status,
       })
       if (error) storeError()
-      const outcome = mutationOutcomeSchema.safeParse(data)
+      const outcome = transitionOutcomeSchema.safeParse(data)
       if (!outcome.success) return storeError()
-      if (outcome.data.status !== 'updated') throwMutationOutcome(outcome.data)
-      const transitioned = await adapter.loadResource({ id: input.id })
-      if (transitioned === null) throw new AppError('RESOURCE_NOT_FOUND')
-      return transitioned
+      if (outcome.data.status === 'not_found' || outcome.data.status === 'validation_error') {
+        throwMutationOutcome(outcome.data)
+      }
+      const current = await adapter.loadResource({ id: input.id })
+      if (current === null) throw new AppError('RESOURCE_NOT_FOUND')
+      return outcome.data.status === 'updated'
+        && sameResourceVersion(current.updatedAt, outcome.data.resourceUpdatedAt)
+        ? { kind: 'updated', resource: current }
+        : { kind: 'conflict', current }
     },
     attachImage: async (input) => {
       const { data, error } = await client.rpc('attach_admin_resource_image', {

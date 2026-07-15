@@ -1,6 +1,6 @@
 begin;
 
-select plan(87);
+select plan(99);
 
 create function pg_temp.capture_json(p_sql text)
 returns jsonb
@@ -16,6 +16,27 @@ exception when others then
 end;
 $$;
 
+create function pg_temp.transition_admin_resource_current(
+  p_admin_user_id uuid,
+  p_request_id uuid,
+  p_resource_id bigint,
+  p_status text
+)
+returns jsonb
+language sql
+as $$
+  select public.transition_admin_resource(
+    p_admin_user_id,
+    coalesce(
+      (select updated_at from public.resources where id = p_resource_id),
+      pg_catalog.now()
+    ),
+    p_request_id,
+    p_resource_id,
+    p_status
+  )
+$$;
+
 select ok(coalesce((select relrowsecurity from pg_catalog.pg_class where oid = 'public.resources'::regclass), false), 'resources keep RLS enabled');
 select ok(coalesce((select relforcerowsecurity from pg_catalog.pg_class where oid = 'public.resources'::regclass), false), 'resources keep RLS forced');
 select policies_are('public', 'resources', array[]::text[], 'resources remain default deny');
@@ -29,11 +50,13 @@ select table_privs_are('public', 'equipment_inventory_items', 'service_role', ar
 
 select has_function('public', 'create_admin_resource', array['uuid', 'uuid', 'jsonb', 'jsonb']);
 select has_function('public', 'update_admin_resource', array['uuid', 'timestamptz', 'uuid', 'bigint', 'jsonb', 'jsonb']);
-select has_function('public', 'transition_admin_resource', array['uuid', 'uuid', 'bigint', 'text']);
+select has_function('public', 'transition_admin_resource', array['uuid', 'timestamptz', 'uuid', 'bigint', 'text']);
+select hasnt_function('public', 'transition_admin_resource', array['uuid', 'uuid', 'bigint', 'text']);
 select has_function('public', 'attach_admin_resource_image', array['uuid', 'timestamptz', 'text', 'uuid', 'bigint']);
 select function_privs_are('public', 'create_admin_resource', array['uuid', 'uuid', 'jsonb', 'jsonb'], 'service_role', array['EXECUTE']);
 select function_privs_are('public', 'update_admin_resource', array['uuid', 'timestamptz', 'uuid', 'bigint', 'jsonb', 'jsonb'], 'service_role', array['EXECUTE']);
-select function_privs_are('public', 'transition_admin_resource', array['uuid', 'uuid', 'bigint', 'text'], 'service_role', array['EXECUTE']);
+select function_privs_are('public', 'transition_admin_resource', array['uuid', 'timestamptz', 'uuid', 'bigint', 'text'], 'service_role', array['EXECUTE']);
+select function_privs_are('public', 'transition_admin_resource', array['uuid', 'timestamptz', 'uuid', 'bigint', 'text'], 'authenticated', array[]::text[]);
 select function_privs_are('public', 'attach_admin_resource_image', array['uuid', 'timestamptz', 'text', 'uuid', 'bigint'], 'service_role', array['EXECUTE']);
 select function_privs_are('public', 'create_admin_resource', array['uuid', 'uuid', 'jsonb', 'jsonb'], 'authenticated', array[]::text[]);
 
@@ -94,15 +117,121 @@ select is(
   'stale optimistic update returns a conflict signal without writing'
 );
 
+create temp table transition_stale_before as
+select
+  r.status,
+  r.updated_at,
+  (select count(*) from public.audit_events) as audit_count
+from public.resources r
+where r.title = '관리 API 검증 교과 수정';
+
 select is(
-  public.transition_admin_resource(
+  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '2020-01-01T00:00:00Z',
+    '77777777-7777-4777-8777-777777777777',
+    (select id from public.resources where title = '관리 API 검증 교과 수정'),
+    'active'
+  ))$capture$) ->> 'status',
+  'conflict',
+  'stale publish returns a closed conflict outcome'
+);
+select is(
+  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '2020-01-01T00:00:00Z',
+    '77777777-7777-4777-8777-777777777777',
+    (select id from public.resources where title = '관리 API 검증 교과 수정'),
+    'archived'
+  ))$capture$) ->> 'status',
+  'conflict',
+  'stale archive returns a closed conflict outcome'
+);
+select is(
+  (select pg_catalog.jsonb_build_object('status', status, 'updatedAt', updated_at)
+   from public.resources where title = '관리 API 검증 교과 수정'),
+  (select pg_catalog.jsonb_build_object('status', status, 'updatedAt', updated_at)
+   from transition_stale_before),
+  'stale transitions do not mutate the resource row'
+);
+select is(
+  (select count(*) from public.audit_events),
+  (select audit_count from transition_stale_before),
+  'stale transitions do not write audit events'
+);
+select is(
+  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    (select updated_at from public.resources where title = '관리 API 검증 교과 수정'),
+    '77777777-7777-4777-8777-777777777777',
+    (select id from public.resources where title = '관리 API 검증 교과 수정'),
+    null::text
+  ))$capture$) ->> 'code',
+  'RESOURCE_INVALID',
+  'null transition status returns a closed invalid outcome'
+);
+select is(
+  (select pg_catalog.jsonb_build_object('status', status, 'updatedAt', updated_at)
+   from public.resources where title = '관리 API 검증 교과 수정'),
+  (select pg_catalog.jsonb_build_object('status', status, 'updatedAt', updated_at)
+   from transition_stale_before),
+  'null transition status does not mutate the resource row'
+);
+select is(
+  (select count(*) from public.audit_events),
+  (select audit_count from transition_stale_before),
+  'null transition status does not write audit events'
+);
+select is(
+  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '2020-01-01T00:00:00Z',
+    '77777777-7777-4777-8777-777777777777',
+    (select id from public.resources where title = '관리 API 검증 교과 수정'),
+    'active'
+  ))$capture$) ->> 'resourceUpdatedAt',
+  (select pg_catalog.to_jsonb(updated_at) #>> '{}' from public.resources where title = '관리 API 검증 교과 수정'),
+  'conflict transition outcome includes the locked row version'
+);
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('public.transition_admin_resource(uuid,timestamptz,uuid,bigint,text)')),
+    'for update'
+  ) > 0
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('public.transition_admin_resource(uuid,timestamptz,uuid,bigint,text)')),
+    'for update'
+  ) < pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('public.transition_admin_resource(uuid,timestamptz,uuid,bigint,text)')),
+    'v_current.updated_at <> p_expected_updated_at'
+  )
+  and pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('public.transition_admin_resource(uuid,timestamptz,uuid,bigint,text)')),
+    'v_current.updated_at <> p_expected_updated_at'
+  ) < pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('public.transition_admin_resource(uuid,timestamptz,uuid,bigint,text)')),
+    'if p_status = ''active'''
+  ),
+  'transition locks the parent then checks the optimistic version before publish validation'
+);
+
+create temp table transition_publish_outcome as
+select pg_temp.transition_admin_resource_current(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '77777777-7777-4777-8777-777777777777',
     (select id from public.resources where title = '관리 API 검증 교과 수정'),
     'active'
-  ) ->> 'status',
+  ) as outcome;
+
+select is(
+  (select outcome ->> 'status' from transition_publish_outcome),
   'updated',
   'validated resource can be published'
+);
+select is(
+  (select outcome ->> 'resourceUpdatedAt' from transition_publish_outcome),
+  (select pg_catalog.to_jsonb(updated_at) #>> '{}' from public.resources where title = '관리 API 검증 교과 수정'),
+  'updated transition outcome includes the locked committed version'
 );
 
 select is((select status from public.resources where title = '관리 API 검증 교과 수정'), 'active', 'publish moves the row to active');
@@ -113,7 +242,7 @@ select is(
 );
 
 select is(
-  public.transition_admin_resource(
+  pg_temp.transition_admin_resource_current(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '77777777-7777-4777-8777-777777777777',
     (select id from public.resources where title = '관리 API 검증 교과 수정'),
@@ -158,7 +287,7 @@ select is(
   'resource update returns a stable not-found outcome'
 );
 select is(
-  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+  pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     '77777777-7777-4777-8777-777777777777', 9223372036854775807, 'active'
   ))$capture$) ->> 'status',
@@ -219,119 +348,119 @@ select id, 'CAM-001', 1, 'department_equipment_room', 'reservation',
 from public.resources where title = 'SQL 재고 기자재';
 
 update public.resources set metadata = metadata || '{"academic_year":2026.5}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course academic year must be an integer');
 update public.resources set status = 'draft', metadata = metadata || '{"academic_year":2101}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course academic year stays in range');
 update public.resources set status = 'draft', metadata = metadata || '{"academic_year":2026,"grade_year":1.5}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course grade must be an integer');
 update public.resources set status = 'draft', metadata = metadata || '{"grade_year":5}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course grade stays in range');
 update public.resources set status = 'draft', metadata = metadata || '{"grade_year":1,"credits":3.5}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course credits must be an integer');
 update public.resources set status = 'draft', metadata = metadata || '{"credits":31}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course credits stay in range');
 update public.resources set status = 'draft', metadata = metadata || '{"credits":3,"term":" 1학기"}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course term must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"term":"1학기","goal":"기초 익히기 "}'::jsonb where title = 'SQL 엄격 교과';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 교과'), 'active'))$capture$) ->> 'code',
   'COURSE_METADATA_REQUIRED', 'course goal must already be trimmed');
 
 update public.resources set metadata = metadata || '{"consent_at":"2026-07-14"}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_CONSENT_REQUIRED', 'work consent requires a strict offset timestamp');
 update public.resources set status = 'draft', metadata = metadata || '{"consent_at":"infinity"}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_CONSENT_REQUIRED', 'work consent rejects infinite timestamps');
 update public.resources set status = 'draft', metadata = metadata || '{"consent_at":"2999-01-01T00:00:00Z"}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_CONSENT_REQUIRED', 'work consent cannot be in the future');
 update public.resources set status = 'draft', metadata = metadata || '{"consent_at":"2026-07-14T01:00:00Z","image_alt":" 작품"}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_MEDIA_REQUIRED', 'work image alt must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"image_alt":"작품","related_course":"기초사진 "}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_RELATION_REQUIRED', 'work related course must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"related_course":"기초사진","related_year":1.5}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_RELATION_REQUIRED', 'work related year must be an integer');
 update public.resources set status = 'draft', metadata = metadata || '{"related_year":1,"related_track":"Photo Track"}'::jsonb where title = 'SQL 엄격 작품';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 작품'), 'active'))$capture$) ->> 'code',
   'WORK_RELATION_REQUIRED', 'work track uses the stable key format');
 
 update public.resources set metadata = metadata || '{"location_label":" 본관"}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility location must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"location_label":"본관","operation_note":"예약 운영 "}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility operation note must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"operation_note":"예약 운영","activities":[]}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility requires at least one activity');
 update public.resources set status = 'draft', metadata = metadata || '{"activities":[" 촬영"]}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility activities must already be trimmed');
 update public.resources set status = 'draft', metadata = metadata || '{"activities":["촬영"],"last_verified_at":"2026-07-14"}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility verification requires a strict offset timestamp');
 update public.resources set status = 'draft', metadata = metadata || '{"last_verified_at":"infinity"}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility verification rejects infinite timestamps');
 update public.resources set status = 'draft', metadata = metadata || '{"last_verified_at":"2999-01-01T00:00:00Z"}'::jsonb where title = 'SQL 엄격 시설';
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 엄격 시설'), 'active'))$capture$) ->> 'code',
   'FACILITY_OPERATION_UNVERIFIED', 'facility verification cannot be in the future');
 
-select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(public.transition_admin_resource(
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
   (select id from public.resources where title = 'SQL 재고 기자재'), 'active'))$capture$) ->> 'status',
   'updated', 'equipment publish returns the closed updated outcome');

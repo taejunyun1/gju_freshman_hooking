@@ -126,6 +126,10 @@ export const adminResourceUpdateSchema = z.object({
   resource: adminResourceWriteSchema,
 }).strict()
 
+export const adminResourceTransitionSchema = z.object({
+  expectedUpdatedAt: z.iso.datetime({ offset: true }).max(40),
+}).strict()
+
 export const adminEquipmentInventoryItemSchema = z.object({
   id: z.number().int().positive().safe(),
   equipmentResourceId: z.number().int().positive().safe(),
@@ -178,5 +182,6 @@ export const adminResourceSchema = z.discriminatedUnion('type', [
 
 export type AdminResourceWrite = z.infer<typeof adminResourceWriteSchema>
 export type AdminResource = z.infer<typeof adminResourceSchema>
+export type AdminResourceTransition = z.infer<typeof adminResourceTransitionSchema>
 export type AdminEquipmentInventoryItem = z.infer<typeof adminEquipmentInventoryItemSchema>
 export type AdminEquipmentInventoryUpdate = z.infer<typeof adminEquipmentInventoryUpdateSchema>

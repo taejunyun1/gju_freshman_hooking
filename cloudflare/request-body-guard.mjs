@@ -3,6 +3,7 @@ export const MAX_REQUEST_BODY_BYTES = 8_192
 export const DEFAULT_MAX_REQUEST_BODY_BYTES = 65_536
 export const RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES = 512 * 1024
 export const RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024 + 64 * 1024
+export const RESOURCE_TRANSITION_MAX_REQUEST_BODY_BYTES = 1024
 export const requestBodyOverflowHeader = 'x-photo-next-body-overflow'
 
 const requestBodyLimitOverrides = new Map([
@@ -12,6 +13,7 @@ const requestBodyLimitOverrides = new Map([
 ])
 
 const resourceImagePathPattern = /^\/api\/admin\/resources\/[1-9][0-9]{0,15}\/image$/u
+const resourceTransitionPathPattern = /^\/api\/admin\/resources\/[1-9][0-9]{0,15}\/(?:publish|archive)$/u
 
 const normalizeGuardedPath = (pathname) => {
   let decodedPath = pathname
@@ -30,6 +32,7 @@ const nitroBuffersRequestBody = request => /post|put|patch/iu.test(request.metho
 const requestBodyLimit = (request) => {
   const path = normalizeGuardedPath(new URL(request.url).pathname)
   if (resourceImagePathPattern.test(path)) return RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES
+  if (resourceTransitionPathPattern.test(path)) return RESOURCE_TRANSITION_MAX_REQUEST_BODY_BYTES
   return requestBodyLimitOverrides.get(path) ?? DEFAULT_MAX_REQUEST_BODY_BYTES
 }
 

@@ -40,6 +40,7 @@ const logout = async (): Promise<void> => {
         <NuxtLink to="/admin">운영 홈</NuxtLink>
         <NuxtLink to="/admin/students">학생 찾기</NuxtLink>
         <NuxtLink to="/admin/counseling">상담 운영</NuxtLink>
+        <NuxtLink to="/admin/resources">학과 자원</NuxtLink>
         <NuxtLink to="/admin/recovery">복구 대기열</NuxtLink>
       </nav>
 

@@ -3,6 +3,7 @@ const decoder = new TextDecoder('utf-8', { fatal: false })
 
 export const MAX_REQUEST_BODY_BYTES = 8_192
 export const RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES = 512 * 1024
+export const RESOURCE_TRANSITION_MAX_REQUEST_BODY_BYTES = 1024
 export const RESOURCE_IMAGE_FILE_MAX_BYTES = 8 * 1024 * 1024
 export const RESOURCE_IMAGE_MULTIPART_OVERHEAD_BYTES = 64 * 1024
 export const RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES = (

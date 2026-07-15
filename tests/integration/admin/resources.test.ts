@@ -17,6 +17,7 @@ import {
   createSupabaseAdminResourcesDependencies,
   decodeAdminResourceRow,
   encodeAdminResourcesCursor,
+  parseAdminResourceJsonBody,
   parseAdminResourceWrite,
   type AdminResourcesServiceDependencies,
 } from '../../../server/modules/admin/resources'
@@ -61,6 +62,30 @@ const storedResource = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+const rawResourceRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 42,
+  type: 'course',
+  title: '사진영상학개론',
+  summary: '사진과 영상의 기초를 익힙니다.',
+  connection_template: '{interest}를 {title}에서 실현합니다.',
+  status: 'draft',
+  visibility: 'public',
+  priority: 10,
+  source_date: '2026-07-14',
+  metadata: {
+    academic_year: 2026,
+    grade_year: 1,
+    term: '1학기',
+    credits: 3,
+    goal: '촬영 기초를 익힌다.',
+  },
+  image_path: null,
+  created_at: createdAt,
+  updated_at: updatedAt,
+  resource_tags: [{ tag_key: 'photography', weight: 3, is_primary: true }],
+  ...overrides,
+})
+
 const inventory = (overrides: Record<string, unknown> = {}) => ({
   id: 1,
   equipmentResourceId: 42,
@@ -90,7 +115,10 @@ const dependencies = (
     ...input.resource,
     tags: input.tags,
   }) })),
-  transitionResource: vi.fn(async input => storedResource({ status: input.status })),
+  transitionResource: vi.fn(async input => ({
+    kind: 'updated' as const,
+    resource: storedResource({ status: input.status }),
+  })),
   attachImage: vi.fn(async () => ({
     kind: 'committed' as const,
     resourceId: 42,
@@ -286,6 +314,22 @@ describe('administrator resource list and detail', () => {
 })
 
 describe('administrator resource writes', () => {
+  it('accepts only the exact JSON media type with at most one UTF-8 charset parameter', async () => {
+    await expect(parseAdminResourceJsonBody('application/json', '{}')).resolves.toEqual({})
+    await expect(parseAdminResourceJsonBody('Application/JSON; Charset=UTF-8', '{}')).resolves.toEqual({})
+
+    for (const contentType of [
+      'application/jsonp',
+      'application/json.evil',
+      'application/json; charset=utf-8; charset=utf-8',
+      'application/json; profile=admin',
+      'application/json; charset=utf-16',
+    ]) {
+      await expect(parseAdminResourceJsonBody(contentType, '{}'))
+        .rejects.toThrowError(new AppError('RESOURCE_INVALID'))
+    }
+  })
+
   it('strictly validates tags and type-specific metadata before any write', () => {
     expect(() => parseAdminResourceWrite({
       ...courseWrite(),
@@ -405,6 +449,7 @@ describe('administrator resource writes', () => {
     } as never)
     await expect(publishAdapter.transitionResource({
       id: 42,
+      expectedUpdatedAt: updatedAt,
       status: 'active',
       changedFields: ['status'],
       adminUserId: admin.userId,
@@ -531,6 +576,235 @@ describe('administrator equipment inventory writes', () => {
 
 describe('publishing, archiving, and inventory truth', () => {
   it.each([
+    ['publish', createPublishAdminResourceHandler],
+    ['archive', createArchiveAdminResourceHandler],
+  ] as const)('requires a strict bounded optimistic-lock body before %s', async (_label, createHandler) => {
+    const malformedBodies = [
+      { contentType: 'application/json', body: undefined },
+      { contentType: 'application/json', body: 'null' },
+      { contentType: 'application/json', body: '{}' },
+      { contentType: 'application/json', body: JSON.stringify({ expectedUpdatedAt: updatedAt, extra: true }) },
+      { contentType: 'text/plain', body: JSON.stringify({ expectedUpdatedAt: updatedAt }) },
+    ]
+
+    for (const malformed of malformedBodies) {
+      const transitionResource = vi.fn(async input => ({
+        kind: 'updated' as const,
+        resource: storedResource({ status: input.status }),
+      }))
+      const target = event()
+      const handler = createHandler({
+        resources: createAdminResourcesService(dependencies({ transitionResource })),
+        getContentType: () => malformed.contentType,
+        getParam: () => '42',
+        readRawBody: async () => malformed.body,
+        requireAdmin: async () => admin,
+        ...responseDependencies(target),
+      } as never)
+
+      expect(await handler(target)).toMatchObject({ error: { code: 'RESOURCE_INVALID' } })
+      expect(transitionResource).not.toHaveBeenCalled()
+    }
+
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({ status: input.status }),
+    }))
+    const target = event()
+    const oversized = createHandler({
+      resources: createAdminResourcesService(dependencies({ transitionResource })),
+      getContentType: () => 'application/json',
+      getParam: () => '42',
+      readRawBody: async () => { throw new RequestBodyLimitError() },
+      requireAdmin: async () => admin,
+      ...responseDependencies(target),
+    } as never)
+    expect(await oversized(target)).toMatchObject({ error: { code: 'RESOURCE_INVALID' } })
+    expect(transitionResource).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['publish', 'active', createPublishAdminResourceHandler],
+    ['archive', 'archived', createArchiveAdminResourceHandler],
+  ] as const)('passes expectedUpdatedAt into the atomic %s transition', async (_label, status, createHandler) => {
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({ status: input.status }),
+    }))
+    const target = event()
+    const handler = createHandler({
+      resources: createAdminResourcesService(dependencies({ transitionResource: transitionResource as never })),
+      getParam: () => '42',
+      requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
+      ...responseDependencies(target),
+    } as never)
+
+    expect(await handler(target)).toMatchObject({ data: { resource: { status } } })
+    expect(transitionResource).toHaveBeenCalledWith({
+      id: 42,
+      expectedUpdatedAt: updatedAt,
+      status,
+      adminUserId: admin.userId,
+      requestId,
+      changedFields: ['status'],
+    })
+  })
+
+  it.each([
+    ['publish', 'active'] as const,
+    ['archive', 'archived'] as const,
+  ])('treats an equivalent offset timestamp as the same optimistic instant for %s', async (method, status) => {
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({ status: input.status }),
+    }))
+    const service = createAdminResourcesService(dependencies({ transitionResource }))
+    const equivalentOffset = '2026-07-15T11:00:00+09:00'
+
+    const response = method === 'publish'
+      ? await service.publish(42, equivalentOffset, { adminUserId: admin.userId, requestId })
+      : await service.archive(42, equivalentOffset, { adminUserId: admin.userId, requestId })
+
+    expect(response.resource.status).toBe(status)
+    expect(transitionResource).toHaveBeenCalledWith(expect.objectContaining({
+      expectedUpdatedAt: equivalentOffset,
+    }))
+  })
+
+  it.each([
+    ['publish', createPublishAdminResourceHandler],
+    ['archive', createArchiveAdminResourceHandler],
+  ] as const)('returns a strict current public DTO when a stale %s loses the lock', async (_label, createHandler) => {
+    const current = storedResource({ title: '다른 관리자가 먼저 전환함', updatedAt: '2026-07-15T03:00:00.000Z' })
+    const target = event()
+    const handler = createHandler({
+      resources: createAdminResourcesService(dependencies({
+        transitionResource: vi.fn(async () => ({ kind: 'conflict' as const, current })) as never,
+      })),
+      getParam: () => '42',
+      requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
+      ...responseDependencies(target),
+    } as never)
+
+    const response = await handler(target)
+
+    expect(target.status).toBe(409)
+    expect(response).toMatchObject({ error: {
+      code: 'RESOURCE_CONFLICT',
+      current: { id: 42, title: '다른 관리자가 먼저 전환함', updatedAt: '2026-07-15T03:00:00.000Z' },
+    } })
+    expect(JSON.stringify(response)).not.toContain('connection_template')
+  })
+
+  it.each([
+    ['publish', createPublishAdminResourceHandler],
+    ['archive', createArchiveAdminResourceHandler],
+  ] as const)('prioritizes the loaded version conflict before %s validation and the RPC race check', async (_label, createHandler) => {
+    const current = storedResource({
+      metadata: {},
+      title: '최신 본은 아직 게시 검증 전',
+      updatedAt: '2026-07-15T03:00:00.000Z',
+    })
+    const transitionResource = vi.fn(async () => ({
+      kind: 'updated' as const,
+      resource: current,
+    }))
+    const target = event()
+    const handler = createHandler({
+      resources: createAdminResourcesService(dependencies({
+        loadResource: vi.fn(async () => current),
+        transitionResource,
+      })),
+      getParam: () => '42',
+      requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
+      ...responseDependencies(target),
+    } as never)
+
+    expect(await handler(target)).toMatchObject({ error: {
+      code: 'RESOURCE_CONFLICT',
+      current: { title: '최신 본은 아직 게시 검증 전', updatedAt: '2026-07-15T03:00:00.000Z' },
+    } })
+    expect(target.status).toBe(409)
+    expect(transitionResource).not.toHaveBeenCalled()
+  })
+
+  it('forwards the optimistic version to the transition RPC', async () => {
+    const rpc = vi.fn(async () => ({
+      data: { status: 'validation_error', code: 'COURSE_METADATA_REQUIRED' },
+      error: null,
+    }))
+    const adapter = createSupabaseAdminResourcesDependencies({ rpc } as never)
+
+    await expect(adapter.transitionResource({
+      id: 42,
+      expectedUpdatedAt: updatedAt,
+      status: 'active',
+      changedFields: ['status'],
+      adminUserId: admin.userId,
+      requestId,
+    } as never)).rejects.toMatchObject({ code: 'COURSE_METADATA_REQUIRED' })
+    expect(rpc).toHaveBeenCalledWith('transition_admin_resource', {
+      p_admin_user_id: admin.userId,
+      p_expected_updated_at: updatedAt,
+      p_request_id: requestId,
+      p_resource_id: 42,
+      p_status: 'active',
+    })
+  })
+
+  it('strictly requires a locked resource version in updated and conflict transition outcomes', async () => {
+    for (const status of ['updated', 'conflict'] as const) {
+      const from = vi.fn()
+      const adapter = createSupabaseAdminResourcesDependencies({
+        from,
+        rpc: vi.fn(async () => ({ data: { status }, error: null })),
+      } as never)
+
+      await expect(adapter.transitionResource({
+        id: 42,
+        expectedUpdatedAt: updatedAt,
+        status: 'active',
+        changedFields: ['status'],
+        adminUserId: admin.userId,
+        requestId,
+      })).rejects.toThrow('ADMIN_RESOURCE_STORE_FAILED')
+      expect(from).not.toHaveBeenCalled()
+    }
+  })
+
+  it('promotes a committed transition to a conflict when the reload has a later version', async () => {
+    const committedAt = '2026-07-15T03:00:00.000Z'
+    const laterAt = '2026-07-15T04:00:00.000Z'
+    const query = {
+      eq: () => query,
+      maybeSingle: async () => ({ data: rawResourceRow({ updated_at: laterAt, title: '후속 변경' }), error: null }),
+      select: () => query,
+    }
+    const adapter = createSupabaseAdminResourcesDependencies({
+      from: vi.fn(() => query),
+      rpc: vi.fn(async () => ({
+        data: { status: 'updated', resourceUpdatedAt: committedAt },
+        error: null,
+      })),
+    } as never)
+
+    await expect(adapter.transitionResource({
+      id: 42,
+      expectedUpdatedAt: updatedAt,
+      status: 'active',
+      changedFields: ['status'],
+      adminUserId: admin.userId,
+      requestId,
+    })).resolves.toMatchObject({
+      kind: 'conflict',
+      current: { title: '후속 변경', updatedAt: laterAt },
+    })
+  })
+
+  it.each([
     ['course metadata', storedResource({ metadata: {} }), 'COURSE_METADATA_REQUIRED'],
     ['work consent', storedResource({ type: 'student_work', metadata: {}, imagePath: 'resources/42/work.webp' }), 'WORK_CONSENT_REQUIRED'],
     ['work media', storedResource({ type: 'student_work', metadata: {
@@ -548,19 +822,27 @@ describe('publishing, archiving, and inventory truth', () => {
       resources: createAdminResourcesService(dependencies({ loadResource: vi.fn(async () => resource) })),
       getParam: () => '42',
       requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
       ...responseDependencies(target),
     })
     expect(await handler(target)).toMatchObject({ error: { code } })
   })
 
   it('counts only verified inventory and publishes through an audited transaction', async () => {
-    const transitionResource = vi.fn(async input => storedResource({
-      type: 'equipment', status: input.status, metadata: {},
+    const draftEquipment = storedResource({ type: 'equipment', metadata: {} })
+    const activeEquipment = storedResource({ type: 'equipment', status: 'active', metadata: {} })
+    const loadResource = vi.fn()
+      .mockResolvedValueOnce(draftEquipment)
+      .mockResolvedValueOnce(draftEquipment)
+      .mockResolvedValue(activeEquipment)
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({ type: 'equipment', status: input.status, metadata: {} }),
     }))
     const target = event()
     const handler = createPublishAdminResourceHandler({
       resources: createAdminResourcesService(dependencies({
-        loadResource: vi.fn(async () => storedResource({ type: 'equipment', metadata: {} })),
+        loadResource,
         listInventory: vi.fn(async () => [
           inventory(),
           inventory({ id: 2, dataQualityStatus: 'duplicate_code', sourceRow: 2 }),
@@ -571,12 +853,14 @@ describe('publishing, archiving, and inventory truth', () => {
       })),
       getParam: () => '42',
       requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
       ...responseDependencies(target),
     })
     const response = await handler(target)
 
     expect(transitionResource).toHaveBeenCalledWith({
       id: 42,
+      expectedUpdatedAt: updatedAt,
       status: 'active',
       adminUserId: admin.userId,
       requestId,
@@ -594,8 +878,11 @@ describe('publishing, archiving, and inventory truth', () => {
         inventory(),
         inventory({ id: 2, inventoryCode: 'CAM-002', sourceRow: 2 }),
       ])
-    const transitionResource = vi.fn(async input => storedResource({
-      type: 'equipment', status: input.status, metadata: { confirmedQuantity: 2 },
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({
+        type: 'equipment', status: input.status, metadata: { confirmedQuantity: 2 },
+      }),
     }))
     const service = createAdminResourcesService(dependencies({
       loadResource: vi.fn(async () => storedResource({ type: 'equipment', metadata: {} })),
@@ -603,25 +890,105 @@ describe('publishing, archiving, and inventory truth', () => {
       transitionResource,
     }))
 
-    const response = await service.publish(42, { adminUserId: admin.userId, requestId })
+    const response = await service.publish(42, updatedAt, { adminUserId: admin.userId, requestId })
 
     expect(listInventory).toHaveBeenCalledTimes(2)
     expect(response.resource.metadata).toMatchObject({ confirmedQuantity: 2 })
     expect(response.inventory).toHaveLength(2)
   })
 
+  it('retries resource-inventory-resource reads until an equipment snapshot has one version', async () => {
+    const laterAt = '2026-07-15T03:00:00.000Z'
+    const loadResource = vi.fn()
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt }))
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt: laterAt }))
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt: laterAt }))
+    const listInventory = vi.fn()
+      .mockResolvedValueOnce([inventory()])
+      .mockResolvedValueOnce([
+        inventory({ updatedAt: laterAt }),
+        inventory({ id: 2, inventoryCode: 'CAM-002', sourceRow: 2, updatedAt: laterAt }),
+      ])
+    const service = createAdminResourcesService(dependencies({ loadResource, listInventory }))
+
+    const response = await service.detail(42)
+
+    expect(response.resource.updatedAt).toBe(laterAt)
+    expect(response.resource.metadata).toMatchObject({ confirmedQuantity: 2 })
+    expect(response.inventory).toHaveLength(2)
+    expect(loadResource).toHaveBeenCalledTimes(3)
+    expect(listInventory).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails closed after three continuously changing equipment snapshot attempts', async () => {
+    const versions = [
+      updatedAt,
+      '2026-07-15T03:00:00.000Z',
+      '2026-07-15T04:00:00.000Z',
+      '2026-07-15T05:00:00.000Z',
+    ]
+    const loadResource = vi.fn()
+    for (const version of versions) {
+      loadResource.mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt: version }))
+    }
+    const listInventory = vi.fn(async () => [inventory()])
+    const service = createAdminResourcesService(dependencies({ loadResource, listInventory }))
+
+    await expect(service.detail(42)).rejects.toThrow('ADMIN_RESOURCE_SNAPSHOT_UNSTABLE')
+    expect(loadResource).toHaveBeenCalledTimes(4)
+    expect(listInventory).toHaveBeenCalledTimes(3)
+  })
+
+  it('returns latest strict conflict truth when equipment changes after a successful transition', async () => {
+    const committedAt = '2026-07-15T03:00:00.000Z'
+    const laterAt = '2026-07-15T04:00:00.000Z'
+    const latestInventory = [
+      inventory({ updatedAt: laterAt }),
+      inventory({ id: 2, inventoryCode: 'CAM-002', sourceRow: 2, updatedAt: laterAt }),
+    ]
+    const loadResource = vi.fn()
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt }))
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt }))
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt: laterAt }))
+      .mockResolvedValueOnce(storedResource({ type: 'equipment', metadata: {}, updatedAt: laterAt }))
+    const listInventory = vi.fn()
+      .mockResolvedValueOnce([inventory()])
+      .mockResolvedValueOnce(latestInventory)
+      .mockResolvedValueOnce(latestInventory)
+    const transitionResource = vi.fn(async () => ({
+      kind: 'updated' as const,
+      resource: storedResource({ type: 'equipment', status: 'active', metadata: {}, updatedAt: committedAt }),
+    }))
+    const service = createAdminResourcesService(dependencies({
+      loadResource,
+      listInventory,
+      transitionResource,
+    }))
+
+    await expect(service.publish(42, updatedAt, { adminUserId: admin.userId, requestId }))
+      .rejects.toMatchObject({
+        code: 'RESOURCE_CONFLICT',
+        current: { updatedAt: laterAt, metadata: { confirmedQuantity: 2 } },
+      })
+  })
+
   it('archives without deleting and records only changed field names', async () => {
-    const transitionResource = vi.fn(async input => storedResource({ status: input.status }))
+    const transitionResource = vi.fn(async input => ({
+      kind: 'updated' as const,
+      resource: storedResource({ status: input.status }),
+    }))
     const target = event()
     const handler = createArchiveAdminResourceHandler({
       resources: createAdminResourcesService(dependencies({ transitionResource })),
       getParam: () => '42',
       requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
       ...responseDependencies(target),
     })
     await handler(target)
     expect(transitionResource).toHaveBeenCalledWith({
       id: 42,
+      expectedUpdatedAt: updatedAt,
       status: 'archived',
       adminUserId: admin.userId,
       requestId,

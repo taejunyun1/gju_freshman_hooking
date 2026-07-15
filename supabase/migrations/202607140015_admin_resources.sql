@@ -147,6 +147,7 @@ $$;
 
 create function public.transition_admin_resource(
   p_admin_user_id uuid,
+  p_expected_updated_at timestamptz,
   p_request_id uuid,
   p_resource_id bigint,
   p_status text
@@ -166,6 +167,7 @@ declare
   v_verified_at text;
   v_verified_timestamp timestamptz;
   v_verified_quantity integer;
+  v_transition_updated_at timestamptz;
 begin
   if not exists (
     select 1 from public.admin_users
@@ -173,12 +175,22 @@ begin
   ) then
     raise exception using errcode = 'P0001', message = 'ADMIN_REQUIRED';
   end if;
-  if p_status not in ('active', 'archived') then
+  if p_expected_updated_at is null
+    or not pg_catalog.isfinite(p_expected_updated_at)
+    or p_status is null
+    or p_status not in ('active', 'archived')
+  then
     return '{"status":"validation_error","code":"RESOURCE_INVALID"}'::jsonb;
   end if;
   select * into v_current from public.resources where id = p_resource_id for update;
   if not found then
     return '{"status":"not_found"}'::jsonb;
+  end if;
+  if v_current.updated_at <> p_expected_updated_at then
+    return pg_catalog.jsonb_build_object(
+      'status', 'conflict',
+      'resourceUpdatedAt', v_current.updated_at
+    );
   end if;
 
   if p_status = 'active' then
@@ -305,7 +317,8 @@ begin
       metadata = case when v_current.type = 'equipment' and p_status = 'active'
         then v_current.metadata else metadata end,
       updated_at = pg_catalog.clock_timestamp()
-  where id = p_resource_id;
+  where id = p_resource_id
+  returning updated_at into v_transition_updated_at;
 
   insert into public.audit_events(
     admin_user_id, action, target_type, target_id, metadata, request_id
@@ -317,7 +330,10 @@ begin
     pg_catalog.jsonb_build_object('changedFields', pg_catalog.jsonb_build_array('status')),
     p_request_id
   );
-  return '{"status":"updated"}'::jsonb;
+  return pg_catalog.jsonb_build_object(
+    'status', 'updated',
+    'resourceUpdatedAt', v_transition_updated_at
+  );
 end;
 $$;
 
@@ -510,7 +526,7 @@ revoke all privileges on function public.create_admin_resource(uuid, uuid, jsonb
   from public, anon, authenticated, service_role;
 revoke all privileges on function public.update_admin_resource(uuid, timestamptz, uuid, bigint, jsonb, jsonb)
   from public, anon, authenticated, service_role;
-revoke all privileges on function public.transition_admin_resource(uuid, uuid, bigint, text)
+revoke all privileges on function public.transition_admin_resource(uuid, timestamptz, uuid, bigint, text)
   from public, anon, authenticated, service_role;
 revoke all privileges on function public.attach_admin_resource_image(uuid, timestamptz, text, uuid, bigint)
   from public, anon, authenticated, service_role;
@@ -519,6 +535,6 @@ revoke all privileges on function public.update_admin_resource_inventory(uuid, t
 
 grant execute on function public.create_admin_resource(uuid, uuid, jsonb, jsonb) to service_role;
 grant execute on function public.update_admin_resource(uuid, timestamptz, uuid, bigint, jsonb, jsonb) to service_role;
-grant execute on function public.transition_admin_resource(uuid, uuid, bigint, text) to service_role;
+grant execute on function public.transition_admin_resource(uuid, timestamptz, uuid, bigint, text) to service_role;
 grant execute on function public.attach_admin_resource_image(uuid, timestamptz, text, uuid, bigint) to service_role;
 grant execute on function public.update_admin_resource_inventory(uuid, timestamptz, bigint, bigint, uuid, jsonb) to service_role;
