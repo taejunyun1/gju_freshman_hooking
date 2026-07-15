@@ -156,6 +156,24 @@ describe('result master sequence', () => {
     expect(wrapper.findAll('[data-capability-evidence]')).toHaveLength(4)
   })
 
+  it('collapses the strongest capability evidence after combining facilities and equipment', async () => {
+    const raw = JSON.parse(JSON.stringify(makeResultSnapshot())) as unknown as {
+      resources: {
+        equipment: Array<{ affinity: number }>
+        facility: Array<{ affinity: number }>
+      }
+    }
+    raw.resources.facility[0]!.affinity = 95
+    raw.resources.equipment[0]!.affinity = 90
+
+    const wrapper = await mountTimeline(raw as unknown as ResultSnapshot)
+    const collapsed = wrapper.findAll('[data-capability-evidence]')
+
+    expect(collapsed).toHaveLength(2)
+    expect(collapsed[0]!.text()).toContain('스튜디오 A(호리존)')
+    expect(collapsed[1]!.text()).toContain('APUTURE 600X')
+  })
+
   it('allowlists capability display fields and sends the exact resource-open event', async () => {
     const raw = JSON.parse(JSON.stringify(makeResultSnapshot())) as ResultSnapshot & {
       resources: ResultSnapshot['resources'] & {
@@ -209,6 +227,7 @@ describe('result master sequence', () => {
     expect(faculty.get('a[href="tel:062-670-2338"]').exists()).toBe(true)
     expect(faculty.get('a[href="mailto:tjyun@gwangju.ac.kr"]').exists()).toBe(true)
     expect(faculty.get('a[href="https://www.taejunyun.com"]').exists()).toBe(true)
+    expect(faculty.get('[data-faculty-person="701"] h4').text()).toBe('윤태준 교수')
     expect(faculty.text()).not.toMatch(/배정 완료|자동 배정/u)
     expect(wrapper.get('[data-result-section="counseling"]').text()).toContain(
       '관리자가 실제 상담교수를 최종 배정',
@@ -238,5 +257,43 @@ describe('result master sequence', () => {
     expect(source).toContain('160ms')
     expect(reducedMotionCss).toMatch(/animation(?:-duration)?:\s*(?:none|0m?s)/u)
     expect(reducedMotionCss).toMatch(/transition(?:-duration)?:\s*(?:none|0m?s)/u)
+    expect(source).not.toContain('100vw')
+    expect(source).toMatch(/left:\s*calc\(100%\s*-\s*3\.1rem\)/u)
+  })
+
+  it('keeps long Korean labels, titles, reasons, and public contacts inside their tracks', async () => {
+    const raw = JSON.parse(JSON.stringify(makeResultSnapshot())) as unknown as {
+      selectedInterests: Array<{ label: string }>
+      faculty: {
+        primary: {
+          name: string
+          publicContacts: { email: string }
+        }
+      }
+      resources: {
+        course: Array<{ title: string, connectionReason: string }>
+      }
+      learningPath: Array<{ resources: Array<{ title: string, connectionReason: string }> }>
+    }
+    const longLabel = '긴관심사문구'.repeat(20)
+    const longTitle = '긴교과목이름'.repeat(20)
+    const longReason = '긴연결이유'.repeat(30)
+    const longEmail = `${'longaddress'.repeat(12)}@example.com`
+    raw.selectedInterests[0]!.label = longLabel
+    raw.resources.course[0]!.title = longTitle
+    raw.resources.course[0]!.connectionReason = longReason
+    raw.learningPath[0]!.resources[0]!.title = longTitle
+    raw.learningPath[0]!.resources[0]!.connectionReason = longReason
+    raw.faculty.primary.name = longTitle
+    raw.faculty.primary.publicContacts.email = longEmail
+
+    const wrapper = await mountTimeline(raw as unknown as ResultSnapshot)
+    const source = resultComponentSource()
+
+    expect(wrapper.text()).toContain(longLabel)
+    expect(wrapper.text()).toContain(longTitle)
+    expect(wrapper.text()).toContain(longReason)
+    expect(wrapper.get(`a[href="mailto:${longEmail}"]`).exists()).toBe(true)
+    expect(source.match(/overflow-wrap:\s*anywhere/gu)?.length ?? 0).toBeGreaterThanOrEqual(5)
   })
 })
