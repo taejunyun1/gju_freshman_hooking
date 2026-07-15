@@ -18,6 +18,8 @@ const publicMessages: Record<AppErrorCode, string> = {
   COUNSELING_INVALID: '상담 신청 내용을 다시 확인해 주세요.',
   COUNSELING_NOT_FOUND: '요청한 상담 내역을 찾을 수 없습니다.',
   COUNSELING_CONFLICT: '상담 처리 상태가 변경되었습니다. 최신 내용을 확인해 주세요.',
+  STUDENT_INVALID: '학생 검색 조건을 다시 확인해 주세요.',
+  STUDENT_NOT_FOUND: '요청한 학생 정보를 찾을 수 없습니다.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -35,6 +37,8 @@ const statusCodes: Record<AppErrorCode, number> = {
   COUNSELING_INVALID: 422,
   COUNSELING_NOT_FOUND: 404,
   COUNSELING_CONFLICT: 409,
+  STUDENT_INVALID: 422,
+  STUDENT_NOT_FOUND: 404,
 }
 
 export class AppError extends Error {
