@@ -1,9 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const revision = `sha256:${'a'.repeat(64)}`
 const storageKey = 'photo_next_assessment_v1'
+const publicId = '11111111-1111-4111-8111-111111111111'
+const idempotencyKey = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const session = {
   csrfToken: 'csrf-memory-token',
   expiresAt: '2026-07-14T12:00:00.000Z',
@@ -27,16 +29,21 @@ const catalog = {
 }
 const success = <T>(data: T) => ({ data, requestId: 'request-id' })
 
-const validScoredResult = () => ({
-  trackScores: { documentary: 9, art_photo: 4, commercial: 2, video: 1 },
-  rankedTracks: ['documentary', 'art_photo', 'commercial', 'video'],
-  interestVector: { field: 0.2 },
-})
-
 const deferred = <T>() => {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
   return { promise, resolve }
+}
+
+const mountPageWithStore = async () => {
+  const { default: AssessmentPage } = await import('../../../app/pages/assessment.vue')
+  const { useAssessmentStore } = await import('../../../app/stores/assessment')
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const wrapper = mount(AssessmentPage, {
+    global: { plugins: [pinia], stubs: { NuxtLink: true } },
+  })
+  return { store: useAssessmentStore(pinia), wrapper }
 }
 
 const mountPage = async () => {
@@ -50,6 +57,7 @@ describe('student assessment page', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubGlobal('navigateTo', vi.fn())
+    vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKey) })
     sessionStorage.clear()
   })
 
@@ -158,7 +166,7 @@ describe('student assessment page', () => {
     expect(scroll).toHaveBeenCalledTimes(2)
   })
 
-  it('disables final calculation until every assessment group is complete', async () => {
+  it('disables final submission until every assessment group is complete', async () => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       step: 3,
       selections: { work: [], result: [], style: [], career: ['career.photo'] },
@@ -173,10 +181,10 @@ describe('student assessment page', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="assessment-validate"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="assessment-submit"]').attributes('disabled')).toBeDefined()
   })
 
-  it('validates the final step with memory-only CSRF and exposes a temporary primary track label', async () => {
+  it('submits the final step with memory-only CSRF and idempotency, clears the draft, and navigates to the owned result', async () => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       step: 3,
       selections: {
@@ -192,8 +200,8 @@ describe('student assessment page', () => {
       if (url === '/api/student/session') return success(session)
       if (url === '/api/assessment/options') return success(catalog)
       if (url === '/api/events') return success({ accepted: true })
-      if (url === '/api/student/assessment/validate') {
-        return success(validScoredResult())
+      if (url === '/api/assessment/submit') {
+        return success({ publicId })
       }
       throw new Error(`unexpected ${url}`)
     })
@@ -201,20 +209,20 @@ describe('student assessment page', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
     await flushPromises()
 
-    expect(fetch).toHaveBeenCalledWith('/api/student/assessment/validate', expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith('/api/assessment/submit', expect.objectContaining({
+      body: expect.objectContaining({ idempotencyKey }),
       headers: { 'x-photo-next-csrf': 'csrf-memory-token' },
       method: 'POST',
     }))
-    expect(wrapper.get('[data-testid="validated-primary-track"]').text()).toContain('다큐멘터리')
-    const persisted = sessionStorage.getItem(storageKey) ?? ''
-    expect(persisted).not.toContain('csrf-memory-token')
-    expect(persisted).not.toContain('trackScores')
+    expect(globalThis.navigateTo).toHaveBeenCalledWith(`/result/${publicId}`)
+    expect(wrapper.find('[data-testid="validated-primary-track"]').exists()).toBe(false)
+    expect(sessionStorage.getItem(storageKey)).toBeNull()
   })
 
-  it('disables the assessment fieldset while validation is pending', async () => {
+  it('disables the assessment fieldset and announces progress while submission is pending', async () => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       step: 3,
       selections: {
@@ -226,30 +234,69 @@ describe('student assessment page', () => {
       careerOther: '',
       catalogRevision: revision,
     }))
-    const pendingValidation = deferred<unknown>()
+    const pendingSubmission = deferred<unknown>()
     vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
       if (url === '/api/student/session') return success(session)
       if (url === '/api/assessment/options') return success(catalog)
       if (url === '/api/events') return success({ accepted: true })
-      if (url === '/api/student/assessment/validate') return pendingValidation.promise
+      if (url === '/api/assessment/submit') return pendingSubmission.promise
       throw new Error(`unexpected ${url}`)
     }))
     const wrapper = await mountPage()
     await flushPromises()
 
-    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
 
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="assessment-submit"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[data-testid="assessment-submit"]').text()).toContain('제출 중')
     const before = sessionStorage.getItem(storageKey)
     await wrapper.get('[data-key="career.photo"]').trigger('click')
     expect(sessionStorage.getItem(storageKey)).toBe(before)
 
-    pendingValidation.resolve(success(validScoredResult()))
+    pendingSubmission.resolve(success({ publicId }))
     await flushPromises()
-    expect(wrapper.get('[data-testid="validated-primary-track"]').text()).toContain('다큐멘터리')
+    expect(globalThis.navigateTo).toHaveBeenCalledWith(`/result/${publicId}`)
   })
 
-  it('shows a distinct stale-catalog review state after validation reloads the options', async () => {
+  it('disables logout and does not call the logout API while assessment submission is pending', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: {
+        work: ['work.photo'],
+        result: ['result.portfolio'],
+        style: ['style.solo'],
+        career: ['career.photo'],
+      },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    const pendingSubmission = deferred<unknown>()
+    const fetch = vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') return success(catalog)
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/assessment/submit') return pendingSubmission.promise
+      if (url === '/api/student/logout') return success({ ok: true })
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
+    const logout = wrapper.get('[data-testid="logout"]')
+
+    expect(logout.attributes('disabled')).toBeDefined()
+    await logout.trigger('click')
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/student/logout')).toHaveLength(0)
+    expect(globalThis.navigateTo).not.toHaveBeenCalledWith('/login', { replace: true })
+
+    pendingSubmission.resolve(success({ publicId }))
+    await flushPromises()
+  })
+
+  it('shows a distinct stale-catalog review state after submission reloads the options', async () => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       step: 3,
       selections: {
@@ -273,14 +320,14 @@ describe('student assessment page', () => {
         return success({ ...catalog, catalogRevision: optionsLoads === 1 ? revision : `sha256:${'b'.repeat(64)}` })
       }
       if (url === '/api/events') return success({ accepted: true })
-      if (url === '/api/student/assessment/validate') throw stale
+      if (url === '/api/assessment/submit') throw stale
       throw new Error(`unexpected ${url}`)
     })
     vi.stubGlobal('$fetch', fetch)
     const wrapper = await mountPage()
     await flushPromises()
 
-    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="assessment-stale"]').text()).toContain('선택을 다시 확인')
@@ -320,14 +367,14 @@ describe('student assessment page', () => {
         return success(catalog)
       }
       if (url === '/api/events') return success({ accepted: true })
-      if (url === '/api/student/assessment/validate') throw stale
+      if (url === '/api/assessment/submit') throw stale
       throw new Error(`unexpected ${url}`)
     })
     vi.stubGlobal('$fetch', fetch)
     const wrapper = await mountPage()
     await flushPromises()
 
-    await wrapper.get('[data-testid="assessment-validate"]').trigger('click')
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="assessment-retry"]').trigger('click')
     await flushPromises()
@@ -335,8 +382,75 @@ describe('student assessment page', () => {
     expect(wrapper.get('[data-testid="assessment-stale"]').text()).toContain('선택을 다시 확인')
     expect(wrapper.text()).toContain('01 / 04')
     expect(wrapper.text()).toContain('영상 촬영하기')
-    expect(wrapper.find('[data-testid="assessment-validate"]').exists()).toBe(false)
-    expect(fetch.mock.calls.filter(([url]) => url === '/api/student/assessment/validate')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="assessment-submit"]').exists()).toBe(false)
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/assessment/submit')).toHaveLength(1)
+  })
+
+  it('routes an expired submit session to login while preserving the draft', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: {
+        work: ['work.photo'],
+        result: ['result.portfolio'],
+        style: ['style.solo'],
+        career: ['career.photo'],
+      },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    const authFailure = Object.assign(new Error('expired session'), {
+      data: { error: { code: 'AUTH_FAILED', message: 'sanitized' }, requestId: 'auth-id' },
+      statusCode: 401,
+    })
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') return success(catalog)
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/assessment/submit') throw authFailure
+      throw new Error(`unexpected ${url}`)
+    }))
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(globalThis.navigateTo).toHaveBeenCalledWith('/login', { replace: true })
+    expect(sessionStorage.getItem(storageKey)).not.toBeNull()
+  })
+
+  it('does not navigate or clear a changed draft when an obsolete submission succeeds late', async () => {
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      step: 3,
+      selections: {
+        work: ['work.photo'],
+        result: ['result.portfolio'],
+        style: ['style.solo'],
+        career: ['career.photo'],
+      },
+      careerOther: '',
+      catalogRevision: revision,
+    }))
+    const pendingSubmission = deferred<unknown>()
+    vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+      if (url === '/api/student/session') return success(session)
+      if (url === '/api/assessment/options') return success(catalog)
+      if (url === '/api/events') return success({ accepted: true })
+      if (url === '/api/assessment/submit') return pendingSubmission.promise
+      throw new Error(`unexpected ${url}`)
+    }))
+    const { store, wrapper } = await mountPageWithStore()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
+    store.clear()
+    expect(store.toggleOption('work.photo')).toBe(true)
+    const changedDraft = sessionStorage.getItem(storageKey)
+    pendingSubmission.resolve(success({ publicId }))
+    await flushPromises()
+
+    expect(globalThis.navigateTo).not.toHaveBeenCalledWith(`/result/${publicId}`)
+    expect(sessionStorage.getItem(storageKey)).toBe(changedDraft)
   })
 
   it('logs out through the API, clears assessment storage, and replaces the route with login', async () => {

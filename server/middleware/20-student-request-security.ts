@@ -13,6 +13,7 @@ type StudentRequestSecurityDependencies = {
 
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 const csrfProtectedPaths = new Set([
+  '/api/assessment/submit',
   '/api/student/logout',
   '/api/student/assessment/validate',
   '/api/student/password/change',
@@ -21,6 +22,10 @@ const csrfProtectedPaths = new Set([
 const forbidden = (): never => {
   throw new Error('STUDENT_REQUEST_FORBIDDEN')
 }
+
+const withoutTrailingSlash = (path: string): string => path.length > 1
+  ? path.replace(/\/+$/u, '')
+  : path
 
 const canonicalStudentPath = (rawPath: string): string | null => {
   const collapsedPath = rawPath.replace(/\/{2,}/gu, '/')
@@ -31,10 +36,15 @@ const canonicalStudentPath = (rawPath: string): string | null => {
   catch {
     // Malformed encoding is rejected below when it targets the student API prefix.
   }
-  const targetsStudentApi = collapsedPath.startsWith('/api/student/') || decodedPath.startsWith('/api/student/')
-  if (!targetsStudentApi) return null
+  const canonicalPath = withoutTrailingSlash(collapsedPath)
+  const decodedCanonicalPath = withoutTrailingSlash(decodedPath)
+  const targetsStudentApi = canonicalPath.startsWith('/api/student/')
+    || decodedCanonicalPath.startsWith('/api/student/')
+  const targetsAssessmentSubmit = canonicalPath === '/api/assessment/submit'
+    || decodedCanonicalPath === '/api/assessment/submit'
+  if (!targetsStudentApi && !targetsAssessmentSubmit) return null
   if (rawPath.includes('%') || rawPath.includes('\\')) forbidden()
-  return collapsedPath.length > 1 ? collapsedPath.replace(/\/+$/u, '') : collapsedPath
+  return canonicalPath
 }
 
 export const createStudentRequestSecurityMiddleware = (

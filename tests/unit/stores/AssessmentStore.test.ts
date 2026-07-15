@@ -5,6 +5,9 @@ import { useAssessmentStore } from '../../../app/stores/assessment'
 const revisionA = `sha256:${'a'.repeat(64)}`
 const revisionB = `sha256:${'b'.repeat(64)}`
 const storageKey = 'photo_next_assessment_v1'
+const publicId = '11111111-1111-4111-8111-111111111111'
+const idempotencyKeyA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const idempotencyKeyB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 
 const catalog = (catalogRevision = revisionA) => ({
   catalogRevision,
@@ -260,6 +263,247 @@ describe('assessment store', () => {
     expect(persisted).not.toContain('trackScores')
     expect(persisted).not.toContain('rankedTracks')
     expect(persisted).not.toContain('interestVector')
+  })
+
+  describe('atomic assessment submission', () => {
+    it('reuses one memory-only UUID for an unchanged failed request and retry, then clears the draft on success', async () => {
+      const randomUUID = vi.fn().mockReturnValue(idempotencyKeyA)
+      vi.stubGlobal('crypto', { randomUUID })
+      let submissions = 0
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') {
+          submissions += 1
+          if (submissions === 1) throw new Error('private upstream detail')
+          return success({ publicId })
+        }
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+
+      await expect(store.submit('csrf-memory-token')).resolves.toBeNull()
+
+      expect(store.status).toBe('error')
+      expect(store.retryAction).toBe('submit')
+      expect(store.selections.work).toEqual(['work.photo'])
+      expect(sessionStorage.getItem(storageKey)).not.toBeNull()
+      expect(sessionStorage.getItem(storageKey)).not.toContain(idempotencyKeyA)
+
+      await expect(store.retry('csrf-memory-token')).resolves.toBe(publicId)
+
+      const submitCalls = fetch.mock.calls.filter(([url]) => url === '/api/assessment/submit')
+      expect(submitCalls).toHaveLength(2)
+      expect(submitCalls[0]?.[1]).toEqual({
+        body: {
+          catalogRevision: revisionA,
+          idempotencyKey: idempotencyKeyA,
+          selections: {
+            work: ['work.photo'],
+            result: ['result.portfolio'],
+            style: ['style.solo'],
+            career: ['career.photo'],
+            careerOther: null,
+          },
+        },
+        headers: { 'x-photo-next-csrf': 'csrf-memory-token' },
+        method: 'POST',
+      })
+      expect(submitCalls[1]?.[1]).toEqual(submitCalls[0]?.[1])
+      expect(randomUUID).toHaveBeenCalledTimes(1)
+      expect(sessionStorage.getItem(storageKey)).toBeNull()
+    })
+
+    it('resets the completed in-memory draft so the same store cannot restore it on catalog re-entry', async () => {
+      vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKeyA) })
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') return success({ publicId })
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+      store.toggleOption('career.explore')
+      store.setCareerOther('아카이브 연구')
+      expect(store.next()).toBe(true)
+      expect(store.next()).toBe(true)
+      expect(store.next()).toBe(true)
+
+      await expect(store.submit('csrf-memory-token')).resolves.toBe(publicId)
+
+      expect(store.step).toBe(0)
+      expect(store.selections).toEqual({ work: [], result: [], style: [], career: [] })
+      expect(store.careerOther).toBe('')
+      expect(store.isComplete).toBe(false)
+      expect(sessionStorage.getItem(storageKey)).toBeNull()
+
+      await expect(store.loadOptions()).resolves.toBe(true)
+
+      expect(store.step).toBe(0)
+      expect(store.selections).toEqual({ work: [], result: [], style: [], career: [] })
+      expect(store.careerOther).toBe('')
+      expect(store.isComplete).toBe(false)
+      expect(sessionStorage.getItem(storageKey)).toBeNull()
+    })
+
+    it('rotates the idempotency key when a selection changes after a failed submission', async () => {
+      const randomUUID = vi.fn()
+        .mockReturnValueOnce(idempotencyKeyA)
+        .mockReturnValueOnce(idempotencyKeyB)
+      vi.stubGlobal('crypto', { randomUUID })
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') throw new Error('submit unavailable')
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+
+      await store.submit('csrf-memory-token')
+      expect(store.toggleOption('work.video')).toBe(true)
+      await store.submit('csrf-memory-token')
+
+      const keys = fetch.mock.calls
+        .filter(([url]) => url === '/api/assessment/submit')
+        .map(([, options]) => options?.body?.idempotencyKey)
+      expect(keys).toEqual([idempotencyKeyA, idempotencyKeyB])
+      expect(randomUUID).toHaveBeenCalledTimes(2)
+    })
+
+    it('rotates the idempotency key when career free text changes after a failed submission', async () => {
+      const randomUUID = vi.fn()
+        .mockReturnValueOnce(idempotencyKeyA)
+        .mockReturnValueOnce(idempotencyKeyB)
+      vi.stubGlobal('crypto', { randomUUID })
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') throw new Error('submit unavailable')
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+      store.toggleOption('career.explore')
+      store.setCareerOther('아카이브 연구')
+
+      await store.submit('csrf-memory-token')
+      expect(store.setCareerOther('문화기관 아카이브')).toBe(true)
+      await store.submit('csrf-memory-token')
+
+      const keys = fetch.mock.calls
+        .filter(([url]) => url === '/api/assessment/submit')
+        .map(([, options]) => options?.body?.idempotencyKey)
+      expect(keys).toEqual([idempotencyKeyA, idempotencyKeyB])
+      expect(randomUUID).toHaveBeenCalledTimes(2)
+      expect(sessionStorage.getItem(storageKey)).not.toContain(idempotencyKeyB)
+    })
+
+    it('invalidates the old key when a stale catalog is reconciled but keeps recognized choices', async () => {
+      const randomUUID = vi.fn()
+        .mockReturnValueOnce(idempotencyKeyA)
+        .mockReturnValueOnce(idempotencyKeyB)
+      vi.stubGlobal('crypto', { randomUUID })
+      const stale = Object.assign(new Error('stale upstream'), {
+        data: { error: { code: 'ASSESSMENT_CATALOG_STALE', message: 'sanitized' }, requestId: 'stale-id' },
+        statusCode: 409,
+      })
+      let optionsLoads = 0
+      let submissions = 0
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') {
+          optionsLoads += 1
+          return success(catalog(optionsLoads === 1 ? revisionA : revisionB))
+        }
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') {
+          submissions += 1
+          if (submissions === 1) throw stale
+          throw new Error('submit unavailable')
+        }
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+
+      await store.submit('csrf-memory-token')
+      expect(store.catalogRevision).toBe(revisionB)
+      expect(store.selections.work).toEqual(['work.photo'])
+      await store.submit('csrf-memory-token')
+
+      const submitCalls = fetch.mock.calls.filter(([url]) => url === '/api/assessment/submit')
+      expect(submitCalls.map(([, options]) => options?.body?.idempotencyKey)).toEqual([
+        idempotencyKeyA,
+        idempotencyKeyB,
+      ])
+      expect(submitCalls.map(([, options]) => options?.body?.catalogRevision)).toEqual([
+        revisionA,
+        revisionB,
+      ])
+      expect(sessionStorage.getItem(storageKey)).toContain(revisionB)
+    })
+
+    it('ignores a late success after clear starts a changed draft and does not remove that draft', async () => {
+      vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKeyA) })
+      const pendingSubmission = deferred<unknown>()
+      vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') return pendingSubmission.promise
+        throw new Error(`unexpected ${url}`)
+      }))
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+
+      const submission = store.submit('csrf-memory-token')
+      expect(store.status).toBe('submitting')
+      expect(store.toggleOption('work.video')).toBe(false)
+
+      store.clear()
+      expect(store.toggleOption('work.video')).toBe(true)
+      const changedDraft = sessionStorage.getItem(storageKey)
+      pendingSubmission.resolve(success({ publicId }))
+
+      await expect(submission).resolves.toBeNull()
+      expect(sessionStorage.getItem(storageKey)).toBe(changedDraft)
+      expect(sessionStorage.getItem(storageKey)).toContain('work.video')
+    })
+
+    it('marks an authentication failure without clearing the persisted draft', async () => {
+      vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKeyA) })
+      const authFailure = Object.assign(new Error('expired session'), {
+        data: { error: { code: 'AUTH_FAILED', message: 'sanitized' }, requestId: 'auth-id' },
+        statusCode: 401,
+      })
+      vi.stubGlobal('$fetch', vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') throw authFailure
+        throw new Error(`unexpected ${url}`)
+      }))
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+
+      await expect(store.submit('csrf-memory-token')).resolves.toBeNull()
+
+      expect(store.status).toBe('unauthenticated')
+      expect(store.selections.work).toEqual(['work.photo'])
+      expect(sessionStorage.getItem(storageKey)).not.toBeNull()
+    })
   })
 
   it('blocks public mutations while validation is pending and keeps the accepted result memory-only', async () => {

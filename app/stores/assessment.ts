@@ -25,11 +25,13 @@ type AssessmentStatus =
   | 'error'
   | 'stale'
   | 'unauthenticated'
+  | 'submitting'
   | 'validating'
   | 'validated'
 
-type RetryAction = 'load' | 'validate' | null
+type RetryAction = 'load' | 'submit' | 'validate' | null
 type SelectionState = Record<QuestionGroup, string[]>
+type AssessmentCompletion = { publicId: string }
 
 type PersistedAssessment = {
   step: number
@@ -39,6 +41,7 @@ type PersistedAssessment = {
 }
 
 const revisionPattern = /^sha256:[a-f0-9]{64}$/u
+const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const emailPattern = /[^\s@]+@[^\s@]+\.[^\s@]+/u
 const phonePattern = /(?:(?:\+?82)[-.\s]?(?:0)?\d{1,2}|0\d{1,2})[-.\s)]?\d{3,4}[-.\s]?\d{4}/u
 const interestTagPattern = /^[a-z][a-z0-9_]{0,63}$/u
@@ -171,6 +174,11 @@ const isScoredAssessment = (value: unknown): value is ScoredAssessment => {
   ))
 }
 
+const isAssessmentCompletion = (value: unknown): value is AssessmentCompletion => isRecord(value)
+  && hasExactKeys(value, ['publicId'])
+  && typeof value.publicId === 'string'
+  && canonicalUuidPattern.test(value.publicId)
+
 export const useAssessmentStore = defineStore('assessment', () => {
   const status = ref<AssessmentStatus>('idle')
   const groups = ref<PublicAssessmentCatalog['groups']>([])
@@ -187,6 +195,9 @@ export const useAssessmentStore = defineStore('assessment', () => {
   const reviewRequired = ref(false)
   const completedGroups = new Set<string>()
   let requestGeneration = 0
+  let submissionIdempotencyKey: string | null = null
+  let submissionKeyFingerprint: string | null = null
+  let completedDraftNeedsFreshCatalog = false
 
   const currentGroup = computed(() => groups.value[step.value])
   const currentLimit = computed(() => currentGroup.value && limits.value
@@ -218,7 +229,25 @@ export const useAssessmentStore = defineStore('assessment', () => {
     generation === requestGeneration && startingFingerprint === fingerprint()
   )
 
-  const mutationsLocked = (): boolean => status.value === 'loading' || status.value === 'validating'
+  const mutationsLocked = (): boolean => status.value === 'loading'
+    || status.value === 'submitting'
+    || status.value === 'validating'
+
+  const invalidateSubmissionKey = (): void => {
+    submissionIdempotencyKey = null
+    submissionKeyFingerprint = null
+  }
+
+  const idempotencyKeyFor = (selectionFingerprint: string): string => {
+    if (submissionIdempotencyKey && submissionKeyFingerprint === selectionFingerprint) {
+      return submissionIdempotencyKey
+    }
+    const generated = globalThis.crypto.randomUUID()
+    if (!canonicalUuidPattern.test(generated)) throw new Error('ASSESSMENT_IDEMPOTENCY_KEY_INVALID')
+    submissionIdempotencyKey = generated
+    submissionKeyFingerprint = selectionFingerprint
+    return generated
+  }
 
   const moveToFirstIncompleteGroup = (): void => {
     if (!limits.value) return
@@ -270,6 +299,21 @@ export const useAssessmentStore = defineStore('assessment', () => {
     catch {
       // Clearing in-memory state still succeeds when storage is unavailable.
     }
+  }
+
+  const resetCompletedDraft = (): void => {
+    step.value = 0
+    selections.value = emptySelections()
+    careerOther.value = ''
+    errorMessage.value = ''
+    retryAction.value = null
+    validatedResult.value = null
+    reviewRequired.value = false
+    startedEmitted.value = false
+    completedGroups.clear()
+    invalidateSubmissionKey()
+    completedDraftNeedsFreshCatalog = true
+    removePersisted()
   }
 
   const parsedPersisted = (): PersistedAssessment | null => {
@@ -358,7 +402,8 @@ export const useAssessmentStore = defineStore('assessment', () => {
       career: [...selections.value.career],
     }
     const previousCareerOther = careerOther.value
-    const hadCatalog = Boolean(catalogRevision.value)
+    const startFresh = completedDraftNeedsFreshCatalog
+    const hadCatalog = Boolean(catalogRevision.value) && !startFresh
     const generation = ++requestGeneration
     const startingFingerprint = fingerprint()
     status.value = 'loading'
@@ -370,20 +415,23 @@ export const useAssessmentStore = defineStore('assessment', () => {
       if (!isApiSuccess(response, isCatalog)) throw new Error('ASSESSMENT_OPTIONS_INVALID')
       groups.value = response.data.groups
       limits.value = response.data.limits
+      if (catalogRevision.value !== response.data.catalogRevision) invalidateSubmissionKey()
       catalogRevision.value = response.data.catalogRevision
       validatedResult.value = null
 
       if (groups.value.length === 0 || groups.value.some(group => group.options.length === 0)) {
+        invalidateSubmissionKey()
         selections.value = emptySelections()
         careerOther.value = ''
         step.value = 0
         removePersisted()
         reviewRequired.value = false
+        completedDraftNeedsFreshCatalog = false
         status.value = 'empty'
         return true
       }
 
-      if (options.preserveSelections || hadCatalog) {
+      if (!startFresh && (options.preserveSelections || hadCatalog)) {
         reconcile(previousSelections, previousCareerOther)
       }
       else {
@@ -392,6 +440,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
         step.value = 0
         restore()
       }
+      completedDraftNeedsFreshCatalog = false
       if (reviewRequired.value) {
         moveToFirstIncompleteGroup()
         persist()
@@ -435,6 +484,8 @@ export const useAssessmentStore = defineStore('assessment', () => {
       selections.value[group.key] = selected.filter(key => key !== optionKey)
       if (optionKey === 'career.explore') careerOther.value = ''
       announcement.value = `${group.key} 선택 ${selections.value[group.key].length}개`
+      completedDraftNeedsFreshCatalog = false
+      invalidateSubmissionKey()
       invalidateResult()
       persist()
       return true
@@ -446,6 +497,8 @@ export const useAssessmentStore = defineStore('assessment', () => {
     }
     selections.value[group.key] = [...selected, optionKey]
     announcement.value = `${group.key} 선택 ${selections.value[group.key].length}개`
+    completedDraftNeedsFreshCatalog = false
+    invalidateSubmissionKey()
     invalidateResult()
     persist()
     return true
@@ -459,8 +512,11 @@ export const useAssessmentStore = defineStore('assessment', () => {
       announcement.value = issue
       return false
     }
+    if (careerOther.value === value) return true
     careerOther.value = value
     announcement.value = `${value.length} / 30자 입력`
+    completedDraftNeedsFreshCatalog = false
+    invalidateSubmissionKey()
     invalidateResult()
     persist()
     return true
@@ -565,8 +621,96 @@ export const useAssessmentStore = defineStore('assessment', () => {
     }
   }
 
-  const retry = async (csrfToken?: string): Promise<boolean> => {
+  const submit = async (csrfToken: string): Promise<string | null> => {
+    if (mutationsLocked()) return null
+    if (!isComplete.value || !catalogRevision.value) {
+      announcement.value = '각 단계의 최소 선택 수를 확인해 주세요.'
+      return null
+    }
+    reviewRequired.value = false
+    emitStepCompleted('career', selections.value.career.length)
+    const generation = ++requestGeneration
+    const startingFingerprint = fingerprint()
+    let idempotencyKey: string
+    try {
+      idempotencyKey = idempotencyKeyFor(startingFingerprint)
+    }
+    catch {
+      status.value = 'error'
+      retryAction.value = 'submit'
+      errorMessage.value = '결과를 준비하지 못했습니다. 선택은 그대로 유지됩니다. 다시 시도하세요.'
+      return null
+    }
+    const submission = {
+      catalogRevision: catalogRevision.value,
+      idempotencyKey,
+      selections: {
+        work: [...selections.value.work],
+        result: [...selections.value.result],
+        style: [...selections.value.style],
+        career: [...selections.value.career],
+        careerOther: careerOther.value.trim() || null,
+      },
+    }
+    status.value = 'submitting'
+    announcement.value = '선택한 관심사로 결과를 제출 중입니다.'
+    errorMessage.value = ''
+    retryAction.value = null
+    validatedResult.value = null
+    try {
+      const response = await $fetch<unknown>('/api/assessment/submit', {
+        body: submission,
+        headers: { 'x-photo-next-csrf': csrfToken },
+        method: 'POST',
+      })
+      if (!requestIsCurrent(generation, startingFingerprint)) {
+        if (generation === requestGeneration) status.value = 'ready'
+        return null
+      }
+      if (!isApiSuccess(response, isAssessmentCompletion)) {
+        throw new Error('ASSESSMENT_COMPLETION_INVALID')
+      }
+      resetCompletedDraft()
+      status.value = 'ready'
+      announcement.value = '결과가 준비되었습니다.'
+      return response.data.publicId
+    }
+    catch (error) {
+      if (!requestIsCurrent(generation, startingFingerprint)) {
+        if (generation === requestGeneration) status.value = 'ready'
+        return null
+      }
+      const code = publicErrorCode(error)
+      if (code === 'ASSESSMENT_CATALOG_STALE') {
+        invalidateSubmissionKey()
+        reviewRequired.value = true
+        const reloaded = await loadOptions({ preserveSelections: true })
+        if (!reloaded && reviewRequired.value) {
+          errorMessage.value = '선택지가 업데이트되어 다시 불러와야 합니다. 다시 불러온 뒤 선택을 확인해 주세요.'
+        }
+        return null
+      }
+      if (code === 'AUTH_FAILED') {
+        status.value = 'unauthenticated'
+        errorMessage.value = '로그인 정보가 만료되었습니다.'
+        return null
+      }
+      status.value = 'error'
+      if (code === 'ASSESSMENT_INVALID') {
+        retryAction.value = null
+        errorMessage.value = '선택 내용을 확인한 뒤 결과를 다시 만들어 주세요.'
+      }
+      else {
+        retryAction.value = 'submit'
+        errorMessage.value = '결과를 준비하지 못했습니다. 선택은 그대로 유지됩니다. 다시 시도하세요.'
+      }
+      return null
+    }
+  }
+
+  const retry = async (csrfToken?: string): Promise<boolean | string | null> => {
     if (retryAction.value === 'load') return loadOptions({ preserveSelections: Boolean(catalogRevision.value) })
+    if (retryAction.value === 'submit' && csrfToken) return submit(csrfToken)
     if (retryAction.value === 'validate' && csrfToken) return validate(csrfToken)
     return false
   }
@@ -583,6 +727,8 @@ export const useAssessmentStore = defineStore('assessment', () => {
     reviewRequired.value = false
     startedEmitted.value = false
     completedGroups.clear()
+    invalidateSubmissionKey()
+    completedDraftNeedsFreshCatalog = false
     status.value = groups.value.length ? 'ready' : 'idle'
     removePersisted()
   }
@@ -618,6 +764,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
     setCareerOther,
     status,
     step,
+    submit,
     toggleOption,
     validate,
     validatedResult,

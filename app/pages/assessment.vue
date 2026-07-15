@@ -25,7 +25,9 @@ const currentGroupLabel = computed(() => assessment.currentGroup
   ? groupLabels[assessment.currentGroup.key]
   : '')
 const isLastStep = computed(() => assessment.step === assessment.groups.length - 1)
-const flowBusy = computed(() => assessment.status === 'loading' || assessment.status === 'validating')
+const flowBusy = computed(() => assessment.status === 'loading'
+  || assessment.status === 'submitting'
+  || assessment.status === 'validating')
 
 const loadSession = async (): Promise<void> => {
   checkingSession.value = true
@@ -46,6 +48,7 @@ const loadSession = async (): Promise<void> => {
 }
 
 const logout = async (): Promise<void> => {
+  if (loggingOut.value || flowBusy.value) return
   loggingOut.value = true
   logoutError.value = ''
   try {
@@ -90,19 +93,27 @@ const previousStep = async (): Promise<void> => {
   if (assessment.previous()) await focusCurrentStep()
 }
 
-const validate = async (): Promise<void> => {
+const goToResult = async (publicId: string | null): Promise<void> => {
+  if (publicId) await navigateTo(`/result/${publicId}`)
+}
+
+const submit = async (): Promise<void> => {
   if (!session.value) return
-  await assessment.validate(session.value.csrfToken)
+  const publicId = await assessment.submit(session.value.csrfToken)
   if (assessment.status === 'unauthenticated') {
     await navigateTo('/login', { replace: true })
+    return
   }
+  await goToResult(publicId)
 }
 
 const retry = async (): Promise<void> => {
-  await assessment.retry(session.value?.csrfToken)
+  const result = await assessment.retry(session.value?.csrfToken)
   if (assessment.status === 'unauthenticated') {
     await navigateTo('/login', { replace: true })
+    return
   }
+  await goToResult(typeof result === 'string' ? result : null)
 }
 
 onMounted(loadSession)
@@ -136,7 +147,7 @@ onMounted(loadSession)
           <button
             data-testid="logout"
             type="button"
-            :disabled="loggingOut"
+            :disabled="loggingOut || flowBusy"
             @click="logout"
           >
             {{ loggingOut ? '로그아웃 중…' : '로그아웃' }}
@@ -229,7 +240,7 @@ onMounted(loadSession)
               type="button"
               @click="retry"
             >
-              {{ assessment.retryAction === 'load' ? '다시 불러오기' : '결과 다시 계산' }}
+              {{ assessment.retryAction === 'load' ? '다시 불러오기' : '결과 다시 만들기' }}
             </button>
           </div>
 
@@ -240,17 +251,6 @@ onMounted(loadSession)
           >
             <p class="assessment-page__state-code">CATALOG / UPDATED</p>
             <p role="status">{{ assessment.errorMessage }}</p>
-          </div>
-
-          <div
-            v-if="assessment.status === 'validated'"
-            class="assessment-page__validated"
-            aria-live="polite"
-          >
-            <p class="assessment-page__state-code">VALIDATED / MEMORY ONLY</p>
-            <p>선택으로 계산한 현재의 첫 번째 연결 경로</p>
-            <strong data-testid="validated-primary-track">{{ assessment.primaryTrackLabel }}</strong>
-            <small>이 결과는 적성이나 진로를 확정하지 않습니다.</small>
           </div>
 
           <AssessmentStep
@@ -295,14 +295,14 @@ onMounted(loadSession)
             </button>
             <button
               v-else
-              data-testid="assessment-validate"
+              data-testid="assessment-submit"
               class="assessment-page__primary-action"
               type="button"
               :disabled="!assessment.isComplete || flowBusy"
-              :aria-busy="assessment.status === 'validating' ? 'true' : undefined"
-              @click="validate"
+              :aria-busy="assessment.status === 'submitting' ? 'true' : undefined"
+              @click="submit"
             >
-              {{ assessment.status === 'validating' ? '계산 중…' : '결과 계산' }}
+              {{ assessment.status === 'submitting' ? '결과 제출 중…' : '나의 연결 경로 보기' }}
             </button>
           </nav>
         </section>
