@@ -61,4 +61,50 @@ describe('assessment history page', () => {
     expect(wrapper.text()).toContain('최근 편집본')
     expect(wrapper.text()).not.toMatch(/private-062-000-0000|rawWeights|commercial.*3/u)
   })
+
+  it('accepts PostgreSQL offset timestamps with six fractional digits', async () => {
+    const completedAt = '2026-07-15T12:00:00.123456+09:00'
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({
+      data: {
+        items: [historyItem(
+          '11111111-1111-4111-8111-111111111111',
+          completedAt,
+          'commercial',
+          92.3,
+        )],
+      },
+      requestId: 'request-id',
+    }))
+    const { default: HistoryPage } = await import('../../../app/pages/history.vue')
+    const wrapper = mount(HistoryPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="history-card"] time').attributes('datetime')).toBe(completedAt)
+  })
+
+  it('preserves server order when different microseconds parse to the same millisecond', async () => {
+    const serverFirstId = '99999999-9999-4999-8999-999999999999'
+    const serverSecondId = '11111111-1111-4111-8111-111111111111'
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({
+      data: {
+        items: [
+          historyItem(serverFirstId, '2026-07-15T12:00:00.123456+09:00', 'commercial', 92.3),
+          historyItem(serverSecondId, '2026-07-15T12:00:00.123001+09:00', 'art_photo', 84.4),
+        ],
+      },
+      requestId: 'request-id',
+    }))
+    const { default: HistoryPage } = await import('../../../app/pages/history.vue')
+    const wrapper = mount(HistoryPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="history-card"] a').map(link => link.attributes('href'))).toEqual([
+      `/result/${serverFirstId}`,
+      `/result/${serverSecondId}`,
+    ])
+  })
 })

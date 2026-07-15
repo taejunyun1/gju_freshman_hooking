@@ -1,7 +1,28 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { makeResultSnapshot, resultPublicId } from '../../fixtures/result'
+
+type RouteUpdateHook = (to: { params: { publicId?: string | string[] } }) => void
+
+const routerHooks = vi.hoisted(() => ({
+  beforeUpdate: undefined as RouteUpdateHook | undefined,
+}))
+
+vi.mock('vue-router', () => ({
+  onBeforeRouteUpdate: (callback: RouteUpdateHook) => {
+    routerHooks.beforeUpdate = callback
+  },
+}))
+
+const nextResultPublicId = '33333333-3333-4333-8333-333333333333'
+const routeParam = ref<string | string[] | undefined>(resultPublicId)
+const route = {
+  get params() {
+    return { publicId: routeParam.value }
+  },
+}
 
 const ResultTimelineStub = {
   props: ['snapshot', 'resultPublicId'],
@@ -22,15 +43,16 @@ const mountPage = async () => {
   const { default: ResultPage } = await import('../../../app/pages/result/[publicId].vue')
   return mount(ResultPage, {
     global: {
-      stubs: { ResultTimeline: ResultTimelineStub },
+      stubs: { NuxtLink: true, ResultTimeline: ResultTimelineStub },
     },
   })
 }
 
 describe('owned result page', () => {
   beforeEach(() => {
-    vi.resetModules()
-    vi.stubGlobal('useRoute', () => ({ params: { publicId: resultPublicId } }))
+    routeParam.value = resultPublicId
+    routerHooks.beforeUpdate = undefined
+    vi.stubGlobal('useRoute', () => route)
   })
 
   afterEach(() => {
@@ -85,5 +107,46 @@ describe('owned result page', () => {
 
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-testid="loaded-result"]').text()).toContain(resultPublicId)
+  })
+
+  it('loads a changed route ID and ignores the previous request when it resolves late', async () => {
+    const firstRequest = deferred<unknown>()
+    const secondRequest = deferred<unknown>()
+    const fetch = vi.fn((url: string) => {
+      if (url === `/api/result/${resultPublicId}`) return firstRequest.promise
+      if (url === `/api/result/${nextResultPublicId}`) return secondRequest.promise
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = await mountPage()
+
+    routeParam.value = nextResultPublicId
+    expect(routerHooks.beforeUpdate).toBeTypeOf('function')
+    routerHooks.beforeUpdate?.({ params: { publicId: nextResultPublicId } })
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+
+    expect(fetch).toHaveBeenNthCalledWith(2, `/api/result/${nextResultPublicId}`)
+    expect(wrapper.get('[data-testid="result-skeleton"]').attributes('aria-busy')).toBe('true')
+
+    const nextSnapshot = {
+      ...makeResultSnapshot(),
+      completedAt: '2026-07-15T12:45:00+09:00',
+    }
+    secondRequest.resolve({ data: nextSnapshot, requestId: 'second-request-id' })
+    await secondRequest.promise
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="loaded-result"]').text()).toContain(
+      `${nextResultPublicId} / ${nextSnapshot.completedAt}`,
+    )
+
+    firstRequest.resolve({ data: makeResultSnapshot(), requestId: 'first-request-id' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="loaded-result"]').text()).toContain(
+      `${nextResultPublicId} / ${nextSnapshot.completedAt}`,
+    )
   })
 })
