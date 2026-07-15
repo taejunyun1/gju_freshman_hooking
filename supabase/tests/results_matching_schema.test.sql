@@ -53,8 +53,8 @@ select is(
        'public.faculty_tags'::regclass,
        'public.faculty_specialist_links'::regclass
      ])),
-  7,
-  'all seven declared result and matching relationships are foreign keys'
+  8,
+  'all eight declared result and matching relationships are foreign keys after campaign attribution validation'
 );
 
 select is(
