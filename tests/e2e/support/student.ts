@@ -1,13 +1,31 @@
 import { expect, type Page } from '@playwright/test'
+import type { ApiSuccess, RegistrationResult } from '../../../shared/types/api'
+import { clearLocalRegistrationRateLimitBuckets } from './local-registration-rate-limit'
 export { uniqueAssessmentPhone } from './phone'
 
 type RegisteredStudent = {
   nickname: string
 }
 
+type OnRegistered = (student: RegisteredStudent) => Promise<void>
+
+const createdRegistration = (value: unknown): RegisteredStudent | null => {
+  const payload = value as Partial<ApiSuccess<RegistrationResult>> | null
+  if (
+    !payload
+    || typeof payload !== 'object'
+    || !payload.data
+    || payload.data.kind !== 'created'
+    || typeof payload.data.nickname !== 'string'
+    || payload.data.nickname.length === 0
+  ) return null
+  return { nickname: payload.data.nickname }
+}
+
 export const registerAndLoginStudent = async (
   page: Page,
   phone: string,
+  onRegistered?: OnRegistered,
 ): Promise<RegisteredStudent> => {
   await page.goto('/start')
   await page.getByLabel('휴대전화 번호').fill(phone)
@@ -15,16 +33,22 @@ export const registerAndLoginStudent = async (
   await page.getByLabel('현재 상태').selectOption('high3')
   await page.getByLabel('지역').selectOption('gwangju')
 
+  clearLocalRegistrationRateLimitBuckets()
   const registerResponsePromise = page.waitForResponse((response) => {
     return new URL(response.url()).pathname === '/api/student/register'
   })
   await page.getByRole('button', { name: '내 연결 경로 시작하기' }).click()
-  expect((await registerResponsePromise).ok()).toBe(true)
+  const registerResponse = await registerResponsePromise
+  expect(registerResponse.ok()).toBe(true)
+  const registration = createdRegistration(await registerResponse.json())
+  expect(registration).not.toBeNull()
+  const { nickname } = registration!
+  await onRegistered?.({ nickname })
 
   await expect(page).toHaveURL('/credentials')
-  const nickname = await page.getByTestId('nickname').textContent()
+  const displayedNickname = await page.getByTestId('nickname').textContent()
   const initialPassword = await page.getByTestId('initial-password').textContent()
-  expect(nickname).toBeTruthy()
+  expect(displayedNickname).toBe(nickname)
   expect(initialPassword).toBeTruthy()
 
   await page.getByRole('link', { name: '로그인하러 가기' }).click()
@@ -39,5 +63,5 @@ export const registerAndLoginStudent = async (
 
   await expect(page).toHaveURL('/assessment')
   await expect(page.getByText(`${nickname}님`, { exact: true })).toBeVisible()
-  return { nickname: nickname! }
+  return { nickname }
 }
