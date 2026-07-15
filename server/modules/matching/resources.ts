@@ -1,3 +1,5 @@
+import { z } from 'zod'
+import { resultResourceSchema } from '../../../shared/schemas/result'
 import type {
   CareerResultResource,
   CourseResultResource,
@@ -38,6 +40,7 @@ interface EquipmentCandidateMetadata {
 interface FacilityCandidateMetadata {
   readonly locationLabel: string
   readonly operationNote: string
+  readonly lastVerifiedAt: string
   readonly [key: string]: unknown
 }
 
@@ -114,6 +117,8 @@ const allowedTypes = new Set<ResultResource['type']>([
   'career',
   'support',
 ])
+const tagKeyPattern = /^[a-z][a-z0-9_]{0,63}$/u
+const verifiedAtSchema = z.iso.datetime({ offset: true }).max(32)
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -142,7 +147,8 @@ const hasValidTags = (value: unknown): value is readonly ResourceMatchTag[] => (
   && value.length > 0
   && value.every(tag => (
     isRecord(tag)
-    && isNonEmptyString(tag.key)
+    && typeof tag.key === 'string'
+    && tagKeyPattern.test(tag.key)
     && typeof tag.weight === 'number'
     && Number.isFinite(tag.weight)
     && tag.weight >= 0
@@ -159,7 +165,8 @@ const hasCourseMetadata = (metadata: Record<string, unknown>): boolean => (
   && isNonEmptyString(metadata.term)
   && typeof metadata.credits === 'number'
   && Number.isInteger(metadata.credits)
-  && metadata.credits > 0
+  && metadata.credits >= 0
+  && metadata.credits <= 30
   && isNonEmptyString(metadata.goalSummary)
 )
 
@@ -167,14 +174,17 @@ const hasEquipmentMetadata = (metadata: Record<string, unknown>): boolean => (
   isNonEmptyString(metadata.locationLabel)
   && typeof metadata.confirmedQuantity === 'number'
   && Number.isSafeInteger(metadata.confirmedQuantity)
-  && metadata.confirmedQuantity >= 0
+  && metadata.confirmedQuantity >= 1
+  && metadata.confirmedQuantity <= 999
   && metadata.reservationUrl === 'https://gjureserve.co.kr'
   && ((metadata.accessMode === 'reservation' && metadata.accessLabel === '예약 가능')
     || (metadata.accessMode === 'inquiry' && metadata.accessLabel === '문의 전용'))
 )
 
 const hasFacilityMetadata = (metadata: Record<string, unknown>): boolean => (
-  isNonEmptyString(metadata.locationLabel) && isNonEmptyString(metadata.operationNote)
+  isNonEmptyString(metadata.locationLabel)
+  && isNonEmptyString(metadata.operationNote)
+  && verifiedAtSchema.safeParse(metadata.lastVerifiedAt).success
 )
 
 const hasStudentWorkMetadata = (metadata: Record<string, unknown>): boolean => (
@@ -208,6 +218,8 @@ const isValidCandidate = (value: unknown): value is ResourceCandidate => {
     || (value.status !== 'active' && value.status !== 'next_year_confirmed')
     || value.visibility !== 'public'
     || !Number.isSafeInteger(value.priority)
+    || (value.priority as number) < 0
+    || (value.priority as number) > 32767
     || !isIsoDate(value.sourceDate)
     || !isRecord(value.metadata)
     || !hasValidTags(value.tags)) return false
@@ -234,6 +246,26 @@ const assertSelectedInterests = (selected: readonly SelectedInterestEvidence[]):
   }
 }
 
+const assertCandidateIntegrity = (candidates: readonly ResourceCandidate[]): void => {
+  const ids = new Set<number>()
+  for (const value of candidates as readonly unknown[]) {
+    if (!isRecord(value) || !Number.isSafeInteger(value.id)) continue
+    const id = value.id as number
+    if (ids.has(id)) throw new Error('Duplicate candidate resource ID')
+    ids.add(id)
+  }
+
+  for (const value of candidates as readonly unknown[]) {
+    if (!isRecord(value) || !Array.isArray(value.tags)) continue
+    const keys = new Set<string>()
+    for (const tag of value.tags) {
+      if (!isRecord(tag) || typeof tag.key !== 'string') continue
+      if (keys.has(tag.key)) throw new Error('Duplicate resource tag key')
+      keys.add(tag.key)
+    }
+  }
+}
+
 const affinity = (
   interestVector: Readonly<Record<string, number>>,
   tags: readonly ResourceMatchTag[],
@@ -257,12 +289,16 @@ const roundOneDecimal = (value: number): number => Math.round((value + Number.EP
 
 const emptyDisplayMetadata = (): EmptyDisplayMetadata => Object.freeze({})
 
+const canonicalResult = (result: ResultResource): ResultResource | null => (
+  resultResourceSchema.safeParse(result).success ? result : null
+)
+
 const toResultResource = (
   candidate: ResourceCandidate,
   rawAffinity: number,
   tag: ResourceMatchTag,
   input: Pick<RankResourcesInput, 'interestVector' | 'selectedInterests'>,
-): ResultResource => {
+): ResultResource | null => {
   const connectionReason = renderConnectionReason({
     interestVector: input.interestVector,
     selectedInterests: input.selectedInterests,
@@ -281,7 +317,7 @@ const toResultResource = (
   }
 
   switch (candidate.type) {
-    case 'course': return Object.freeze({
+    case 'course': return canonicalResult(Object.freeze({
       ...base,
       type: candidate.type,
       displayMetadata: Object.freeze({
@@ -289,8 +325,8 @@ const toResultResource = (
         term: candidate.metadata.term,
         credits: candidate.metadata.credits,
       }),
-    })
-    case 'equipment': return Object.freeze({
+    }))
+    case 'equipment': return canonicalResult(Object.freeze({
       ...base,
       type: candidate.type,
       displayMetadata: Object.freeze({
@@ -300,31 +336,31 @@ const toResultResource = (
         accessMode: candidate.metadata.accessMode,
         accessLabel: candidate.metadata.accessLabel,
       }),
-    }) as EquipmentResultResource
-    case 'facility': return Object.freeze({
+    }) as EquipmentResultResource)
+    case 'facility': return canonicalResult(Object.freeze({
       ...base,
       type: candidate.type,
       displayMetadata: Object.freeze({
         locationLabel: candidate.metadata.locationLabel,
         operationNote: candidate.metadata.operationNote,
       }),
-    })
-    case 'student_work': return Object.freeze({
+    }))
+    case 'student_work': return canonicalResult(Object.freeze({
       ...base,
       type: candidate.type,
       displayMetadata: Object.freeze({
         imagePath: candidate.metadata.imagePath,
         imageAlt: candidate.metadata.imageAlt,
       }),
-    })
+    }))
     case 'extracurricular':
     case 'project':
     case 'career':
-    case 'support': return Object.freeze({
+    case 'support': return canonicalResult(Object.freeze({
       ...base,
       type: candidate.type,
       displayMetadata: emptyDisplayMetadata(),
-    })
+    }))
   }
 }
 
@@ -375,6 +411,7 @@ const resultsOf = <Result extends ResultResource>(
 export const rankResources = (input: RankResourcesInput): RankedResources => {
   assertInterestVector(input.interestVector)
   assertSelectedInterests(input.selectedInterests)
+  assertCandidateIntegrity(input.candidates)
 
   const ranked = input.candidates
     .filter(isValidCandidate)
@@ -382,11 +419,13 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
       const rawAffinity = affinity(input.interestVector, candidate.tags)
       if (rawAffinity <= 0) return null
       const tag = primaryTag(candidate.tags)
+      const result = toResultResource(candidate, rawAffinity, tag, input)
+      if (result === null) return null
       return {
         candidate,
         rawAffinity,
         primaryTag: tag,
-        result: toResultResource(candidate, rawAffinity, tag, input),
+        result,
       }
     })
     .filter((candidate): candidate is RankedCandidate => candidate !== null)

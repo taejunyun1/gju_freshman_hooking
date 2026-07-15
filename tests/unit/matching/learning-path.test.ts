@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildLearningPath } from '../../../server/modules/matching/learning-path'
+import { courseResultResourceSchema } from '../../../shared/schemas/result'
 import type { CourseResultResource } from '../../../shared/types/result'
 
 const course = (
@@ -40,6 +41,7 @@ describe('four-year learning path', () => {
     const misleadingTitle = {
       ...course(2, 1, 60),
       title: '4학년 현장실습으로 보이는 제목',
+      connectionReason: '선택 관심이 교과 2 ‘4학년 현장실습으로 보이는 제목’과 연결됩니다.',
     }
     const courses = [
       course(6, 3, 80, '2026-07-01'),
@@ -71,5 +73,40 @@ describe('four-year learning path', () => {
       course(1, 1, 80),
       course(1, 2, 70),
     ])).toThrow(/duplicate|중복/iu)
+  })
+
+  it('rejects non-course and malformed canonical resources', () => {
+    const nonCourse = {
+      ...course(20, 1, 80),
+      type: 'facility',
+      displayMetadata: { locationLabel: '학과', operationNote: '학과 확인 필요' },
+    } as unknown as CourseResultResource
+    const malformedAffinity = {
+      ...course(21, 1, 80),
+      affinity: 80.01,
+    } as CourseResultResource
+
+    expect(() => buildLearningPath([nonCourse])).toThrow(/canonical|course|교과/iu)
+    expect(() => buildLearningPath([malformedAffinity])).toThrow(/canonical|course|교과/iu)
+  })
+
+  it('deep-clones and freezes course resources before exposing the path', () => {
+    const mutable = course(30, 2, 90) as unknown as {
+      title: string
+      displayMetadata: { gradeYear: 1 | 2 | 3 | 4, term: string, credits: number }
+    }
+    const path = buildLearningPath([mutable as CourseResultResource])
+    const result = path[1].resources[0]!
+
+    expect(result).not.toBe(mutable)
+    expect(result.displayMetadata).not.toBe(mutable.displayMetadata)
+    expect(courseResultResourceSchema.safeParse(result).success).toBe(true)
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(Object.isFrozen(result.displayMetadata)).toBe(true)
+
+    mutable.title = '호출자가 바꾼 제목'
+    mutable.displayMetadata.term = '호출자가 바꾼 학기'
+    expect(result.title).toBe('교과 30')
+    expect(result.displayMetadata.term).toBe('1학기')
   })
 })

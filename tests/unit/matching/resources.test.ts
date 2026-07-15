@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderConnectionReason } from '../../../server/modules/matching/reasons'
+import { resultResourceSchema } from '../../../shared/schemas/result'
 import {
   computeEnvironmentScore,
   rankResources,
@@ -61,7 +62,11 @@ const facility = (
   visibility: 'public',
   priority: 0,
   sourceDate: '2026-07-14',
-  metadata: { locationLabel: '학과', operationNote: '학과 확인 필요' },
+  metadata: {
+    locationLabel: '학과',
+    operationNote: '학과 확인 필요',
+    lastVerifiedAt: '2026-07-14T09:00:00+09:00',
+  },
   tags: [tag(`interest_${id}`)],
   ...overrides,
 })
@@ -191,6 +196,157 @@ describe('resource matching', () => {
         candidates: [course(1, { tags: [tag('documentary')] })],
       })).toThrow(/interest|score|0.*1|finite|관심|점수/iu)
     }
+  })
+
+  it('emits only canonical resource snapshots and filters every malformed boundary', () => {
+    const canonicalStudentWork = {
+      id: 4,
+      type: 'student_work',
+      title: '학생 작품',
+      summary: '안전한 학생 작품',
+      status: 'active',
+      visibility: 'public',
+      priority: 0,
+      sourceDate: '2026-07-14',
+      metadata: { imagePath: 'works/safe.jpg', imageAlt: '안전한 학생 작품' },
+      tags: [tag('edge_4')],
+    } as const satisfies ResourceCandidate
+    const candidates: ResourceCandidate[] = [
+      course(1, {
+        metadata: { gradeYear: 1, term: '1학기', credits: 0, goalSummary: '기초를 확인하는' },
+        tags: [tag('edge_1')],
+      }),
+      equipment(2, {
+        metadata: {
+          locationLabel: '판타지랩',
+          confirmedQuantity: 1,
+          reservationUrl: 'https://gjureserve.co.kr',
+          accessMode: 'inquiry',
+          accessLabel: '문의 전용',
+        },
+        tags: [tag('edge_2')],
+      }),
+      facility(3, { tags: [tag('edge_3')] }),
+      canonicalStudentWork,
+      course(10, { title: ' 앞뒤 공백', tags: [tag('edge_10')] }),
+      course(11, { summary: '가'.repeat(1001), tags: [tag('edge_11')] }),
+      course(12, { priority: -1, tags: [tag('edge_12')] }),
+      course(13, { priority: 32768, tags: [tag('edge_13')] }),
+      course(14, { tags: [tag('Invalid-Key')] }),
+      course(15, {
+        metadata: { gradeYear: 1, term: '가'.repeat(21), credits: 3, goalSummary: '기초를 익히는' },
+        tags: [tag('edge_15')],
+      }),
+      course(16, {
+        metadata: { gradeYear: 1, term: '1학기', credits: 31, goalSummary: '기초를 익히는' },
+        tags: [tag('edge_16')],
+      }),
+      course(17, {
+        metadata: { gradeYear: 1, term: '1학기', credits: 3, goalSummary: '가'.repeat(1000) },
+        tags: [tag('edge_17')],
+      }),
+      equipment(18, {
+        metadata: { ...equipment(18).metadata, confirmedQuantity: 0 },
+        tags: [tag('edge_18')],
+      }),
+      equipment(19, {
+        metadata: { ...equipment(19).metadata, confirmedQuantity: 1000 },
+        tags: [tag('edge_19')],
+      }),
+      equipment(20, {
+        metadata: { ...equipment(20).metadata, locationLabel: '가'.repeat(121) },
+        tags: [tag('edge_20')],
+      }),
+      {
+        ...canonicalStudentWork,
+        id: 21,
+        metadata: { imagePath: '../secret.jpg', imageAlt: '위험한 경로' },
+        tags: [tag('edge_21')],
+      },
+      {
+        ...canonicalStudentWork,
+        id: 22,
+        metadata: { imagePath: 'works/long-alt.jpg', imageAlt: '가'.repeat(201) },
+        tags: [tag('edge_22')],
+      },
+    ]
+    const keys = candidates.flatMap(candidate => candidate.tags.map(item => item.key))
+    const ranked = rankResources({
+      interestVector: Object.fromEntries(keys.map(key => [key, 1])),
+      selectedInterests: selected(keys),
+      candidates,
+    })
+
+    expect(ranked.course.map(item => item.id)).toEqual([1])
+    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([2, 3])
+    expect(ranked.studentWork.map(item => item.id)).toEqual([4])
+    const displayed = [
+      ...ranked.course,
+      ...ranked.capabilityEvidence,
+      ...ranked.studentWork,
+    ]
+    expect(displayed.every(item => resultResourceSchema.safeParse(item).success)).toBe(true)
+    expect(displayed.every(item => Object.isFrozen(item) && Object.isFrozen(item.displayMetadata)))
+      .toBe(true)
+  })
+
+  it('requires verified facility evidence but omits verification timestamps from snapshots', () => {
+    const valid = facility(30, { tags: [tag('facility_30')] })
+    const nullVerification = facility(31, {
+      metadata: { ...facility(31).metadata, lastVerifiedAt: null } as unknown as FacilityCandidate['metadata'],
+      tags: [tag('facility_31')],
+    })
+    const invalidVerification = facility(32, {
+      metadata: { ...facility(32).metadata, lastVerifiedAt: '확인 필요' },
+      tags: [tag('facility_32')],
+    })
+    const keys = ['facility_30', 'facility_31', 'facility_32']
+    const ranked = rankResources({
+      interestVector: Object.fromEntries(keys.map(key => [key, 1])),
+      selectedInterests: selected(keys),
+      candidates: [valid, nullVerification, invalidVerification],
+    })
+
+    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([30])
+    expect(ranked.capabilityEvidence[0]?.displayMetadata).toEqual({
+      locationLabel: '학과',
+      operationNote: '학과 확인 필요',
+    })
+    expect(JSON.stringify(ranked.capabilityEvidence[0])).not.toContain('lastVerifiedAt')
+  })
+
+  it('rejects duplicate candidate IDs and tag keys deterministically across permutations', () => {
+    const messageFor = (candidates: readonly ResourceCandidate[]): string | null => {
+      try {
+        rankResources({
+          interestVector: { documentary: 1, portrait: 1 },
+          selectedInterests: selected(['documentary', 'portrait']),
+          candidates,
+        })
+        return null
+      }
+      catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    }
+    const duplicateIds: ResourceCandidate[] = [
+      course(40, { tags: [tag('documentary')] }),
+      equipment(40, { tags: [tag('portrait')] }),
+    ]
+    const duplicateTags: ResourceCandidate[] = [course(41, {
+      tags: [tag('documentary', 3), tag('documentary', 1)],
+    })]
+
+    const idMessage = messageFor(duplicateIds)
+    expect(idMessage).toMatch(/duplicate.*candidate.*id|candidate.*id.*duplicate/iu)
+    expect(messageFor([...duplicateIds].reverse())).toBe(idMessage)
+
+    const tagMessage = messageFor(duplicateTags)
+    expect(tagMessage).toMatch(/duplicate.*tag|tag.*duplicate/iu)
+    expect(messageFor(duplicateTags.map(candidate => ({
+      ...candidate,
+      tags: [...candidate.tags].reverse(),
+    })))).toBe(tagMessage)
   })
 
   it('selects primary tags deterministically and enforces diversity per pool', () => {
