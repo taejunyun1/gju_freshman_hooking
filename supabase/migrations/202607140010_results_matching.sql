@@ -453,6 +453,164 @@ create index faculty_specialist_links_lookup_idx
 create index faculty_specialist_links_specialist_idx
   on public.faculty_specialist_links(specialist_faculty_id);
 
+create function public.complete_assessment(
+  p_prospect_id bigint,
+  p_idempotency_key uuid,
+  p_campaign_id bigint,
+  p_track_scores jsonb,
+  p_environment_score numeric,
+  p_result_snapshot jsonb,
+  p_responses jsonb
+)
+returns table(
+  assessment_id bigint,
+  public_id uuid,
+  created boolean
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_locked_prospect_id bigint;
+  v_assessment_id bigint;
+  v_public_id uuid;
+  v_completed_at timestamptz;
+  v_response jsonb;
+begin
+  select prospect.id
+  into v_locked_prospect_id
+  from public.prospects prospect
+  where prospect.id = p_prospect_id
+  for update;
+
+  if not found then
+    raise exception using
+      errcode = 'P0002',
+      message = 'prospect not found';
+  end if;
+
+  select assessment.id, assessment.public_id
+  into v_assessment_id, v_public_id
+  from public.assessments assessment
+  where assessment.prospect_id = p_prospect_id
+    and assessment.idempotency_key = p_idempotency_key
+  for update;
+
+  if found then
+    return query select v_assessment_id, v_public_id, false;
+    return;
+  end if;
+
+  v_completed_at := pg_catalog.clock_timestamp();
+
+  if p_responses is null
+    or pg_catalog.jsonb_typeof(p_responses) <> 'array'
+    or pg_catalog.jsonb_array_length(p_responses) not between 4 and 11
+  then
+    raise exception using
+      errcode = '22023',
+      message = 'responses must be an array containing 4 to 11 entries';
+  end if;
+
+  for v_response in
+    select response.value
+    from pg_catalog.jsonb_array_elements(p_responses) as response(value)
+  loop
+    if pg_catalog.jsonb_typeof(v_response) <> 'object'
+      or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_response)) <> 5
+      or not v_response ?& array[
+        'question_group',
+        'option_key',
+        'option_label_snapshot',
+        'weight_snapshot',
+        'free_text'
+      ]
+      or pg_catalog.jsonb_typeof(v_response -> 'question_group') <> 'string'
+      or pg_catalog.jsonb_typeof(v_response -> 'option_key') <> 'string'
+      or pg_catalog.jsonb_typeof(v_response -> 'option_label_snapshot') <> 'string'
+      or pg_catalog.jsonb_typeof(v_response -> 'weight_snapshot') <> 'object'
+      or pg_catalog.jsonb_typeof(v_response -> 'free_text') not in ('string', 'null')
+    then
+      raise exception using
+        errcode = '22023',
+        message = 'response entries must contain the exact snapshot fields';
+    end if;
+  end loop;
+
+  if exists (
+    select 1
+    from pg_catalog.jsonb_array_elements(p_responses) as response(value)
+    group by
+      response.value ->> 'question_group',
+      response.value ->> 'option_key'
+    having pg_catalog.count(*) > 1
+  ) then
+    raise exception using
+      errcode = '22023',
+      message = 'response identities must be unique';
+  end if;
+
+  insert into public.assessments (
+    prospect_id,
+    campaign_id,
+    idempotency_key,
+    track_scores,
+    environment_score,
+    result_snapshot,
+    completed_at,
+    created_at
+  ) values (
+    p_prospect_id,
+    p_campaign_id,
+    p_idempotency_key,
+    p_track_scores,
+    p_environment_score,
+    p_result_snapshot,
+    v_completed_at,
+    v_completed_at
+  )
+  returning id, assessments.public_id
+  into v_assessment_id, v_public_id;
+
+  insert into public.assessment_responses (
+    assessment_id,
+    question_group,
+    option_key,
+    option_label_snapshot,
+    weight_snapshot,
+    free_text
+  )
+  select
+    v_assessment_id,
+    response.value ->> 'question_group',
+    response.value ->> 'option_key',
+    response.value ->> 'option_label_snapshot',
+    response.value -> 'weight_snapshot',
+    case
+      when pg_catalog.jsonb_typeof(response.value -> 'free_text') = 'null' then null
+      else response.value ->> 'free_text'
+    end
+  from pg_catalog.jsonb_array_elements(p_responses) as response(value);
+
+  update public.prospects prospect
+  set last_active_at = pg_catalog.clock_timestamp()
+  where prospect.id = v_locked_prospect_id;
+
+  delete from public.assessments assessment
+  where assessment.prospect_id = p_prospect_id
+    and assessment.id in (
+      select retained.id
+      from public.assessments retained
+      where retained.prospect_id = p_prospect_id
+      order by retained.completed_at desc, retained.id desc
+      offset 3
+    );
+
+  return query select v_assessment_id, v_public_id, true;
+end;
+$$;
+
 alter table public.assessments enable row level security;
 alter table public.assessment_responses enable row level security;
 alter table public.resources enable row level security;
@@ -507,3 +665,9 @@ revoke all privileges on function public.is_safe_relative_asset_path(text)
   from public, anon, authenticated, service_role;
 revoke all privileges on function public.is_valid_faculty_contact_visibility(jsonb)
   from public, anon, authenticated, service_role;
+revoke all privileges on function public.complete_assessment(
+  bigint, uuid, bigint, jsonb, numeric, jsonb, jsonb
+) from public, anon, authenticated, service_role;
+grant execute on function public.complete_assessment(
+  bigint, uuid, bigint, jsonb, numeric, jsonb, jsonb
+) to service_role;
