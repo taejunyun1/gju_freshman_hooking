@@ -1,0 +1,464 @@
+import { describe, expect, it } from 'vitest'
+import { renderConnectionReason } from '../../../server/modules/matching/reasons'
+import {
+  computeEnvironmentScore,
+  rankResources,
+  type ResourceCandidate,
+} from '../../../server/modules/matching/resources'
+
+type CourseCandidate = Extract<ResourceCandidate, { type: 'course' }>
+type EquipmentCandidate = Extract<ResourceCandidate, { type: 'equipment' }>
+type FacilityCandidate = Extract<ResourceCandidate, { type: 'facility' }>
+
+const tag = (key: string, weight = 3, isPrimary = false) => ({ key, weight, isPrimary })
+
+const course = (id: number, overrides: Partial<CourseCandidate> = {}): CourseCandidate => ({
+  id,
+  type: 'course',
+  title: `교과 ${id}`,
+  summary: `교과 ${id} 요약`,
+  status: 'active',
+  visibility: 'public',
+  priority: 0,
+  sourceDate: '2026-07-14',
+  metadata: { gradeYear: 1, term: '1학기', credits: 3, goalSummary: '기초를 익히는' },
+  tags: [tag(`interest_${id}`)],
+  ...overrides,
+})
+
+const equipment = (
+  id: number,
+  overrides: Partial<EquipmentCandidate> = {},
+): EquipmentCandidate => ({
+  id,
+  type: 'equipment',
+  title: `장비 ${id}`,
+  summary: `장비 ${id} 요약`,
+  status: 'active',
+  visibility: 'public',
+  priority: 0,
+  sourceDate: '2026-07-14',
+  metadata: {
+    locationLabel: '판타지랩',
+    confirmedQuantity: 2,
+    reservationUrl: 'https://gjureserve.co.kr',
+    accessMode: 'inquiry',
+    accessLabel: '문의 전용',
+  },
+  tags: [tag(`interest_${id}`)],
+  ...overrides,
+})
+
+const facility = (
+  id: number,
+  overrides: Partial<FacilityCandidate> = {},
+): FacilityCandidate => ({
+  id,
+  type: 'facility',
+  title: `시설 ${id}`,
+  summary: `시설 ${id} 요약`,
+  status: 'next_year_confirmed',
+  visibility: 'public',
+  priority: 0,
+  sourceDate: '2026-07-14',
+  metadata: { locationLabel: '학과', operationNote: '학과 확인 필요' },
+  tags: [tag(`interest_${id}`)],
+  ...overrides,
+})
+
+const emptyMetadataCandidate = (
+  id: number,
+  type: 'extracurricular' | 'project' | 'career' | 'support',
+  key = `interest_${id}`,
+): ResourceCandidate => ({
+  id,
+  type,
+  title: `${type} ${id}`,
+  summary: `${type} ${id} 요약`,
+  status: 'active',
+  visibility: 'public',
+  priority: 0,
+  sourceDate: '2026-07-14',
+  metadata: {},
+  tags: [tag(key)],
+})
+
+const selected = (keys: readonly string[]) => keys.map(key => ({
+  key,
+  label: `${key} 선택`,
+}))
+
+describe('resource matching', () => {
+  it('uses exact affinity and locked sort keys while exposing one decimal', () => {
+    const interests = { a: 0.5, b: 0.5, c: 0.5, d: 0.5, raw_high: 0.5004, raw_low: 0.5 }
+    const ranked = rankResources({
+      interestVector: interests,
+      selectedInterests: selected(Object.keys(interests)),
+      candidates: [
+        course(12, { priority: 5, sourceDate: '2026-07-01', tags: [tag('d')] }),
+        course(9, { priority: 5, sourceDate: '2026-07-01', tags: [tag('c')] }),
+        course(3, { priority: 5, sourceDate: '2026-07-02', tags: [tag('b')] }),
+        course(7, { priority: 10, sourceDate: '2026-06-01', tags: [tag('a')] }),
+      ],
+    })
+
+    expect(ranked.course.map(item => item.id)).toEqual([7, 3, 9, 12])
+    expect(ranked.course.map(item => item.affinity)).toEqual([50, 50, 50, 50])
+
+    const rawRanked = rankResources({
+      interestVector: interests,
+      selectedInterests: selected(Object.keys(interests)),
+      candidates: [
+        course(1, { tags: [tag('raw_low')] }),
+        course(10, { tags: [tag('raw_high')] }),
+      ],
+    })
+    expect(rawRanked.course.map(item => item.id)).toEqual([10, 1])
+    expect(rawRanked.course.map(item => item.affinity)).toEqual([50, 50])
+
+    const weighted = rankResources({
+      interestVector: { documentary: 1 },
+      selectedInterests: [{ key: 'documentary', label: '다큐멘터리' }],
+      candidates: [course(20, { tags: [tag('documentary', 3), tag('unmatched', 1)] })],
+    })
+    expect(weighted.course[0]?.affinity).toBe(75)
+  })
+
+  it('uses no inactive, private, unrelated, or malformed candidate as filler', () => {
+    const valid = course(1, { tags: [tag('documentary')] })
+    const invalidWeightHigh = course(6, { tags: [tag('documentary', 4)] }) as ResourceCandidate
+    const invalidWeightLow = course(7, { tags: [tag('documentary', -0.1)] }) as ResourceCandidate
+    const invalidWeightNonFinite = course(8, {
+      tags: [tag('documentary', Number.NaN)],
+    }) as ResourceCandidate
+    const invalidMetadata = course(9, {
+      metadata: { gradeYear: 5, term: '1학기', credits: 3, goalSummary: '잘못된' },
+    } as unknown as Partial<CourseCandidate>)
+    const invalidType = { ...course(10), type: 'unknown' } as unknown as ResourceCandidate
+    const invalidEquipment = equipment(13, {
+      metadata: { locationLabel: '판타지랩' } as unknown as EquipmentCandidate['metadata'],
+      tags: [tag('documentary')],
+    })
+    const invalidFacility = facility(14, {
+      metadata: { locationLabel: '학과' } as unknown as FacilityCandidate['metadata'],
+      tags: [tag('documentary')],
+    })
+    const invalidStudentWork = {
+      id: 15,
+      type: 'student_work',
+      title: '근거가 불완전한 작품',
+      summary: '이미지 대체 텍스트가 없습니다.',
+      status: 'active',
+      visibility: 'public',
+      priority: 0,
+      sourceDate: '2026-07-14',
+      metadata: { imagePath: 'works/incomplete.jpg' },
+      tags: [tag('documentary')],
+    } as unknown as ResourceCandidate
+
+    const ranked = rankResources({
+      interestVector: { documentary: 1 },
+      selectedInterests: [{ key: 'documentary', label: '다큐멘터리' }],
+      candidates: [
+        valid,
+        course(2, { status: 'draft', tags: [tag('documentary')] }),
+        course(3, { status: 'archived', tags: [tag('documentary')] }),
+        course(4, { visibility: 'admin_only', tags: [tag('documentary')] }),
+        course(5, { visibility: 'hidden', tags: [tag('documentary')] }),
+        course(11, { tags: [tag('unrelated')] }),
+        course(12, { sourceDate: '07/14/2026', tags: [tag('documentary')] }),
+        invalidWeightHigh,
+        invalidWeightLow,
+        invalidWeightNonFinite,
+        invalidMetadata,
+        invalidType,
+        invalidEquipment,
+        invalidFacility,
+        invalidStudentWork,
+      ],
+    })
+
+    expect(ranked.course.map(item => item.id)).toEqual([1])
+    expect(ranked.capabilityEvidence).toEqual([])
+    expect(ranked.studentWork).toEqual([])
+  })
+
+  it('rejects non-finite or out-of-range student interest scores', () => {
+    for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, -0.1, 1.1]) {
+      expect(() => rankResources({
+        interestVector: { documentary: invalid },
+        selectedInterests: [{ key: 'documentary', label: '다큐멘터리' }],
+        candidates: [course(1, { tags: [tag('documentary')] })],
+      })).toThrow(/interest|score|0.*1|finite|관심|점수/iu)
+    }
+  })
+
+  it('selects primary tags deterministically and enforces diversity per pool', () => {
+    const documentary = [1, 2, 3].map(id => course(id, {
+      tags: [tag('z_tag', 2, true), tag('documentary', 3), tag('a_tag', 3)],
+    }))
+    const alternative = course(4, { tags: [tag('portrait', 3)] })
+    const ranked = rankResources({
+      interestVector: { a_tag: 1, documentary: 1, portrait: 0.8, z_tag: 1 },
+      selectedInterests: selected(['a_tag', 'documentary', 'portrait', 'z_tag']),
+      candidates: [...documentary, alternative],
+    })
+
+    expect(ranked.course.filter(item => item.primaryTag === 'a_tag')).toHaveLength(2)
+    expect(ranked.course.map(item => item.id)).toEqual([1, 2, 4])
+
+    const combinedCapability = rankResources({
+      interestVector: { documentary: 1, portrait: 0.8 },
+      selectedInterests: selected(['documentary', 'portrait']),
+      candidates: [
+        equipment(11, { tags: [tag('documentary')] }),
+        facility(12, { tags: [tag('documentary')] }),
+        equipment(13, { tags: [tag('documentary')] }),
+        facility(14, { tags: [tag('portrait')] }),
+      ],
+    })
+    expect(combinedCapability.capabilityEvidence.map(item => item.id)).toEqual([11, 12, 14])
+    expect(combinedCapability.capabilityEvidence
+      .filter(item => item.primaryTag === 'documentary')).toHaveLength(2)
+  })
+
+  it('combines capability and project pools, applies every cap, and preserves evidence', () => {
+    const keys = Array.from({ length: 60 }, (_, index) => `interest_${index + 1}`)
+    const capability: ResourceCandidate[] = [
+      equipment(1, {
+        metadata: {
+          locationLabel: '판타지랩',
+          confirmedQuantity: 2,
+          reservationUrl: 'https://gjureserve.co.kr',
+          accessMode: 'inquiry',
+          accessLabel: '문의 전용',
+          inventoryCode: 'SECRET-01',
+        } as EquipmentCandidate['metadata'],
+      }),
+      facility(2),
+      equipment(3),
+      facility(4),
+      equipment(5),
+    ]
+    const extracurricularProject = Array.from({ length: 5 }, (_, index) => emptyMetadataCandidate(
+      index + 6,
+      index % 2 === 0 ? 'extracurricular' : 'project',
+    ))
+    const studentWork = Array.from({ length: 5 }, (_, index): ResourceCandidate => ({
+      id: index + 11,
+      type: 'student_work',
+      title: `작품 ${index + 1}`,
+      summary: '포트폴리오 작품',
+      status: 'active',
+      visibility: 'public',
+      priority: 0,
+      sourceDate: '2026-07-14',
+      metadata: { imagePath: `works/${index + 1}.jpg`, imageAlt: `작품 ${index + 1}` },
+      tags: [tag(`interest_${index + 11}`)],
+    }))
+    const careers = Array.from({ length: 6 }, (_, index) => emptyMetadataCandidate(
+      index + 16,
+      'career',
+    ))
+    const courses = Array.from({ length: 7 }, (_, index) => course(index + 31))
+
+    const ranked = rankResources({
+      interestVector: Object.fromEntries(keys.map(key => [key, 1])),
+      selectedInterests: selected(keys),
+      candidates: [...capability, ...extracurricularProject, ...studentWork, ...careers, ...courses],
+    })
+
+    expect(ranked.course).toHaveLength(5)
+    expect(ranked.capabilityEvidence).toHaveLength(4)
+    expect(ranked.capabilityEvidence.slice(0, 2)).toHaveLength(2)
+    expect(ranked.capabilityEvidence.map(item => item.type)).toEqual([
+      'equipment',
+      'facility',
+      'equipment',
+      'facility',
+    ])
+    expect(ranked.capabilityEvidence[0]?.displayMetadata).toEqual({
+      locationLabel: '판타지랩',
+      confirmedQuantity: 2,
+      reservationUrl: 'https://gjureserve.co.kr',
+      accessMode: 'inquiry',
+      accessLabel: '문의 전용',
+    })
+    expect(JSON.stringify(ranked.capabilityEvidence[0])).not.toContain('SECRET-01')
+    expect(ranked.capabilityEvidence[1]?.displayMetadata).toEqual({
+      locationLabel: '학과',
+      operationNote: '학과 확인 필요',
+    })
+    expect(ranked.extracurricularProject).toHaveLength(3)
+    expect(ranked.studentWork).toHaveLength(3)
+    expect(ranked.studentWork[0]?.displayMetadata).toEqual({
+      imagePath: 'works/1.jpg',
+      imageAlt: '작품 1',
+    })
+    expect(ranked.career).toHaveLength(4)
+  })
+
+  it('computes category fits from displayed items and excludes support', () => {
+    const candidates: ResourceCandidate[] = [
+      course(1, { tags: [tag('course_fit', 2)] }),
+      equipment(2, { tags: [tag('equipment_fit', 3)] }),
+      facility(3, { tags: [tag('facility_fit', 1)] }),
+      emptyMetadataCandidate(4, 'project', 'project_fit'),
+      {
+        id: 5,
+        type: 'student_work',
+        title: '학생 작품',
+        summary: '학생 작품 요약',
+        status: 'active',
+        visibility: 'public',
+        priority: 0,
+        sourceDate: '2026-07-14',
+        metadata: { imagePath: 'works/one.jpg', imageAlt: '학생 작품' },
+        tags: [tag('portfolio_fit', 1)],
+      },
+      emptyMetadataCandidate(6, 'career', 'career_fit'),
+      emptyMetadataCandidate(7, 'support', 'support_fit'),
+    ]
+    const ranked = rankResources({
+      interestVector: {
+        course_fit: 0.8,
+        equipment_fit: 0.6,
+        facility_fit: 0.3,
+        project_fit: 0.5,
+        portfolio_fit: 0.4,
+        career_fit: 1,
+        support_fit: 1,
+      },
+      selectedInterests: selected([
+        'course_fit',
+        'equipment_fit',
+        'facility_fit',
+        'project_fit',
+        'portfolio_fit',
+        'career_fit',
+        'support_fit',
+      ]),
+      candidates,
+    })
+
+    expect(ranked.categoryFits).toEqual({
+      course: 80,
+      equipmentFacility: 52.5,
+      extracurricularProject: 50,
+      careerPortfolio: 85,
+    })
+    expect(ranked.support).toHaveLength(1)
+    expect(ranked.categoryFits).not.toHaveProperty('support')
+
+    const displayedOnly = rankResources({
+      interestVector: {
+        cap_1: 1,
+        cap_2: 0.9,
+        cap_3: 0.8,
+        cap_4: 0.7,
+        cap_5: 0.6,
+        cap_6: 0.1,
+      },
+      selectedInterests: selected(['cap_1', 'cap_2', 'cap_3', 'cap_4', 'cap_5', 'cap_6']),
+      candidates: [1, 2, 3, 4, 5, 6].map(index => course(100 + index, {
+        tags: [tag(`cap_${index}`, 1)],
+      })),
+    })
+    expect(displayedOnly.course.map(item => item.id)).toEqual([101, 102, 103, 104, 105])
+    expect(displayedOnly.categoryFits.course).toBe(80)
+
+    expect(computeEnvironmentScore({
+      course: 80,
+      equipmentFacility: 70,
+      extracurricularProject: 60,
+      faculty: 90,
+      careerPortfolio: 50,
+      support: 100,
+    })).toBe(72)
+    expect(computeEnvironmentScore({ course: 100 })).toBe(35)
+    expect(computeEnvironmentScore({
+      course: 80.1,
+      equipmentFacility: 70.2,
+      extracurricularProject: 60.3,
+      faculty: 90.4,
+      careerPortfolio: 50.5,
+    })).toBe(72.3)
+
+    for (const category of [
+      'course',
+      'equipmentFacility',
+      'extracurricularProject',
+      'faculty',
+      'careerPortfolio',
+    ] as const) {
+      for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, -0.1, 100.1]) {
+        expect(() => computeEnvironmentScore({ [category]: invalid }))
+          .toThrow(/0.*100|finite/iu)
+      }
+    }
+  })
+
+  it('renders the strongest matched Korean evidence and rejects missing evidence', () => {
+    const input = {
+      interestVector: { documentary: 0.7, portrait: 0.9 },
+      selectedInterests: [
+        { key: 'documentary', label: '사람과 사회의 기록' },
+        { key: 'portrait', label: '인물 연출' },
+      ],
+      resourceTags: [tag('documentary', 3), tag('portrait', 2)],
+      resourceTitle: '포토 스토리 워크숍',
+      goalSummary: '인물 중심의 서사를 제작하는',
+    } as const
+    expect(renderConnectionReason(input)).toBe(
+      '선택한 ‘사람과 사회의 기록’ 관심이 인물 중심의 서사를 제작하는 ‘포토 스토리 워크숍’과 연결됩니다.',
+    )
+
+    expect(() => renderConnectionReason({
+      ...input,
+      selectedInterests: [{ key: 'portrait', label: '인물 연출' }],
+    })).toThrow(/label|레이블|evidence|근거/iu)
+    expect(() => renderConnectionReason({ ...input, resourceTitle: ' ' })).toThrow(/title|제목/iu)
+    expect(() => renderConnectionReason({ ...input, goalSummary: '  ' })).toThrow(/goal|목표/iu)
+    expect(() => renderConnectionReason({
+      ...input,
+      selectedInterests: [
+        { key: 'documentary', label: '' },
+        { key: 'portrait', label: '인물 연출' },
+      ],
+    })).toThrow(/label|레이블|evidence|근거/iu)
+    expect(() => renderConnectionReason({
+      ...input,
+      interestVector: { unrelated: 1 },
+    })).toThrow(/matched|일치/iu)
+  })
+
+  it('is deterministic across candidate, tag, and selected-label permutations', () => {
+    const candidates = [
+      course(9, { tags: [tag('portrait', 2), tag('documentary', 3)] }),
+      course(3, { tags: [tag('portrait', 3), tag('documentary', 2)] }),
+    ]
+    const first = rankResources({
+      interestVector: { documentary: 0.8, portrait: 0.8 },
+      selectedInterests: [
+        { key: 'documentary', label: '기록' },
+        { key: 'portrait', label: '인물' },
+      ],
+      candidates,
+    })
+    const second = rankResources({
+      interestVector: { portrait: 0.8, documentary: 0.8 },
+      selectedInterests: [
+        { key: 'portrait', label: '인물' },
+        { key: 'documentary', label: '기록' },
+      ],
+      candidates: [...candidates].reverse().map(candidate => ({
+        ...candidate,
+        tags: [...candidate.tags].reverse(),
+      })),
+    })
+
+    expect(second.course.map(item => item.id)).toEqual(first.course.map(item => item.id))
+    expect(second.course.map(item => item.connectionReason))
+      .toEqual(first.course.map(item => item.connectionReason))
+  })
+})
