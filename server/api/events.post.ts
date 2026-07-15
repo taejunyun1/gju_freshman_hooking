@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { selectionLimits } from '../../shared/schemas/assessment'
+import { decodeResultSnapshot } from '../../shared/schemas/result'
 import type { ApiFailure, ApiSuccess } from '../../shared/types/api'
+import { resourceTypes } from '../../shared/types/domain'
 import { createSupabaseStudentSessionReader } from '../modules/identity/service'
 import { createEventWriter, type EventWriter } from '../modules/metrics/events'
 import { getAnonymousVisitorId } from '../utils/anonymous-visitor'
@@ -16,6 +18,7 @@ const MAX_BODY_BYTES = 8_192
 const MAX_PROPERTIES_BYTES = 4_096
 const encoder = new TextEncoder()
 const catalogRevisionSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u)
+const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 
 const browserEventSchema = z.discriminatedUnion('eventName', [
   z.object({ eventName: z.literal('landing_viewed') }).strict(),
@@ -34,12 +37,23 @@ const browserEventSchema = z.discriminatedUnion('eventName', [
       context.addIssue({ code: 'custom', message: 'selected count is outside group limits' })
     }
   }),
+  z.object({
+    eventName: z.literal('resource_opened'),
+    resultPublicId: z.string().max(100),
+    resourceId: z.number().int().positive().safe(),
+    resourceType: z.enum(resourceTypes),
+  }).strict(),
 ])
 
 type StudentSession = {
   prospectId: number
   nickname: string
   expiresAt: string
+}
+
+type OwnedAssessmentEventRecord = {
+  assessmentId: number
+  resultSnapshot: unknown
 }
 
 type EventsHandlerDependencies = {
@@ -51,6 +65,9 @@ type EventsHandlerDependencies = {
   getRequestId: (event: unknown) => string
   getRequestOrigin: (event: unknown) => string
   getSessionToken: (event: unknown) => string | undefined
+  loadOwnedAssessment?: (
+    identity: { prospectId: number, publicId: string },
+  ) => Promise<OwnedAssessmentEventRecord | null>
   readRawBody: (event: unknown) => Promise<string | undefined>
   readStudentSession: (sessionToken: string) => Promise<StudentSession | null>
   setHeader: (event: unknown, name: string, value: string) => void
@@ -70,6 +87,7 @@ const eventProperties = (event: z.infer<typeof browserEventSchema>, requestId: s
   if (event.eventName === 'assessment_started') {
     return { request_id: requestId, catalog_revision: event.catalogRevision }
   }
+  if (event.eventName === 'resource_opened') throw new Error('RESOURCE_EVENT_REQUIRES_OWNERSHIP')
   return {
     request_id: requestId,
     catalog_revision: event.catalogRevision,
@@ -121,6 +139,59 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
 
     let prospectId: number | undefined
     const sessionToken = dependencies.getSessionToken(event)
+    if (parsed.data.eventName === 'resource_opened') {
+      const resourceEvent = parsed.data
+      let session: StudentSession | null = null
+      if (sessionToken) {
+        try {
+          session = await dependencies.readStudentSession(sessionToken)
+        }
+        catch {
+          throw new AppError('AUTH_FAILED')
+        }
+      }
+      if (!session) throw new AppError('AUTH_FAILED')
+      prospectId = session.prospectId
+
+      if (!canonicalUuidPattern.test(resourceEvent.resultPublicId)) {
+        throw new AppError('RESULT_NOT_FOUND')
+      }
+      if (!dependencies.loadOwnedAssessment) throw new Error('EVENT_STORE_UNAVAILABLE')
+      const stored = await dependencies.loadOwnedAssessment({
+        prospectId,
+        publicId: resourceEvent.resultPublicId,
+      })
+      if (!stored) throw new AppError('RESULT_NOT_FOUND')
+      if (!Number.isSafeInteger(stored.assessmentId) || stored.assessmentId <= 0) {
+        throw new Error('EVENT_STORE_INVALID')
+      }
+
+      const snapshot = decodeResultSnapshot(stored.resultSnapshot)
+      const resourceExists = Object.values(snapshot.resources)
+        .flat()
+        .some(resource => resource.id === resourceEvent.resourceId
+          && resource.type === resourceEvent.resourceType)
+      if (!resourceExists) throw new AppError('RESULT_NOT_FOUND')
+
+      const properties = {
+        assessment_id: stored.assessmentId,
+        resource_id: resourceEvent.resourceId,
+        resource_type: resourceEvent.resourceType,
+      }
+      if (encoder.encode(JSON.stringify(properties)).byteLength > MAX_PROPERTIES_BYTES) {
+        throw new Error('EVENT_PROPERTIES_INVALID')
+      }
+      await dependencies.writeEvent({
+        anonymousId,
+        eventName: resourceEvent.eventName,
+        path: EVENT_ROUTE,
+        properties,
+        prospectId,
+        requestId,
+      })
+      return { data: { accepted: true }, requestId }
+    }
+
     if (sessionToken) {
       try {
         prospectId = (await dependencies.readStudentSession(sessionToken))?.prospectId
@@ -189,6 +260,26 @@ export const createServerEventsHandler = (
     },
     getRequestOrigin: requestEvent => getRequestURL(requestEvent as never).origin,
     getSessionToken: requestEvent => getCookie(requestEvent as never, studentSessionCookie),
+    loadOwnedAssessment: async ({ prospectId, publicId }) => {
+      const { data, error } = await client.from('assessments')
+        .select('id,public_id,prospect_id,result_snapshot')
+        .eq('public_id', publicId)
+        .eq('prospect_id', prospectId)
+        .maybeSingle()
+      if (error) throw new Error('EVENT_STORE_UNAVAILABLE')
+      if (data === null) return null
+      if (
+        typeof data !== 'object'
+        || !Number.isSafeInteger(data.id)
+        || data.id <= 0
+        || data.public_id !== publicId
+        || data.prospect_id !== prospectId
+        || !('result_snapshot' in data)
+      ) {
+        throw new Error('EVENT_STORE_INVALID')
+      }
+      return { assessmentId: data.id, resultSnapshot: data.result_snapshot }
+    },
     readRawBody: readBoundedRequestBody,
     readStudentSession: sessionToken => (
       sessionReader ??= createSessionReader(client)

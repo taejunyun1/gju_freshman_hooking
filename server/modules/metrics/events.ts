@@ -21,7 +21,7 @@ export type ServerEvent = {
   requestId: string
 }
 
-export type BrowserEvent = {
+type ExistingBrowserEvent = {
   anonymousId: string
   eventName: 'landing_viewed' | 'assessment_started' | 'assessment_step_completed'
   path: '/api/events'
@@ -29,6 +29,21 @@ export type BrowserEvent = {
   prospectId?: number
   requestId: string
 }
+
+type ResourceOpenedEvent = {
+  anonymousId: string
+  eventName: 'resource_opened'
+  path: '/api/events'
+  properties: {
+    assessment_id: number
+    resource_id: number
+    resource_type: 'course' | 'equipment' | 'facility' | 'extracurricular' | 'project' | 'student_work' | 'career' | 'support'
+  }
+  prospectId: number
+  requestId: string
+}
+
+export type BrowserEvent = ExistingBrowserEvent | ResourceOpenedEvent
 
 export type ProductEvent = ServerEvent | BrowserEvent
 export type EventWriter = (event: ProductEvent) => Promise<void>
