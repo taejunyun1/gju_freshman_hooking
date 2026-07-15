@@ -6,12 +6,16 @@ import {
   counselingAvailabilitySchema,
   counselingContactMethodSchema,
   counselingStatusSchema,
+  studentCounselingStatusSchema,
   type CounselingApplication,
+  type StudentCounselingStatus,
 } from '../../../shared/schemas/counseling'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { createSupabaseStudentSessionReader } from '../identity/service'
 import { createEventWriter, type EventWriter } from '../metrics/events'
+
+export type { StudentCounselingStatus } from '../../../shared/schemas/counseling'
 
 const COUNSELING_ROUTE = '/api/counseling' as const
 const canonicalUuidSchema = z.string().uuid()
@@ -176,25 +180,6 @@ export type CounselingRequestContext = {
   sessionToken: string
 }
 
-export type StudentCounselingStatus = {
-  id: string
-  assessmentPublicId: string | null
-  status: z.infer<typeof counselingStatusSchema>
-  contactMethod: z.infer<typeof counselingContactMethodSchema>
-  availability: z.infer<typeof counselingAvailabilitySchema>
-  inquiry: string | null
-  consentedAt: string
-  assignedAt: string | null
-  contactedAt: string | null
-  completedAt: string | null
-  closedAt: string | null
-  version: number
-  createdAt: string
-  updatedAt: string
-  assignedFaculty: z.infer<typeof assignedFacultySchema> | null
-  recommendations: Array<z.infer<typeof facultyRecommendationSchema>>
-}
-
 type CreateRequestInput = {
   prospectId: number
   assessmentId: number
@@ -225,7 +210,7 @@ const parseStoreValue = <Schema extends z.ZodType>(
 const publicStatus = (rawValue: unknown): StudentCounselingStatus => {
   const request = parseStoreValue(storedRequestSchema, rawValue, 'COUNSELING_STORE_INVALID')
   const roleOrder = { primary: 0, backup: 1, specialist: 2 } as const
-  return {
+  return parseStoreValue(studentCounselingStatusSchema, {
     id: request.publicId,
     assessmentPublicId: request.assessmentPublicId,
     status: request.status,
@@ -244,7 +229,7 @@ const publicStatus = (rawValue: unknown): StudentCounselingStatus => {
     recommendations: [...request.recommendations].sort((left, right) => (
       roleOrder[left.role] - roleOrder[right.role] || left.rank - right.rank
     )),
-  }
+  }, 'COUNSELING_PUBLIC_STATUS_INVALID')
 }
 
 const authenticate = async (

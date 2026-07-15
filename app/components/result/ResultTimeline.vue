@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { TrackKey } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
+import CounselingCTA from '../counseling/CounselingCTA.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
 import FacultyRecommendation from './FacultyRecommendation.vue'
 import InterestClip from './InterestClip.vue'
@@ -188,14 +189,7 @@ const hasOutcomes = computed(() => (
       data-result-section="counseling"
       aria-labelledby="counseling-title"
     >
-      <p class="result-timeline__counseling-code">NEXT EDIT / COUNSELING</p>
-      <div>
-        <h2 id="counseling-title">관심 분야를 실제 입학 준비로 이어가세요</h2>
-        <p>
-          전임교원이 전체 학습경로와 진로상담을 담당하고, 필요한 경우 실무 전문교원과 함께 살펴봅니다.
-          상담을 접수하면 관리자가 실제 상담교수를 최종 배정합니다.
-        </p>
-      </div>
+      <CounselingCTA :assessment-public-id="resultPublicId" />
     </section>
   </article>
 </template>
@@ -223,8 +217,7 @@ const hasOutcomes = computed(() => (
 }
 
 .result-timeline__eyebrow,
-.result-timeline__section-heading > p,
-.result-timeline__counseling-code {
+.result-timeline__section-heading > p {
   margin: 0;
   color: var(--color-sequence);
   font-family: var(--font-mono);
@@ -349,29 +342,10 @@ const hasOutcomes = computed(() => (
 }
 
 .result-timeline__counseling {
-  display: grid;
-  gap: 1.2rem;
   border: 1px solid var(--color-signal);
   border-left: 0.45rem solid var(--color-signal);
   background: color-mix(in srgb, var(--color-signal) 6%, var(--color-surface));
   padding: clamp(1.25rem, 5vw, 2rem);
-}
-
-.result-timeline__counseling-code { color: var(--color-signal); }
-
-.result-timeline__counseling h2 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.35rem, 5vw, 2rem);
-  letter-spacing: -0.04em;
-  line-height: 1.25;
-}
-
-.result-timeline__counseling p:not(.result-timeline__counseling-code) {
-  margin: 0.65rem 0 0;
-  color: color-mix(in srgb, var(--color-ink) 72%, transparent);
-  line-height: 1.65;
-  word-break: keep-all;
 }
 
 @media (min-width: 1024px) {
@@ -389,10 +363,5 @@ const hasOutcomes = computed(() => (
   }
 
   .result-timeline__support-lane { grid-column: 1 / -1; }
-
-  .result-timeline__counseling {
-    grid-template-columns: 12rem 1fr;
-    align-items: start;
-  }
 }
 </style>
