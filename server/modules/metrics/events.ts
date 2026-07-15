@@ -7,6 +7,7 @@ export const serverEventNames = [
   'login_failed',
   'assessment_completed',
   'result_viewed',
+  'counseling_requested',
 ] as const
 
 export type ServerEventName = typeof serverEventNames[number]
@@ -14,7 +15,7 @@ export type ServerEventName = typeof serverEventNames[number]
 export type ServerEvent = {
   anonymousId: string
   eventName: ServerEventName
-  path: '/api/student/register' | '/api/student/login' | '/api/assessment/submit' | `/api/result/${string}`
+  path: '/api/student/register' | '/api/student/login' | '/api/assessment/submit' | '/api/counseling' | `/api/result/${string}`
   campaignId?: number | null
   prospectId?: number
   properties?: Record<string, unknown>

@@ -14,6 +14,7 @@ const publicMessages: Record<AppErrorCode, string> = {
   ASSESSMENT_INVALID: '평가 응답을 다시 확인해 주세요.',
   ASSESSMENT_CATALOG_STALE: '평가 선택지가 변경되었습니다. 다시 확인해 주세요.',
   RESULT_NOT_FOUND: '요청한 결과를 찾을 수 없습니다.',
+  COUNSELING_INVALID: '상담 신청 내용을 다시 확인해 주세요.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -28,6 +29,7 @@ const statusCodes: Record<AppErrorCode, number> = {
   ASSESSMENT_INVALID: 422,
   ASSESSMENT_CATALOG_STALE: 409,
   RESULT_NOT_FOUND: 404,
+  COUNSELING_INVALID: 422,
 }
 
 export class AppError extends Error {
