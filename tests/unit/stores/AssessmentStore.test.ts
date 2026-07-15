@@ -243,7 +243,7 @@ describe('assessment store', () => {
     expect(ok).toBe(true)
     expect(store.status).toBe('validated')
     expect(store.validatedResult).toEqual(scored)
-    expect(store.primaryTrackLabel).toBe('다큐멘터리')
+    expect(store.primaryTrackLabel).toBe('다큐멘터리 사진')
     expect(fetch).toHaveBeenCalledWith('/api/student/assessment/validate', {
       body: {
         catalogRevision: revisionA,

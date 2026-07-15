@@ -145,6 +145,9 @@ describe('verified department content seed', () => {
     expect(faculty.every(person => person.platformTags.length > 0)).toBe(true)
     expect(faculty.map(person => person.platformTags.length)).toEqual([8, 12, 9, 7, 6, 8])
     expect(faculty.reduce((total, person) => total + person.platformTags.length, 0)).toBe(50)
+    expect(faculty.find(person => person.name === '윤태준')).toMatchObject({
+      expertiseSummary: '현대예술·예술사진·영상·AI·기술적 이미지',
+    })
     expect(faculty.find(person => person.name === '김사라')?.institutionProjects).toHaveLength(14)
     expect(faculty.find(person => person.name === '곽동욱')?.careerPaths).toEqual([])
   })
@@ -167,6 +170,7 @@ describe('verified department content seed', () => {
     expect(seed.facultyTags.filter(tag => tag.facultyName === '박재웅' && tag.source === 'platform')
       .every(tag => tag.category === 'specialist')).toBe(true)
     expect(seed.facultyTags).toHaveLength(174)
+    expect(seed.facultyTags.some(tag => tag.tagKey === 'technical_image')).toBe(false)
     expect(seed.facultyTags.filter(tag => tag.facultyName === '윤태준'
       && tag.category === 'result'
       && tag.tagLabel === 'AI 이미지·영상 프로젝트').map(tag => tag.tagKey))
@@ -302,7 +306,7 @@ describe('verified department content seed', () => {
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:5a1be602511b23d7f2ed071298b3dfa024530453d28932ea0534c57a9c81ce33',
+      'sha256:2c4b0c5dfd8273b3914af083f8099a8f1be0a9c864d4d840a89fb6db296a69aa',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')

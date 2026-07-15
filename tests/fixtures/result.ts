@@ -134,7 +134,7 @@ const snapshotInput = () => ({
       id: 701,
       name: '윤태준',
       title: '교수',
-      expertise: '현대예술·예술사진·영상촬영·융합이미지',
+      expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
       reason: '스튜디오 기반 사진과 영상 학습경로를 총괄 상담합니다.',
       publicContacts: {
         office: '행정관 8층 12호',

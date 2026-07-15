@@ -11,6 +11,8 @@ import {
   counselingStatuses,
   facultyRoles,
   resourceTypes,
+  trackKeys,
+  trackLabels,
 } from '../../../shared/types/domain'
 import type {
   CounselingStatus,
@@ -148,6 +150,16 @@ describe('assessment catalog seed', () => {
 })
 
 describe('implementation index domain contracts', () => {
+  it('keeps internal track keys while publishing the approved category labels', () => {
+    expect(trackKeys).toEqual(['documentary', 'art_photo', 'commercial', 'video'])
+    expect(trackLabels).toEqual({
+      documentary: '다큐멘터리 사진',
+      art_photo: '예술사진',
+      commercial: '광고사진',
+      video: '영상과 기술',
+    })
+  })
+
   it('keeps resource, faculty, and counseling unions exact', () => {
     expect(resourceTypes).toEqual([
       'course',

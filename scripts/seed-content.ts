@@ -7,7 +7,7 @@ import { z, ZodError } from 'zod'
 const SOURCE_DATE = '2026-07-14'
 const RESERVATION_URL = 'https://gjureserve.co.kr'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:5a1be602511b23d7f2ed071298b3dfa024530453d28932ea0534c57a9c81ce33'
+const EXPECTED_CONTENT_REVISION = 'sha256:2c4b0c5dfd8273b3914af083f8099a8f1be0a9c864d4d840a89fb6db296a69aa'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -341,8 +341,9 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
     equipment,
     facilities,
   }
-  if (createContentRevision(parsed) !== EXPECTED_CONTENT_REVISION) {
-    throw new Error('content seed manifest differs from the approved internal sources')
+  const contentRevision = createContentRevision(parsed)
+  if (contentRevision !== EXPECTED_CONTENT_REVISION) {
+    throw new Error(`content seed manifest differs from the approved internal sources: ${contentRevision}`)
   }
   return parsed
 }

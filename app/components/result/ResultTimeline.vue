@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TrackKey } from '../../../shared/types/domain'
+import { trackLabels } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CounselingCTA from '../counseling/CounselingCTA.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
@@ -14,13 +14,6 @@ const props = defineProps<{
   snapshot: ResultSnapshot
   resultPublicId: string
 }>()
-
-const trackLabels: Readonly<Record<TrackKey, string>> = {
-  documentary: '다큐멘터리·기록',
-  art_photo: '예술사진·현대이미지',
-  commercial: '광고사진·브랜드 제작',
-  video: '영상·드론 제작',
-}
 
 const primaryConnection = computed(() => trackLabels[props.snapshot.rankedTracks[0]])
 const hasOutcomes = computed(() => (

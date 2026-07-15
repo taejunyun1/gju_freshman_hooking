@@ -87,7 +87,7 @@ const assertCommercialResult = async (page: Page): Promise<void> => {
     name: '선택한 관심사는 4년 동안 이렇게 이어집니다',
   })).toBeVisible()
   await expect(page.locator('[data-result-section="summary"]')
-    .getByText('광고사진·브랜드 제작', { exact: true }))
+    .getByText('광고사진', { exact: true }))
     .toBeVisible()
 }
 

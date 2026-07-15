@@ -177,7 +177,7 @@ const facultyCandidates = () => ({
     primaryFaculty(201, '조대연', '포토커뮤니케이션·다큐멘터리·시각커뮤니케이션', 30, [
       { key: 'documentary', label: '다큐멘터리', category: 'track', weight: 3, isPrimary: true },
     ]),
-    primaryFaculty(202, '윤태준', '현대예술·예술사진·영상촬영·융합이미지', 20, [
+    primaryFaculty(202, '윤태준', '현대예술·예술사진·영상·AI·기술적 이미지', 20, [
       { key: 'art_photo', label: '예술사진', category: 'track', weight: 3, isPrimary: true },
       { key: 'studio', label: '스튜디오 촬영', category: 'activity', weight: 3, isPrimary: true },
       { key: 'portfolio', label: '포트폴리오', category: 'result', weight: 3, isPrimary: true },

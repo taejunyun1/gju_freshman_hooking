@@ -153,7 +153,7 @@ with inserted as (
     (
       'E2E 총괄 ' || :'suffix', '교수', 'full_time', 'primary',
       '{"office":"hidden","phone":"hidden","email":"hidden","website":"hidden"}'::jsonb,
-      '현대예술·예술사진·영상촬영·융합이미지', '로컬 상담 수직 검증용 총괄 교수입니다.', '{}'::jsonb,
+      '현대예술·예술사진·영상·AI·기술적 이미지', '로컬 상담 수직 검증용 총괄 교수입니다.', '{}'::jsonb,
       'active', 4, 32000, '2026-07-14'::date, clock_timestamp()
     ),
     (

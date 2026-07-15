@@ -57,7 +57,7 @@ const snapshotFixture = (
         id: 202,
         name: '윤태준',
         title: '교수',
-        expertise: '현대예술·예술사진·영상촬영·융합이미지',
+        expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
         reason: '선택한 스튜디오 관심과 전문분야가 연결됩니다.',
         publicContacts: { phone: '062-670-2338', email: 'tjyun@gwangju.ac.kr' },
       },

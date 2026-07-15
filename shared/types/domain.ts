@@ -27,10 +27,10 @@ export const visualKeys = [
 ] as const
 
 export const trackLabels = {
-  documentary: '다큐멘터리',
+  documentary: '다큐멘터리 사진',
   art_photo: '예술사진',
   commercial: '광고사진',
-  video: '영상',
+  video: '영상과 기술',
 } as const satisfies Record<TrackKey, string>
 
 export type TrackKey = typeof trackKeys[number]

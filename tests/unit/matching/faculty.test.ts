@@ -99,7 +99,7 @@ const facultyFixture = (): FacultyCandidate[] => [
     id: 2,
     name: '윤태준',
     title: '교수',
-    expertise: '현대예술·예술사진·영상촬영·융합이미지',
+    expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
     status: 'active',
     employmentType: 'full_time',
     consultationRole: 'primary',

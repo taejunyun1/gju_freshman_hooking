@@ -51,7 +51,7 @@ const storedRequest = (overrides: Record<string, unknown> = {}) => ({
     {
       name: '윤태준',
       title: '교수',
-      expertise: '현대예술·예술사진·영상촬영·융합이미지',
+      expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
       reason: '예술사진과 영상촬영 관심을 연결합니다.',
       role: 'primary',
       rank: 1,
@@ -173,7 +173,7 @@ const rawRequestRow = (overrides: Record<string, unknown> = {}) => ({
     {
       faculty_name_snapshot: '윤태준',
       faculty_title_snapshot: '교수',
-      expertise_snapshot: '현대예술·예술사진·영상촬영·융합이미지',
+      expertise_snapshot: '현대예술·예술사진·영상·AI·기술적 이미지',
       reason_snapshot: '예술사진과 영상촬영 관심을 연결합니다.',
       role: 'primary',
       rank: 1,
@@ -520,7 +520,7 @@ describe('GET /api/counseling', () => {
         assignedFaculty: {
           name: '윤태준',
           title: '교수',
-          expertise: '현대예술·예술사진·영상촬영·융합이미지',
+          expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
         },
       })),
     })
@@ -540,7 +540,7 @@ describe('GET /api/counseling', () => {
         assignedFaculty: {
           name: '윤태준',
           title: '교수',
-          expertise: '현대예술·예술사진·영상촬영·융합이미지',
+          expertise: '현대예술·예술사진·영상·AI·기술적 이미지',
         },
       }),
       requestId,

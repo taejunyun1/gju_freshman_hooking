@@ -1,19 +1,12 @@
 <script setup lang="ts">
-import type { TrackKey } from '../../../shared/types/domain'
+import { trackKeys, trackLabels, type TrackKey } from '../../../shared/types/domain'
 
 const props = defineProps<{
   scores: Readonly<Record<TrackKey, number>>
   environmentScore: number
 }>()
 
-const trackLabels: Readonly<Record<TrackKey, string>> = {
-  documentary: '다큐멘터리·기록',
-  art_photo: '예술사진·현대이미지',
-  commercial: '광고사진·브랜드',
-  video: '영상·드론',
-}
-
-const tracks: readonly TrackKey[] = ['documentary', 'art_photo', 'commercial', 'video']
+const tracks: readonly TrackKey[] = trackKeys
 const scoreText = (score: number) => Number.isInteger(score) ? String(score) : score.toFixed(1)
 </script>
 
