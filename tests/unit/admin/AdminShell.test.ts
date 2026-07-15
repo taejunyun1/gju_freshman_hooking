@@ -35,7 +35,13 @@ describe('administrator shell', () => {
   })
 
   it('assigns the admin layout and middleware as protected-page metadata without manual wrappers', () => {
-    for (const pagePath of ['app/pages/admin/index.vue', 'app/pages/admin/recovery.vue', 'app/pages/admin/counseling.vue']) {
+    for (const pagePath of [
+      'app/pages/admin/index.vue',
+      'app/pages/admin/recovery.vue',
+      'app/pages/admin/counseling.vue',
+      'app/pages/admin/students/index.vue',
+      'app/pages/admin/students/[id].vue',
+    ]) {
       const page = readFileSync(pagePath, 'utf8')
 
       expect(page).toContain("definePageMeta({ layout: 'admin', middleware: 'admin' })")
@@ -48,6 +54,21 @@ describe('administrator shell', () => {
 
     expect(login).toContain("definePageMeta({ layout: false, middleware: 'admin' })")
     expect(login).not.toContain('<NuxtLayout')
+  })
+
+  it('starts session-backed student requests only after the client-side session guard has mounted', () => {
+    const listPage = readFileSync('app/pages/admin/students/index.vue', 'utf8')
+    const detailPage = readFileSync('app/pages/admin/students/[id].vue', 'utf8')
+
+    expect(listPage).toContain('onMounted(() =>')
+    expect(listPage.indexOf('onMounted(() =>')).toBeLessThan(
+      listPage.indexOf("watch(() => route.fullPath, loadStudents, { immediate: true })"),
+    )
+    expect(detailPage).toContain('onMounted(() =>')
+    expect(detailPage.indexOf('onMounted(() =>')).toBeLessThan(
+      detailPage.indexOf('watch(studentId, loadDetail, { immediate: true })'),
+    )
+    expect(detailPage).not.toContain('void loadDetail()')
   })
 
   it('offers password plus explicit TOTP sign-in without public signup', async () => {
@@ -158,6 +179,7 @@ describe('administrator shell', () => {
 
     expect(wrapper.get('nav').text()).toContain('복구 대기열')
     expect(wrapper.get('nav').text()).toContain('상담 운영')
+    expect(wrapper.get('nav').text()).toContain('학생 찾기')
     expect(wrapper.text()).toContain('세션 만료')
     expect(wrapper.text()).toContain('operator content')
   })
