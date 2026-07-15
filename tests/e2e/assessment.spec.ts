@@ -1,7 +1,13 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Response } from '@playwright/test'
+import {
+  expectedCommercialMatchingFixtureSummary,
+  installCommercialMatchingFixture,
+} from './support/commercial-matching-fixture'
 import { registerAndLoginStudent, uniqueAssessmentPhone } from './support/student'
 
 const assessmentStorageKey = 'photo_next_assessment_v1'
+const assessmentSubmitPath = '/api/assessment/submit'
+const canonicalResultUrl = /\/result\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const selections = {
   work: 'work.commercial_image',
   result: 'result.commercial_fashion',
@@ -10,6 +16,11 @@ const selections = {
 } as const
 
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
+
+test.beforeAll(() => {
+  expect(installCommercialMatchingFixture())
+    .toEqual(expectedCommercialMatchingFixtureSummary)
+})
 
 const selectCommercialPath = async (page: Page): Promise<void> => {
   await expect(page.getByRole('group', { name: '무엇을 해보고 싶나요?' })).toBeVisible()
@@ -69,17 +80,39 @@ const assertRuntimeTypography = async (page: Page): Promise<void> => {
   expect(typography.sameOriginResources).toBe(true)
 }
 
+const assertCommercialResult = async (page: Page): Promise<void> => {
+  await expect(page).toHaveURL(canonicalResultUrl)
+  await expect(page.getByRole('heading', {
+    level: 1,
+    name: '선택한 관심사는 4년 동안 이렇게 이어집니다',
+  })).toBeVisible()
+  await expect(page.locator('[data-result-section="summary"]')
+    .getByText('광고사진·브랜드 제작', { exact: true }))
+    .toBeVisible()
+}
+
+const assertSuccessfulSubmit = async (response: Response): Promise<void> => {
+  if (!response.ok()) {
+    throw new Error(`ASSESSMENT_SUBMIT_FAILED:${response.status()}:${await response.text()}`)
+  }
+  expect(response.status()).toBe(200)
+}
+
 test('student completes four steps with commercial as the primary track', async ({ page }, testInfo) => {
   await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
   await expect(page.getByRole('group', { name: '무엇을 해보고 싶나요?' })).toBeVisible()
   await assertRuntimeTypography(page)
   await selectCommercialPath(page)
 
-  await page.getByRole('button', { name: '결과 계산' }).click()
+  const submitResponsePromise = page.waitForResponse(response => (
+    new URL(response.url()).pathname === assessmentSubmitPath
+    && response.request().method() === 'POST'
+  ))
+  await page.getByRole('button', { name: '나의 연결 경로 보기', exact: true }).click()
+  const submitResponse = await submitResponsePromise
 
-  const primaryTrack = page.getByTestId('validated-primary-track')
-  await expect(primaryTrack).toHaveCount(1)
-  await expect(primaryTrack).toHaveText('광고사진')
+  await assertSuccessfulSubmit(submitResponse)
+  await assertCommercialResult(page)
 })
 
 test('matching catalog revision restores only the safe assessment snapshot', async ({ page }, testInfo) => {
@@ -136,49 +169,84 @@ test('matching catalog revision restores only the safe assessment snapshot', asy
   await expect(page.getByRole('checkbox', { name: /제품·패션·광고 이미지 만들기/u })).toBeChecked()
 })
 
-test('first validation network failure preserves every choice and retries the real server once', async ({ page }, testInfo) => {
+test('first submit network failure preserves every choice and retries the real server once', async ({ page }, testInfo) => {
   await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
+  const baselineLocalEntries = await page.evaluate(() => (
+    Object.entries(localStorage).sort(([left], [right]) => left.localeCompare(right))
+  ))
   await selectCommercialPath(page)
 
-  let validateRequests = 0
+  let submitRequests = 0
   const successfulStatuses: number[] = []
   page.on('response', (response) => {
-    if (new URL(response.url()).pathname === '/api/student/assessment/validate' && response.ok()) {
+    if (new URL(response.url()).pathname === assessmentSubmitPath
+      && response.request().method() === 'POST'
+      && response.ok()) {
       successfulStatuses.push(response.status())
     }
   })
-  await page.route('**/api/student/assessment/validate', async (route) => {
-    validateRequests += 1
-    if (validateRequests === 1) {
+  await page.route(`**${assessmentSubmitPath}`, async (route) => {
+    if (new URL(route.request().url()).pathname !== assessmentSubmitPath
+      || route.request().method() !== 'POST') {
+      await route.continue()
+      return
+    }
+
+    submitRequests += 1
+    if (submitRequests === 1) {
       await route.abort('failed')
       return
     }
     await route.continue()
   })
 
-  await page.getByRole('button', { name: '결과 계산' }).click()
+  await page.getByRole('button', { name: '나의 연결 경로 보기', exact: true }).click()
 
-  await expect(page.getByRole('alert')).toContainText('선택은 그대로 유지됩니다')
-  const retry = page.getByRole('button', { name: '결과 다시 계산' })
+  await expect(page.getByRole('alert')).toHaveText('결과를 준비하지 못했습니다. 선택은 그대로 유지됩니다. 다시 시도하세요.')
+  const retry = page.getByRole('button', { name: '결과 다시 만들기', exact: true })
   await expect(retry).toBeVisible()
   await expect(page.getByRole('checkbox', { name: /사진을 직접 촬영하고 보정해/u })).toBeChecked()
-  const preservedSelections = await page.evaluate((storageKey) => {
-    const raw = sessionStorage.getItem(storageKey)
-    if (!raw) throw new Error('ASSESSMENT_SNAPSHOT_MISSING')
-    return (JSON.parse(raw) as { selections: Record<string, string[]> }).selections
+  const preservedStorage = await page.evaluate((storageKey) => {
+    const localEntries = Object.entries(localStorage)
+      .sort(([left], [right]) => left.localeCompare(right))
+    const sessionEntries = Object.entries(sessionStorage)
+    const snapshotEntry = sessionEntries.find(([key]) => key === storageKey)
+    if (!snapshotEntry) throw new Error('ASSESSMENT_SNAPSHOT_MISSING')
+    return {
+      localEntries,
+      rawValues: JSON.stringify([
+        ...localEntries.map(([, value]) => value),
+        ...sessionEntries.map(([, value]) => value),
+      ]),
+      sessionKeys: sessionEntries.map(([key]) => key),
+      snapshot: JSON.parse(snapshotEntry[1]) as unknown,
+    }
   }, assessmentStorageKey)
-  expect(preservedSelections).toEqual({
-    career: [selections.career],
-    result: [selections.result],
-    style: [selections.style],
-    work: [selections.work],
+
+  expect(preservedStorage.localEntries).toEqual(baselineLocalEntries)
+  expect(preservedStorage.sessionKeys).toEqual([assessmentStorageKey])
+  expect(preservedStorage.rawValues).not.toMatch(/csrf|token|session|trackScores|rankedTracks|interestVector/iu)
+  expect(preservedStorage.snapshot).toEqual({
+    careerOther: '',
+    catalogRevision: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+    selections: {
+      career: [selections.career],
+      result: [selections.result],
+      style: [selections.style],
+      work: [selections.work],
+    },
+    step: 3,
   })
 
+  const retryResponsePromise = page.waitForResponse(response => (
+    new URL(response.url()).pathname === assessmentSubmitPath
+    && response.request().method() === 'POST'
+  ))
   await retry.click()
+  const retryResponse = await retryResponsePromise
 
-  const primaryTrack = page.getByTestId('validated-primary-track')
-  await expect(primaryTrack).toHaveCount(1)
-  await expect(primaryTrack).toHaveText('광고사진')
-  expect(validateRequests).toBe(2)
+  await assertSuccessfulSubmit(retryResponse)
+  await assertCommercialResult(page)
+  expect(submitRequests).toBe(2)
   expect(successfulStatuses).toEqual([200])
 })
