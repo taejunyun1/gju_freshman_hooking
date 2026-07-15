@@ -708,9 +708,10 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
   return { submitAssessment, getOwnedResult, getAssessmentHistory }
 }
 
-const valueAt = (metadata: Record<string, unknown>, camel: string, snake: string): unknown => (
-  metadata[camel] ?? metadata[snake]
-)
+const valueAt = (metadata: Record<string, unknown>, ...keys: string[]): unknown => {
+  const key = keys.find(candidate => Object.hasOwn(metadata, candidate))
+  return key === undefined ? undefined : metadata[key]
+}
 
 const mapResourceRow = (input: unknown): ResourceCandidate => {
   if (!isRecord(input) || !isRecord(input.metadata) || !Array.isArray(input.resource_tags)) {
@@ -740,7 +741,7 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
         gradeYear: valueAt(metadata, 'gradeYear', 'grade_year'),
         term: metadata.term,
         credits: metadata.credits,
-        goalSummary: valueAt(metadata, 'goalSummary', 'source_goal'),
+        goalSummary: valueAt(metadata, 'goal', 'goalSummary', 'source_goal'),
       },
     } as ResourceCandidate
     case 'equipment': return {
@@ -759,8 +760,8 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
       type: 'facility',
       metadata: {
         locationLabel: valueAt(metadata, 'locationLabel', 'location_label'),
-        operationNote: valueAt(metadata, 'operationNote', 'operation_note'),
-        lastVerifiedAt: valueAt(metadata, 'lastVerifiedAt', 'last_verified_at'),
+        operationNote: valueAt(metadata, 'operation_note', 'operationNote'),
+        lastVerifiedAt: valueAt(metadata, 'last_verified_at', 'lastVerifiedAt'),
       },
     } as ResourceCandidate
     case 'student_work': return {
@@ -924,7 +925,44 @@ export const createSupabaseAssessmentCompletionDependencies = (
         .in('status', ['active', 'next_year_confirmed'])
         .eq('visibility', 'public')
       if (error || !Array.isArray(data)) throw new Error('RESOURCE_STORE_UNAVAILABLE')
-      return data.map(mapResourceRow)
+      const equipmentIds = data.filter(row => isRecord(row) && row.type === 'equipment')
+        .map(row => row.id)
+      const verifiedCounts = new Map<number, number>()
+      if (equipmentIds.length > 0) {
+        const inventoryResult = await client.from('equipment_inventory_items')
+          .select('equipment_resource_id,data_quality_status')
+          .in('equipment_resource_id', equipmentIds)
+          .eq('data_quality_status', 'verified')
+        if (inventoryResult.error || !Array.isArray(inventoryResult.data)) {
+          throw new Error('RESOURCE_STORE_UNAVAILABLE')
+        }
+        const inventoryRowSchema = z.object({
+          equipment_resource_id: z.number().int().positive().safe(),
+          data_quality_status: z.literal('verified'),
+        }).strict()
+        for (const rawRow of inventoryResult.data) {
+          const row = inventoryRowSchema.safeParse(rawRow)
+          if (!row.success || !equipmentIds.includes(row.data.equipment_resource_id)) {
+            throw new Error('RESOURCE_STORE_INVALID')
+          }
+          verifiedCounts.set(
+            row.data.equipment_resource_id,
+            (verifiedCounts.get(row.data.equipment_resource_id) ?? 0) + 1,
+          )
+        }
+      }
+      return data.map((row) => {
+        if (!isRecord(row) || row.type !== 'equipment' || !isRecord(row.metadata)) {
+          return mapResourceRow(row)
+        }
+        return mapResourceRow({
+          ...row,
+          metadata: {
+            ...row.metadata,
+            confirmedQuantity: verifiedCounts.get(row.id as number) ?? 0,
+          },
+        })
+      })
     },
     loadFacultyCandidates: async () => {
       const [facultyResult, linksResult] = await Promise.all([

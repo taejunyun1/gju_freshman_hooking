@@ -1,12 +1,17 @@
 export const MAX_REQUEST_BODY_BYTES = 8_192
 // Current mutation endpoints accept small JSON; add route-specific exceptions to the table below.
 export const DEFAULT_MAX_REQUEST_BODY_BYTES = 65_536
+export const RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES = 512 * 1024
+export const RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024 + 64 * 1024
 export const requestBodyOverflowHeader = 'x-photo-next-body-overflow'
 
 const requestBodyLimitOverrides = new Map([
   ['/api/events', MAX_REQUEST_BODY_BYTES],
   ['/api/student/assessment/validate', MAX_REQUEST_BODY_BYTES],
+  ['/api/admin/resources/equipment/import/validate', RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES],
 ])
+
+const resourceImagePathPattern = /^\/api\/admin\/resources\/[1-9][0-9]{0,15}\/image$/u
 
 const normalizeGuardedPath = (pathname) => {
   let decodedPath = pathname
@@ -22,9 +27,11 @@ const normalizeGuardedPath = (pathname) => {
 // Mirror Nitro's Cloudflare requestHasBody check so method mismatches cannot bypass the bound.
 const nitroBuffersRequestBody = request => /post|put|patch/iu.test(request.method)
 
-const requestBodyLimit = request => requestBodyLimitOverrides.get(
-  normalizeGuardedPath(new URL(request.url).pathname),
-) ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+const requestBodyLimit = (request) => {
+  const path = normalizeGuardedPath(new URL(request.url).pathname)
+  if (resourceImagePathPattern.test(path)) return RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES
+  return requestBodyLimitOverrides.get(path) ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+}
 
 const parseContentLength = (value) => {
   if (!value || !/^\d+$/u.test(value.trim())) return undefined

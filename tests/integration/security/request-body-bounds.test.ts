@@ -7,6 +7,8 @@ import { createBodyGuardWorker } from '../../../cloudflare/request-body-guard.mj
 
 const guardedUrl = 'https://photo-next.example/api/events'
 const defaultMaxRequestBodyBytes = 65_536
+const importMaxRequestBodyBytes = 512 * 1024
+const imageMaxRequestBodyBytes = 8 * 1024 * 1024 + 64 * 1024
 
 const streamRequest = (
   chunks: Uint8Array[],
@@ -457,5 +459,60 @@ describe('bounded request bodies', () => {
       method: 'POST',
       url: `${guardedUrl}?source=metadata-test`,
     }])
+  })
+
+  it.each([
+    ['/api/admin/resources/equipment/import/validate', 70 * 1024],
+    ['/api/admin/resources/42/image', 100 * 1024],
+    ['/api/admin/resources/%34%32/image/', 100 * 1024],
+  ])('forwards a legitimate route-specific %s body before Nitro parsing', async (path, size) => {
+    const received: Array<{ bytes: number, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+
+    await worker.fetch(new Request(new URL(path, guardedUrl), {
+      body: new Uint8Array(size),
+      duplex: 'half',
+      headers: { 'content-length': String(size) },
+      method: 'POST',
+    } as RequestInit), {}, {})
+
+    expect(received).toEqual([{ bytes: size, marker: null }])
+  })
+
+  it.each([
+    ['/api/admin/resources/equipment/import/validate', importMaxRequestBodyBytes],
+    ['/api/admin/resources/42/image', imageMaxRequestBodyBytes],
+  ])('accepts the exact %s route body limit and rejects one byte more', async (path, maximum) => {
+    const received: Array<{ bytes: number, marker: string | null }> = []
+    const worker = createBodyGuardWorker({
+      async fetch(forwarded: Request) {
+        received.push({
+          bytes: (await forwarded.arrayBuffer()).byteLength,
+          marker: forwarded.headers.get('x-photo-next-body-overflow'),
+        })
+        return new Response('ok')
+      },
+    })
+    for (const size of [maximum, maximum + 1]) {
+      await worker.fetch(new Request(new URL(path, guardedUrl), {
+        body: new Uint8Array(size),
+        duplex: 'half',
+        headers: { 'content-length': String(size) },
+        method: 'POST',
+      } as RequestInit), {}, {})
+    }
+
+    expect(received).toEqual([
+      { bytes: maximum, marker: null },
+      { bytes: 2, marker: '1' },
+    ])
   })
 })

@@ -389,6 +389,117 @@ describe('assessment completion service', () => {
     expect(decodeResultSnapshot(snapshot)).toEqual(snapshot)
   })
 
+  it('uses verified inventory truth instead of a stored equipment quantity in the public result', async () => {
+    const equipmentRow = {
+      id: 102,
+      type: 'equipment',
+      title: '스튜디오 조명 세트',
+      summary: '광고사진 제작을 뒷받침하는 학과 기자재입니다.',
+      status: 'active',
+      visibility: 'public',
+      priority: 20,
+      source_date: '2026-07-14',
+      metadata: {
+        locationLabel: '사진영상미디어학과 기자재실',
+        confirmedQuantity: 999,
+        reservationUrl: 'https://gjureserve.co.kr',
+        accessMode: 'reservation',
+        accessLabel: '예약 가능',
+      },
+      image_path: null,
+      resource_tags: [{ tag_key: 'commercial', weight: 3, is_primary: true }],
+    }
+    const builder = (data: unknown[]) => {
+      const query = {
+        eq: () => query,
+        in: () => query,
+        select: () => query,
+        then: <Result>(resolve: (value: { data: unknown[], error: null }) => Result | PromiseLike<Result>) => (
+          Promise.resolve({ data, error: null }).then(resolve)
+        ),
+      }
+      return query
+    }
+    const client = {
+      from: vi.fn((table: string) => table === 'resources'
+        ? builder([equipmentRow])
+        : builder([
+            { equipment_resource_id: 102, data_quality_status: 'verified' },
+          ])),
+    }
+    const adapter = createSupabaseAssessmentCompletionDependencies(client as never)
+    const loaded = await adapter.loadResourceCandidates()
+    expect(loaded).toMatchObject([{ metadata: { confirmedQuantity: 1 } }])
+
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => [
+        ...resourceCandidates().filter(candidate => candidate.id !== 102),
+        ...loaded,
+      ],
+      completeAssessment,
+    }))
+    await service.submitAssessment(envelope(await createAssessmentCatalogRevision(catalog())), context)
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    expect(snapshot.resources.equipment[0]?.displayMetadata.confirmedQuantity).toBe(1)
+  })
+
+  it('prioritizes canonical course and facility metadata while retaining legacy read compatibility', async () => {
+    const rows = [
+      {
+        id: 201,
+        type: 'course',
+        title: 'canonical 교과',
+        summary: 'canonical 목표를 사용하는 교과입니다.',
+        status: 'active',
+        visibility: 'public',
+        priority: 1,
+        source_date: '2026-07-14',
+        metadata: { grade_year: 1, term: '1학기', credits: 3, goal: 'canonical goal' },
+        image_path: null,
+        resource_tags: [{ tag_key: 'commercial', weight: 3, is_primary: true }],
+      },
+      {
+        id: 202,
+        type: 'facility',
+        title: 'canonical 시설',
+        summary: 'canonical 운영 정보를 사용하는 시설입니다.',
+        status: 'active',
+        visibility: 'public',
+        priority: 1,
+        source_date: '2026-07-14',
+        metadata: {
+          locationLabel: '스튜디오 A',
+          operation_note: 'canonical operation',
+          operationNote: 'legacy operation',
+          last_verified_at: '2026-07-14T01:00:00Z',
+          lastVerifiedAt: '2025-01-01T01:00:00Z',
+        },
+        image_path: null,
+        resource_tags: [{ tag_key: 'commercial', weight: 3, is_primary: true }],
+      },
+    ]
+    const query = {
+      eq: () => query,
+      in: () => query,
+      select: () => query,
+      then: <Result>(resolve: (value: { data: typeof rows, error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({ data: rows, error: null }).then(resolve)
+      ),
+    }
+    const adapter = createSupabaseAssessmentCompletionDependencies({
+      from: vi.fn(() => query),
+    } as never)
+
+    const loaded = await adapter.loadResourceCandidates()
+
+    expect(loaded[0]?.metadata).toMatchObject({ goalSummary: 'canonical goal' })
+    expect(loaded[1]?.metadata).toMatchObject({
+      operationNote: 'canonical operation',
+      lastVerifiedAt: '2026-07-14T01:00:00Z',
+    })
+  })
+
   it('authenticates before the prospect rate limit and stops before content when denied', async () => {
     const order: string[] = []
     const dependencies = serviceDependencies({
