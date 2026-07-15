@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-import { counselingStatuses } from '../types/domain'
+import { applicantStageSchema, regionSchema } from './identity'
+import { counselingStatuses, trackKeys } from '../types/domain'
 
 export { counselingStatuses } from '../types/domain'
 
@@ -35,7 +36,7 @@ const inquirySchema = z.union([
 ])
 
 export const counselingApplicationSchema = z.object({
-  assessmentPublicId: z.string().uuid(),
+  assessmentPublicId: z.string().uuid().transform(value => value.toLowerCase()),
   contactMethod: counselingContactMethodSchema,
   availability: counselingAvailabilitySchema,
   inquiry: inquirySchema,
@@ -51,6 +52,68 @@ export const counselingReopenSchema = z.object({
   expectedVersion: postgresVersionSchema,
   reason: z.string().trim().min(1).max(1000)
     .refine(hasNoC0OrC1Controls, '제어문자는 사용할 수 없습니다.'),
+}).strict()
+
+export const adminCounselingAssignSchema = z.object({
+  assignedFacultyId: z.number().int().positive().safe(),
+  expectedVersion: postgresVersionSchema,
+}).strict()
+
+export const adminCounselingTransitionSchema = z.object({
+  expectedVersion: postgresVersionSchema,
+  to: z.enum(['contacted', 'completed', 'closed']),
+}).strict()
+
+export const adminCounselingReopenSchema = counselingReopenSchema
+
+const adminFacultySummarySchema = z.object({
+  id: z.number().int().positive().safe(),
+  name: safeStoredText(100),
+  title: safeStoredText(100),
+}).strict()
+
+const adminRecommendationSchema = adminFacultySummarySchema.extend({
+  role: z.enum(['primary', 'backup', 'specialist']),
+  rank: z.number().int().min(1).max(2),
+}).strict()
+
+const storedLabelListSchema = z.array(safeStoredText(200)).min(1).max(4)
+
+export const adminCounselingCurrentSchema = z.object({
+  id: z.string().uuid(),
+  status: counselingStatusSchema,
+  version: postgresVersionSchema,
+  assignedAt: counselingTimestampSchema.nullable(),
+  contactedAt: counselingTimestampSchema.nullable(),
+  completedAt: counselingTimestampSchema.nullable(),
+  closedAt: counselingTimestampSchema.nullable(),
+  updatedAt: counselingTimestampSchema,
+  assignedFaculty: adminFacultySummarySchema.nullable(),
+}).strict()
+
+export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.extend({
+  assessmentPublicId: z.string().uuid(),
+  campaignId: z.number().int().positive().safe().nullable(),
+  primaryTrack: z.enum(trackKeys),
+  secondaryTrack: z.enum(trackKeys),
+  selectedWorkLabels: storedLabelListSchema.max(4),
+  selectedCareerLabels: storedLabelListSchema.max(2),
+  nickname: safeStoredText(100),
+  maskedPhone: z.string().regex(/^010-\*{4}-\d{4}$/u),
+  schoolName: safeStoredText(40),
+  applicantStage: applicantStageSchema,
+  region: regionSchema,
+  contactMethod: counselingContactMethodSchema,
+  availability: counselingAvailabilitySchema,
+  consentedAt: counselingTimestampSchema,
+  createdAt: counselingTimestampSchema,
+  recommendations: z.array(adminRecommendationSchema).min(2).max(4),
+}).strict()
+
+export const adminCounselingQueueSchema = z.object({
+  faculty: z.array(adminFacultySummarySchema).max(100),
+  items: z.array(adminCounselingQueueItemSchema).max(50),
+  nextCursor: z.string().min(1).max(200).nullable(),
 }).strict()
 
 const studentCounselingFacultySchema = z.object({
@@ -104,7 +167,7 @@ const studentCounselingRecommendationsSchema = z.array(studentCounselingRecommen
 
 export const studentCounselingStatusSchema = z.object({
   id: z.string().uuid(),
-  assessmentPublicId: z.string().uuid().nullable(),
+  assessmentPublicId: z.string().uuid(),
   status: counselingStatusSchema,
   contactMethod: counselingContactMethodSchema,
   availability: counselingAvailabilitySchema,
@@ -160,3 +223,9 @@ export type CounselingAvailability = z.infer<typeof counselingAvailabilitySchema
 export type CounselingTransition = z.infer<typeof counselingTransitionSchema>
 export type CounselingReopen = z.infer<typeof counselingReopenSchema>
 export type StudentCounselingStatus = z.infer<typeof studentCounselingStatusSchema>
+export type AdminCounselingAssign = z.infer<typeof adminCounselingAssignSchema>
+export type AdminCounselingTransition = z.infer<typeof adminCounselingTransitionSchema>
+export type AdminCounselingReopen = z.infer<typeof adminCounselingReopenSchema>
+export type AdminCounselingCurrent = z.infer<typeof adminCounselingCurrentSchema>
+export type AdminCounselingQueueItem = z.infer<typeof adminCounselingQueueItemSchema>
+export type AdminCounselingQueue = z.infer<typeof adminCounselingQueueSchema>

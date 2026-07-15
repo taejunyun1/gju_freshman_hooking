@@ -1,5 +1,5 @@
 import type { ApplicantStage, Region } from '../schemas/identity'
-import type { QuestionGroup, TrackKey, VisualKey } from './domain'
+import type { CounselingStatus, QuestionGroup, TrackKey, VisualKey } from './domain'
 
 export type RegistrationInput = {
   phone: string
@@ -57,8 +57,19 @@ export type ApiSuccess<T> = {
 
 export type ApiFailure = {
   error: {
-    code: 'AUTH_FAILED' | 'VALIDATION_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR' | 'ADMIN_REQUIRED' | 'MFA_REQUIRED' | 'REAUTH_REQUIRED' | 'RECOVERY_INVALID' | 'ASSESSMENT_INVALID' | 'ASSESSMENT_CATALOG_STALE' | 'RESULT_NOT_FOUND' | 'COUNSELING_INVALID'
+    code: 'AUTH_FAILED' | 'VALIDATION_FAILED' | 'RATE_LIMITED' | 'INTERNAL_ERROR' | 'ADMIN_REQUIRED' | 'MFA_REQUIRED' | 'REAUTH_REQUIRED' | 'RECOVERY_INVALID' | 'ASSESSMENT_INVALID' | 'ASSESSMENT_CATALOG_STALE' | 'RESULT_NOT_FOUND' | 'COUNSELING_INVALID' | 'COUNSELING_NOT_FOUND' | 'COUNSELING_CONFLICT'
     message: string
+    current?: {
+      id: string
+      status: CounselingStatus
+      version: number
+      assignedAt: string | null
+      contactedAt: string | null
+      completedAt: string | null
+      closedAt: string | null
+      updatedAt: string
+      assignedFaculty: { id: number, name: string, title: string } | null
+    }
   }
   requestId: string
 }

@@ -19,6 +19,7 @@ export type { StudentCounselingStatus } from '../../../shared/schemas/counseling
 
 const COUNSELING_ROUTE = '/api/counseling' as const
 const canonicalUuidSchema = z.string().uuid()
+  .refine(value => value === value.toLowerCase(), 'UUID must use canonical lowercase form')
 const safeIdSchema = z.number().int().positive().safe()
 const versionSchema = z.number().int().nonnegative().max(2_147_483_647)
 const timestampSchema = z.iso.datetime({ offset: true }).max(40)
@@ -66,7 +67,7 @@ const storedRequestSchema = z.object({
   requestId: safeIdSchema,
   publicId: canonicalUuidSchema,
   prospectId: safeIdSchema,
-  assessmentPublicId: canonicalUuidSchema.nullable(),
+  assessmentPublicId: canonicalUuidSchema,
   status: counselingStatusSchema,
   contactMethod: counselingContactMethodSchema,
   availability: counselingAvailabilitySchema,
@@ -165,7 +166,7 @@ const rawRequestSchema = z.object({
   version: versionSchema,
   created_at: timestampSchema,
   updated_at: timestampSchema,
-  assessment: z.object({ public_id: canonicalUuidSchema }).strict().nullable(),
+  assessment_public_id_snapshot: canonicalUuidSchema,
   assigned_faculty: z.object({
     name: boundedStoredText(100),
     title: boundedStoredText(100),
@@ -299,9 +300,7 @@ export const createCounselingService = (dependencies: CounselingServiceDependenc
       if (stored.requestId !== created.requestId
         || stored.publicId !== created.publicId
         || stored.prospectId !== session.prospectId
-        || (created.created
-          && stored.assessmentPublicId !== null
-          && stored.assessmentPublicId !== assessment.publicId)) {
+        || (created.created && stored.assessmentPublicId !== assessment.publicId)) {
         throw new Error('COUNSELING_STORE_INVALID')
       }
 
@@ -350,7 +349,7 @@ const mapRawRequest = (rawValue: unknown) => {
     requestId: row.id,
     publicId: row.public_id,
     prospectId: row.prospect_id,
-    assessmentPublicId: row.assessment?.public_id ?? null,
+    assessmentPublicId: row.assessment_public_id_snapshot,
     status: row.status,
     contactMethod: row.contact_method,
     availability: row.availability,
@@ -438,7 +437,7 @@ export const createSupabaseCounselingDependencies = (
         version,
         created_at,
         updated_at,
-        assessment:assessments!counseling_requests_assessment_fk(public_id),
+        assessment_public_id_snapshot,
         assigned_faculty:faculty!counseling_requests_assigned_faculty_fk(name,title,expertise_summary),
         recommendations:counseling_faculty_recommendations(
           faculty_name_snapshot,

@@ -1,6 +1,6 @@
 begin;
 
-select plan(54);
+select plan(83);
 
 select has_table('public'::name, 'counseling_requests'::name);
 select has_table('public'::name, 'counseling_faculty_recommendations'::name);
@@ -21,6 +21,50 @@ select has_function(
   'reopen_counseling_request',
   array['bigint', 'integer', 'text', 'uuid', 'uuid'],
   'reopen is a separate audited administrator RPC'
+);
+select has_function(
+  'public',
+  'admin_transition_counseling_request',
+  array['bigint', 'integer', 'text', 'bigint', 'uuid', 'uuid'],
+  'administrator transitions are audited atomically'
+);
+select has_function(
+  'public',
+  'record_counseling_sensitive_access',
+  array['bigint', 'text', 'uuid', 'uuid'],
+  'sensitive counseling reads are audited through a constrained RPC'
+);
+select has_column('public'::name, 'counseling_requests'::name, 'assessment_public_id_snapshot'::name, 'durable assessment public ID exists');
+select has_column('public'::name, 'counseling_requests'::name, 'campaign_id_snapshot'::name, 'durable campaign exists');
+select has_column('public'::name, 'counseling_requests'::name, 'primary_track_snapshot'::name, 'durable primary track exists');
+select has_column('public'::name, 'counseling_requests'::name, 'secondary_track_snapshot'::name, 'durable secondary track exists');
+select has_column('public'::name, 'counseling_requests'::name, 'selected_work_labels_snapshot'::name, 'durable work labels exist');
+select has_column('public'::name, 'counseling_requests'::name, 'selected_career_labels_snapshot'::name, 'durable career labels exist');
+select has_index('public'::name, 'counseling_requests'::name, 'counseling_requests_primary_track_idx'::name, 'primary track queue index exists');
+select has_index('public'::name, 'counseling_requests'::name, 'counseling_requests_campaign_idx'::name, 'campaign queue index exists');
+select ok(
+  not pg_catalog.has_function_privilege(
+    'service_role',
+    'public.transition_counseling_request(bigint,integer,text,bigint,text)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the service role cannot bypass administrator transition auditing'
+);
+select ok(
+  pg_catalog.has_function_privilege(
+    'service_role',
+    'public.admin_transition_counseling_request(bigint,integer,text,bigint,uuid,uuid)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the service role can execute the audited administrator transition wrapper'
+);
+select ok(
+  pg_catalog.has_function_privilege(
+    'service_role',
+    'public.record_counseling_sensitive_access(bigint,text,uuid,uuid)'::regprocedure,
+    'EXECUTE'
+  ),
+  'the service role can record constrained sensitive-access audits'
 );
 
 select ok((select relrowsecurity from pg_catalog.pg_class where oid = 'public.counseling_requests'::regclass), 'request RLS is enabled');
@@ -72,7 +116,7 @@ select is(
   (select count(*)::integer
    from unnest(array[
      'public.create_counseling_request(bigint,bigint,text,text,text,boolean)'::regprocedure,
-     'public.transition_counseling_request(bigint,integer,text,bigint,text)'::regprocedure,
+     'public.admin_transition_counseling_request(bigint,integer,text,bigint,uuid,uuid)'::regprocedure,
      'public.reopen_counseling_request(bigint,integer,text,uuid,uuid)'::regprocedure
    ]) procedure_oid
    join pg_catalog.pg_proc procedure on procedure.oid = procedure_oid
@@ -85,7 +129,7 @@ select is(
   (select count(*)::integer
    from unnest(array[
      'public.create_counseling_request(bigint,bigint,text,text,text,boolean)'::regprocedure,
-     'public.transition_counseling_request(bigint,integer,text,bigint,text)'::regprocedure,
+     'public.admin_transition_counseling_request(bigint,integer,text,bigint,uuid,uuid)'::regprocedure,
      'public.reopen_counseling_request(bigint,integer,text,uuid,uuid)'::regprocedure
    ]) procedure_oid
    join pg_catalog.pg_proc procedure on procedure.oid = procedure_oid
@@ -99,7 +143,9 @@ select is(
    from unnest(array[
      'public.create_counseling_request(bigint,bigint,text,text,text,boolean)'::regprocedure,
      'public.transition_counseling_request(bigint,integer,text,bigint,text)'::regprocedure,
-     'public.reopen_counseling_request(bigint,integer,text,uuid,uuid)'::regprocedure
+     'public.admin_transition_counseling_request(bigint,integer,text,bigint,uuid,uuid)'::regprocedure,
+     'public.reopen_counseling_request(bigint,integer,text,uuid,uuid)'::regprocedure,
+     'public.record_counseling_sensitive_access(bigint,text,uuid,uuid)'::regprocedure
    ]) procedure_oid
    cross join unnest(array['anon', 'authenticated']) role_name
    where pg_catalog.has_function_privilege(role_name, procedure_oid, 'EXECUTE')),
@@ -111,7 +157,7 @@ select is(
   (select count(*)::integer
    from unnest(array[
      'public.create_counseling_request(bigint,bigint,text,text,text,boolean)'::regprocedure,
-     'public.transition_counseling_request(bigint,integer,text,bigint,text)'::regprocedure,
+     'public.admin_transition_counseling_request(bigint,integer,text,bigint,uuid,uuid)'::regprocedure,
      'public.reopen_counseling_request(bigint,integer,text,uuid,uuid)'::regprocedure
    ]) procedure_oid
    where pg_catalog.has_function_privilege('service_role', procedure_oid, 'EXECUTE')),
@@ -146,6 +192,13 @@ select
   '{"documentary":70,"art_photo":80,"commercial":60,"video":50}'::jsonb,
   75,
   pg_catalog.jsonb_build_object(
+    'rankedTracks', pg_catalog.jsonb_build_array('commercial', 'art_photo', 'video', 'documentary'),
+    'selectedInterests', pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('group', 'work', 'key', 'work.commercial_image', 'label', '제품·패션·광고 이미지 만들기'),
+      pg_catalog.jsonb_build_object('group', 'result', 'key', 'result.commercial_fashion', 'label', '광고·패션 이미지'),
+      pg_catalog.jsonb_build_object('group', 'style', 'key', 'style.studio', 'label', '스튜디오에서 촬영'),
+      pg_catalog.jsonb_build_object('group', 'career', 'key', 'career.photo', 'label', '사진 직접 촬영·보정')
+    ),
     'faculty', pg_catalog.jsonb_build_object(
       'primary', pg_catalog.jsonb_build_object(
         'role', 'primary', 'id', (select id from public.faculty where name = '상담 총괄'),
@@ -198,6 +251,29 @@ reset role;
 select is((select created from pg_temp.counseling_rpc_results where call_name = 'first'), true, 'the first request is created');
 select is((select status from public.counseling_requests), 'new', 'new is the initial status');
 select is((select version from public.counseling_requests), 0, 'new requests start at version zero');
+select is(
+  (select assessment_public_id_snapshot from public.counseling_requests),
+  (select assessment.public_id from public.assessments assessment join public.prospects prospect on prospect.id = assessment.prospect_id where prospect.nickname = '상담학생11'),
+  'the durable assessment public ID is copied at counseling time'
+);
+select is((select campaign_id_snapshot from public.counseling_requests), null::bigint, 'a missing campaign remains a durable null');
+select is((select primary_track_snapshot from public.counseling_requests), 'commercial', 'the primary track is copied exactly');
+select is((select secondary_track_snapshot from public.counseling_requests), 'art_photo', 'the secondary track is copied exactly');
+select is(
+  (select selected_work_labels_snapshot from public.counseling_requests),
+  array['제품·패션·광고 이미지 만들기']::text[],
+  'selected work labels are copied exactly in canonical order'
+);
+select is(
+  (select selected_career_labels_snapshot from public.counseling_requests),
+  array['사진 직접 촬영·보정']::text[],
+  'selected career labels are copied exactly in canonical order'
+);
+select throws_ok(
+  $$update public.counseling_requests set primary_track_snapshot = 'video'$$,
+  '23514', 'counseling context snapshot is immutable',
+  'durable counseling context cannot be rewritten after creation'
+);
 select ok((select consent_given and consented_at is not null from public.counseling_requests), 'required transfer consent is timestamped');
 select is((select count(*)::integer from public.counseling_faculty_recommendations), 3, 'primary, backup, and specialist snapshots persist');
 select ok(
@@ -309,16 +385,40 @@ select throws_ok(
   '23514', null, 'inquiry text cannot exceed 200 characters'
 );
 
+insert into auth.users (id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+insert into public.admin_users (id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+
+select throws_ok(
+  format(
+    'select * from public.admin_transition_counseling_request(%s,0,%L,%s,%L,%L)',
+    (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'),
+    'assigned',
+    (select id from public.faculty where name = '비활성 교수'),
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'aaaaaaaa-0000-4000-8000-000000000009'
+  ),
+  '22023', 'active assigned faculty is required',
+  'assignment rejects an archived faculty member inside the atomic RPC'
+);
+select ok(
+  not exists (
+    select 1 from public.audit_events
+    where request_id = 'aaaaaaaa-0000-4000-8000-000000000009'
+  ),
+  'a rejected assignment leaves no orphan audit event'
+);
+
 set local role service_role;
 
-select * from public.transition_counseling_request(
+select * from public.admin_transition_counseling_request(
   (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'),
   0,
   'assigned',
   (select faculty_id from public.counseling_faculty_recommendations
    where counseling_request_id = (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first')
      and role = 'primary'),
-  '총괄 교수에게 배정'
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'aaaaaaaa-0000-4000-8000-000000000010'
 );
 
 reset role;
@@ -326,6 +426,19 @@ reset role;
 select ok(
   (select status = 'assigned' and version = 1 and assigned_at is not null and assigned_faculty_id is not null from public.counseling_requests),
   'assignment records faculty, timestamp, and next version'
+);
+select ok(
+  exists (
+    select 1 from public.audit_events
+    where action = 'counseling_assigned'
+      and metadata = pg_catalog.jsonb_build_object(
+        'from', 'new',
+        'to', 'assigned',
+        'assigned_faculty_id', (select assigned_faculty_id from public.counseling_requests limit 1)
+      )
+      and request_id = 'aaaaaaaa-0000-4000-8000-000000000010'
+  ),
+  'assignment and its sanitized audit event commit atomically'
 );
 select throws_ok(
   format(
@@ -353,11 +466,13 @@ select throws_ok(
 );
 
 set local role service_role;
-select * from public.transition_counseling_request(
-  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 1, 'contacted', null, null
+select * from public.admin_transition_counseling_request(
+  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 1, 'contacted', null,
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-0000-4000-8000-000000000011'
 );
-select * from public.transition_counseling_request(
-  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 2, 'completed', null, null
+select * from public.admin_transition_counseling_request(
+  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 2, 'completed', null,
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-0000-4000-8000-000000000012'
 );
 reset role;
 
@@ -365,9 +480,56 @@ select ok(
   (select status = 'completed' and version = 3 and contacted_at is not null and completed_at is not null from public.counseling_requests),
   'the normal path records contacted and completed timestamps'
 );
+select is(
+  (select count(*)::integer from public.audit_events where action = 'counseling_transitioned'),
+  2,
+  'contacted and completed transitions each record one sanitized audit event'
+);
 
-insert into auth.users (id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-insert into public.admin_users (id) values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+set local role service_role;
+select public.record_counseling_sensitive_access(
+  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'),
+  'phone_reveal',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'aaaaaaaa-0000-4000-8000-000000000020'
+);
+select public.record_counseling_sensitive_access(
+  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'),
+  'summary',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'aaaaaaaa-0000-4000-8000-000000000021'
+);
+reset role;
+
+select ok(
+  exists (
+    select 1 from public.audit_events
+    where action = 'admin_phone_revealed'
+      and metadata = '{}'::jsonb
+      and request_id = 'aaaaaaaa-0000-4000-8000-000000000020'
+  ),
+  'phone reveal records a metadata-free administrator audit'
+);
+select ok(
+  exists (
+    select 1 from public.events
+    where event_name = 'admin_phone_revealed'
+      and properties = pg_catalog.jsonb_build_object(
+        'request_id', 'aaaaaaaa-0000-4000-8000-000000000020'::uuid,
+        'counseling_request_id', (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first')
+      )
+  ),
+  'phone reveal emits only a sanitized product event'
+);
+select ok(
+  exists (
+    select 1 from public.audit_events
+    where action = 'counseling_summary_created'
+      and metadata = '{}'::jsonb
+      and request_id = 'aaaaaaaa-0000-4000-8000-000000000021'
+  ),
+  'summary creation is audited without persisting its plaintext'
+);
 
 select throws_ok(
   format(
@@ -414,8 +576,9 @@ select throws_ok(
 );
 
 set local role service_role;
-select * from public.transition_counseling_request(
-  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 4, 'closed', null, null
+select * from public.admin_transition_counseling_request(
+  (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'), 4, 'closed', null,
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-0000-4000-8000-000000000013'
 );
 reset role;
 
@@ -449,12 +612,13 @@ select ok(
 );
 
 set local role service_role;
-select * from public.transition_counseling_request(
+select * from public.admin_transition_counseling_request(
   (select counseling_request_id from pg_temp.counseling_rpc_results where call_name = 'first'),
   6,
   'closed',
   null,
-  null
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'aaaaaaaa-0000-4000-8000-000000000014'
 );
 
 insert into pg_temp.counseling_rpc_results
@@ -532,6 +696,32 @@ select is(
    where pg_catalog.has_table_privilege('service_role', relation_oid, 'SELECT')),
   2,
   'the service role can read counseling data for authorized server APIs'
+);
+
+delete from public.assessments assessment
+where assessment.prospect_id = (select id from public.prospects where nickname = '상담학생11');
+
+select ok(
+  not exists (
+    select 1 from public.counseling_requests request
+    where request.prospect_id = (select id from public.prospects where nickname = '상담학생11')
+      and request.assessment_id is not null
+  ),
+  'assessment retention can clear the live foreign key'
+);
+select ok(
+  not exists (
+    select 1 from public.counseling_requests request
+    where request.prospect_id = (select id from public.prospects where nickname = '상담학생11')
+      and (
+        request.assessment_public_id_snapshot is null
+        or request.primary_track_snapshot <> 'commercial'
+        or request.secondary_track_snapshot <> 'art_photo'
+        or request.selected_work_labels_snapshot <> array['제품·패션·광고 이미지 만들기']::text[]
+        or request.selected_career_labels_snapshot <> array['사진 직접 촬영·보정']::text[]
+      )
+  ),
+  'retention leaves every immutable administrator summary field intact'
 );
 
 select * from finish();

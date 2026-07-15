@@ -167,7 +167,7 @@ const rawRequestRow = (overrides: Record<string, unknown> = {}) => ({
   version: 0,
   created_at: createdAt,
   updated_at: createdAt,
-  assessment: { public_id: assessmentPublicId },
+  assessment_public_id_snapshot: assessmentPublicId,
   assigned_faculty: null,
   recommendations: [
     {
@@ -352,21 +352,38 @@ describe('POST /api/counseling', () => {
     expect(dependencies.recordEvent).not.toHaveBeenCalled()
   })
 
-  it('allows a created request assessment retention race but rejects a different retained assessment', async () => {
-    const nullableAssessment = createCounselingService(serviceDependencies({
-      loadRequest: vi.fn(async () => storedRequest({ assessmentPublicId: null })),
-    }))
+  it('requires the immutable assessment snapshot to match a newly created request', async () => {
+    const retainedAssessment = createCounselingService(serviceDependencies())
     const mismatchedAssessment = createCounselingService(serviceDependencies({
       loadRequest: vi.fn(async () => storedRequest({
         assessmentPublicId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       })),
     }))
 
-    await expect(nullableAssessment.requestCounseling(validInput, requestContext)).resolves.toEqual(
-      expect.objectContaining({ assessmentPublicId: null }),
+    await expect(retainedAssessment.requestCounseling(validInput, requestContext)).resolves.toEqual(
+      expect.objectContaining({ assessmentPublicId }),
     )
     await expect(mismatchedAssessment.requestCounseling(validInput, requestContext)).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
+    })
+  })
+
+  it('canonicalizes an uppercase assessment UUID before owned lookup and strict snapshot comparison', async () => {
+    const loadOwnedAssessment = vi.fn(async () => ({
+      assessmentId: 17,
+      publicId: assessmentPublicId,
+    }))
+    const service = createCounselingService(serviceDependencies({ loadOwnedAssessment }))
+
+    await expect(service.requestCounseling({
+      ...validInput,
+      assessmentPublicId: assessmentPublicId.toUpperCase(),
+    }, requestContext)).resolves.toEqual(expect.objectContaining({
+      assessmentPublicId,
+    }))
+    expect(loadOwnedAssessment).toHaveBeenCalledWith({
+      prospectId: 42,
+      publicId: assessmentPublicId,
     })
   })
 
@@ -641,7 +658,7 @@ describe('Supabase counseling adapter boundaries', () => {
       limit: 1,
     }))
     const selection = call?.select?.replace(/\s+/gu, '') ?? ''
-    expect(selection).toContain('assessment:assessments!counseling_requests_assessment_fk(public_id)')
+    expect(selection).toContain('assessment_public_id_snapshot')
     expect(selection).toContain('assigned_faculty:faculty!counseling_requests_assigned_faculty_fk(name,title,expertise_summary)')
     expect(selection).toContain('recommendations:counseling_faculty_recommendations(faculty_name_snapshot,faculty_title_snapshot,expertise_snapshot,reason_snapshot,role,rank)')
     for (const forbidden of [
@@ -656,11 +673,11 @@ describe('Supabase counseling adapter boundaries', () => {
     ]) expect(selection).not.toContain(forbidden)
   })
 
-  it('filters the request-ID path by both prospect and request and maps a deleted assessment to null', async () => {
+  it('filters the request-ID path by both prospect and request and retains the assessment public ID', async () => {
     const fake = createFakeSupabaseClient({
       queryResponses: {
         counseling_requests: [{
-          data: rawRequestRow({ assessment: null }),
+          data: rawRequestRow(),
           error: null,
         }],
       },
@@ -668,7 +685,7 @@ describe('Supabase counseling adapter boundaries', () => {
     const dependencies = createSupabaseCounselingDependencies(fake.client)
 
     await expect(dependencies.loadRequest({ prospectId: 42, requestId: 73 })).resolves.toEqual(
-      expect.objectContaining({ assessmentPublicId: null }),
+      expect.objectContaining({ assessmentPublicId }),
     )
     expect(fake.calls[0]).toEqual(expect.objectContaining({
       filters: [
@@ -678,6 +695,23 @@ describe('Supabase counseling adapter boundaries', () => {
       orders: [],
       limit: null,
     }))
+  })
+
+  it('rejects a non-canonical UUID returned by the request store', async () => {
+    const fake = createFakeSupabaseClient({
+      queryResponses: {
+        counseling_requests: [{
+          data: rawRequestRow({
+            assessment_public_id_snapshot: assessmentPublicId.toUpperCase(),
+          }),
+          error: null,
+        }],
+      },
+    })
+    const dependencies = createSupabaseCounselingDependencies(fake.client)
+
+    await expect(dependencies.loadRequest({ prospectId: 42, requestId: 73 }))
+      .rejects.toThrow('COUNSELING_STORE_INVALID')
   })
 
   it('passes the exact RPC contract and rejects malformed RPC cardinality', async () => {
