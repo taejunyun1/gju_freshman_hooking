@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -6,6 +7,7 @@ import { z, ZodError } from 'zod'
 const SOURCE_DATE = '2026-07-14'
 const RESERVATION_URL = 'https://gjureserve.co.kr'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
+const EXPECTED_CONTENT_REVISION = 'sha256:5a1be602511b23d7f2ed071298b3dfa024530453d28932ea0534c57a9c81ce33'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -26,9 +28,29 @@ const expectedCourseTitles = [
 
 const expectedFacultyNames = ['조대연', '윤태준', '김사라', '박재웅', '정철호', '곽동욱'] as const
 const expectedFacilityKeys = ['studio_a_horizon', 'studio_b', 'darkroom', 'computer_lab'] as const
+const expectedFacultyRoles = [
+  '조대연|full_time|primary', '윤태준|full_time|primary', '김사라|full_time|primary',
+  '박재웅|adjunct|specialist', '정철호|adjunct|specialist', '곽동욱|adjunct|specialist',
+] as const
+const expectedSpecialistLinks = [
+  '윤태준|박재웅|video', '윤태준|박재웅|drone', '윤태준|박재웅|vr', '윤태준|박재웅|video_360',
+  '윤태준|정철호|exhibition', '윤태준|정철호|curating', '윤태준|정철호|art_theory',
+  '|곽동욱|commercial', '|곽동욱|fashion', '|곽동욱|product', '|곽동욱|beauty',
+  '|곽동욱|brand', '|곽동욱|studio', '|곽동욱|lighting',
+] as const
 const expectedDuplicateCodes = new Set([
   'LEN-8LENS-01', 'DRN-DJI-01', 'DRN-DJI2-01', 'ETC-360-01', 'ETC-DJI-01',
 ])
+
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value)
+      .sort()
+      .map(key => [key, canonicalize((value as Record<string, unknown>)[key])]))
+  }
+  return value
+}
 
 const tagKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u)
 const sourceDateSchema = z.literal(SOURCE_DATE)
@@ -198,6 +220,10 @@ export interface DerivedContentSeed {
   specialistLinks: SpecialistLinkSource[]
 }
 
+export const createContentRevision = (parsed: ParsedContentSeedInputs) => `sha256:${createHash('sha256')
+  .update(JSON.stringify(canonicalize(parsed)))
+  .digest('hex')}`
+
 const formatZodError = (section: string, error: ZodError) => {
   const unknown = error.issues.some(issue => issue.code === 'unrecognized_keys')
   return `${section} seed is invalid${unknown ? ' (unknown field)' : ''}`
@@ -244,6 +270,12 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
 
   const facultyInput = parseSection('faculty', facultyInputSchema, input.faculty)
   assertExactOrder('faculty', facultyInput.faculty.map(person => person.name), expectedFacultyNames)
+  const facultyRoles = facultyInput.faculty.map(person => (
+    `${person.name}|${person.employmentType}|${person.consultationRole}`
+  ))
+  if (facultyRoles.some((role, index) => role !== expectedFacultyRoles[index])) {
+    throw new Error('faculty role manifest differs from the approved guide')
+  }
   if (facultyInput.specialistLinks.length !== 14) {
     throw new Error('faculty link seed must contain exactly 14 records')
   }
@@ -253,6 +285,12 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
       || !facultyNames.has(link.specialistFacultyName)) {
       throw new Error('faculty link references an unknown faculty profile')
     }
+  }
+  const specialistLinks = facultyInput.specialistLinks.map(link => (
+    `${link.primaryFacultyName ?? ''}|${link.specialistFacultyName}|${link.tagKey}`
+  ))
+  if (specialistLinks.some((link, index) => link !== expectedSpecialistLinks[index])) {
+    throw new Error('faculty link manifest differs from the approved guide')
   }
 
   const equipment = parseSection('equipment', equipmentRecordSchema.array(), input.equipment)
@@ -266,6 +304,21 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
   if (equipmentCounts.verified !== 128 || equipmentCounts.duplicate_code !== 10
     || equipmentCounts.unidentified !== 2 || equipmentCounts.quantity_check !== 4) {
     throw new Error('equipment data quality count differs from the approved manifest')
+  }
+  const equipmentLocationCounts = countBy(equipment, item => item.locationKey)
+  if (equipmentLocationCounts.department_equipment_room !== 83
+    || equipmentLocationCounts.fantasy_lab !== 61) {
+    throw new Error('equipment location count differs from the approved manifest')
+  }
+  const equipmentAccessCounts = countBy(equipment, item => item.accessMode)
+  if (equipmentAccessCounts.reservation !== 81 || equipmentAccessCounts.inquiry !== 63) {
+    throw new Error('equipment access mode count differs from the approved manifest')
+  }
+  const equipmentCategoryCounts = countBy(equipment, item => item.category)
+  const expectedCategoryCounts = { body: 24, lens: 34, lighting: 30, audio: 25, drone: 8, other: 23 }
+  if (Object.entries(expectedCategoryCounts)
+    .some(([category, count]) => equipmentCategoryCounts[category] !== count)) {
+    throw new Error('equipment category count differs from the approved manifest')
   }
   for (const code of expectedDuplicateCodes) {
     const rows = equipment.filter(item => item.inventoryCode === code)
@@ -281,13 +334,17 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
     throw new Error('facilities seed contains a broken course reference')
   }
 
-  return {
+  const parsed = {
     curriculum,
     faculty: facultyInput.faculty,
     specialistLinks: facultyInput.specialistLinks,
     equipment,
     facilities,
   }
+  if (createContentRevision(parsed) !== EXPECTED_CONTENT_REVISION) {
+    throw new Error('content seed manifest differs from the approved internal sources')
+  }
+  return parsed
 }
 
 const courseSeedKey = (title: string) => `course:${title}`
@@ -304,25 +361,29 @@ const semanticTagRules: Array<[RegExp, string]> = [
   [/광고|커머셜/u, 'commercial'], [/패션/u, 'fashion'], [/제품/u, 'product'],
   [/뷰티/u, 'beauty'], [/브랜드/u, 'brand'], [/스튜디오/u, 'studio'], [/조명/u, 'lighting'],
   [/드론/u, 'drone'], [/360/u, 'video_360'], [/VR/u, 'vr'], [/영상/u, 'video'],
+  [/내러티브/u, 'narrative'], [/프레임|컷/u, 'framing'], [/융합/u, 'convergence'],
   [/인터뷰|구술/u, 'interview'], [/다큐멘터리/u, 'documentary'], [/지역/u, 'local'],
   [/아카이브/u, 'archive'], [/공공/u, 'public_content'], [/문화기관/u, 'cultural_institution'],
   [/문화유산/u, 'cultural_heritage'], [/현장/u, 'field'], [/포토스토리/u, 'photo_story'],
   [/포토에세이/u, 'photo_essay'], [/포토북|사진집/u, 'photobook'], [/포트폴리오/u, 'portfolio'],
   [/전시/u, 'exhibition'], [/큐레이팅/u, 'curating'], [/예술이론|사진이론/u, 'art_theory'],
   [/미디어아트/u, 'media_art'], [/설치/u, 'installation'], [/AI/u, 'ai'],
+  [/포토커뮤니케이션/u, 'photo_communication'], [/시각커뮤니케이션/u, 'visual_communication'],
   [/사진작가/u, 'photographer'], [/영상작가/u, 'video_artist'], [/기획/u, 'planning'],
   [/기록/u, 'record'], [/사진/u, 'photography'],
 ]
 
-const semanticTagKey = (label: string, prefix: string) => {
-  const matched = semanticTagRules.find(([pattern]) => pattern.test(label))
-  if (matched) return matched[1]
+const semanticTagKeys = (label: string, prefix: string) => {
+  const matched = unique(semanticTagRules
+    .filter(([pattern]) => pattern.test(label))
+    .map(([, tagKey]) => tagKey))
+  if (matched.length > 0) return matched
   let hash = 2166136261
   for (const character of label) {
     hash ^= character.codePointAt(0) ?? 0
     hash = Math.imul(hash, 16777619)
   }
-  return `${prefix}_${(hash >>> 0).toString(16)}`
+  return [`${prefix}_${(hash >>> 0).toString(16)}`]
 }
 
 const pushFacultyTag = (
@@ -333,6 +394,22 @@ const pushFacultyTag = (
     && existing.tagKey === tag.tagKey && existing.category === tag.category)) {
     target.push(tag)
   }
+}
+
+const resultPlatformTagKeys = new Set([
+  'photo_story', 'public_content', 'exhibition', 'media_art', 'photobook', 'portfolio', 'archive',
+])
+const activityPlatformTagKeys = new Set([
+  'record', 'social', 'local', 'photo_communication', 'visual_communication', 'narrative',
+  'interview', 'installation', 'ai', 'personal_project', 'local_record', 'public_institution',
+  'cultural_institution', 'field_research', 'cultural_heritage', 'institution_collaboration',
+])
+
+const platformCategory = (person: FacultySource, tagKey: string): DerivedFacultyTag['category'] => {
+  if (person.consultationRole === 'specialist') return 'specialist'
+  if (resultPlatformTagKeys.has(tagKey)) return 'result'
+  if (activityPlatformTagKeys.has(tagKey)) return 'activity'
+  return 'track'
 }
 
 export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedContentSeed => {
@@ -457,7 +534,7 @@ export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedConte
         facultyName: person.name,
         tagKey: tag.tagKey,
         tagLabel: tag.tagLabel,
-        category: person.consultationRole === 'specialist' ? 'specialist' : 'track',
+        category: platformCategory(person, tag.tagKey),
         weight: 3,
         isPrimary: true,
         source: 'platform',
@@ -476,15 +553,17 @@ export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedConte
     ]
     for (const context of contextualTags) {
       for (const label of context.labels) {
-        pushFacultyTag(facultyTags, {
-          facultyName: person.name,
-          tagKey: semanticTagKey(label, context.prefix),
-          tagLabel: label,
-          category: context.category,
-          weight: context.weight,
-          isPrimary: false,
-          source: context.source,
-        })
+        for (const tagKey of semanticTagKeys(label, context.prefix)) {
+          pushFacultyTag(facultyTags, {
+            facultyName: person.name,
+            tagKey,
+            tagLabel: label,
+            category: context.category,
+            weight: context.weight,
+            isPrimary: false,
+            source: context.source,
+          })
+        }
       }
     }
   }
@@ -525,6 +604,7 @@ const sqlJson = (value: unknown) => `${sqlString(JSON.stringify(value))}::jsonb`
 
 export const generateContentSeedSql = (parsed: ParsedContentSeedInputs) => {
   const seed = deriveContentSeed(parsed)
+  const revision = createContentRevision(parsed)
   const resourceManifest = seed.resources.map(resource => ({
     seed_key: resource.seedKey,
     type: resource.type,
@@ -598,6 +678,7 @@ export const generateContentSeedSql = (parsed: ParsedContentSeedInputs) => {
   }))
 
   return `-- Generated by scripts/seed-content.ts. Do not edit.
+-- Content revision: ${revision}
 begin;
 
 select pg_catalog.pg_advisory_xact_lock(

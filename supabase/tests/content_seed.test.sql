@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 select is((select count(*)::integer from public.resources), 128, 'content seed has 128 resources');
 select is((select count(*)::integer from public.resources where type = 'course'), 41, '41 courses are seeded');
@@ -73,6 +73,8 @@ select ok(
   not exists (select 1 from public.faculty_tags where weight not between 0 and 3),
   'all derived faculty tag weights remain in the schema range'
 );
+select is((select count(*)::integer from public.resource_tags), 690, 'all derived resource tags are linked without silent row loss');
+select is((select count(*)::integer from public.faculty_tags), 174, 'all deduplicated faculty tags are linked without silent row loss');
 select is((select count(*)::integer from public.faculty_specialist_links), 14, '14 specialist tag links are seeded');
 select is(
   (select count(*)::integer

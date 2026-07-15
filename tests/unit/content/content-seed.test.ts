@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  createContentRevision,
   deriveContentSeed,
   generateContentSeedSql,
   parseContentSeedInputs,
@@ -153,6 +154,10 @@ describe('verified department content seed', () => {
 
     expect(seed.facultyTags.filter(tag => tag.source === 'platform')
       .every(tag => tag.weight === 3 && tag.isPrimary)).toBe(true)
+    expect(Object.fromEntries(['track', 'activity', 'result', 'specialist'].map(category => [
+      category,
+      seed.facultyTags.filter(tag => tag.source === 'platform' && tag.category === category).length,
+    ]))).toEqual({ track: 5, activity: 17, result: 7, specialist: 21 })
     expect(seed.facultyTags.filter(tag => tag.source === 'teaching')
       .every(tag => tag.category === 'activity' && tag.weight === 2 && !tag.isPrimary)).toBe(true)
     expect(seed.facultyTags.filter(tag => tag.source === 'project')
@@ -161,6 +166,18 @@ describe('verified department content seed', () => {
       .every(tag => tag.category === 'career' && tag.weight === 3 && !tag.isPrimary)).toBe(true)
     expect(seed.facultyTags.filter(tag => tag.facultyName === '박재웅' && tag.source === 'platform')
       .every(tag => tag.category === 'specialist')).toBe(true)
+    expect(seed.facultyTags).toHaveLength(174)
+    expect(seed.facultyTags.filter(tag => tag.facultyName === '윤태준'
+      && tag.category === 'result'
+      && tag.tagLabel === 'AI 이미지·영상 프로젝트').map(tag => tag.tagKey))
+      .toEqual(['ai'])
+    expect(['video', 'ai', 'photography'].every(tagKey => seed.facultyTags.some(tag => (
+      tag.facultyName === '윤태준' && tag.category === 'result' && tag.tagKey === tagKey
+    )))).toBe(true)
+    expect(seed.facultyTags.some(tag => tag.facultyName === '윤태준'
+      && tag.category === 'activity'
+      && tag.tagLabel === '영상 프레임과 컷'
+      && tag.tagKey === 'framing')).toBe(true)
 
     expect(seed.specialistLinks).toHaveLength(14)
     expect(seed.specialistLinks.every(link => link.priority === 100)).toBe(true)
@@ -284,6 +301,10 @@ describe('verified department content seed', () => {
       specialistLinks: 14,
     })
     expect(secondSql).toBe(firstSql)
+    expect(createContentRevision(parsed)).toBe(
+      'sha256:5a1be602511b23d7f2ed071298b3dfa024530453d28932ea0534c57a9c81ce33',
+    )
+    expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')
     expect(firstSql).toContain('pg_advisory_xact_lock')
     expect(firstSql).toContain('lock table public.resources')
@@ -343,5 +364,62 @@ describe('verified department content seed', () => {
       specialistFacultyName: '없는 교수',
     }
     expect(() => parseContentSeedInputs(brokenLink)).toThrow(/faculty.*link/iu)
+
+    const wrongLocation = canonicalInput() as {
+      curriculum: unknown
+      faculty: unknown
+      equipment: Array<Record<string, unknown>>
+      facilities: unknown
+    }
+    wrongLocation.equipment[0] = {
+      ...wrongLocation.equipment[0],
+      locationKey: 'fantasy_lab',
+    }
+    expect(() => parseContentSeedInputs(wrongLocation)).toThrow(/equipment.*location.*count/iu)
+
+    const wrongAccess = canonicalInput() as {
+      curriculum: unknown
+      faculty: unknown
+      equipment: Array<Record<string, unknown>>
+      facilities: unknown
+    }
+    wrongAccess.equipment[0] = { ...wrongAccess.equipment[0], accessMode: 'inquiry' }
+    expect(() => parseContentSeedInputs(wrongAccess)).toThrow(/equipment.*access.*count/iu)
+
+    const wrongRole = canonicalInput() as {
+      curriculum: unknown
+      faculty: { faculty: Array<Record<string, unknown>>, specialistLinks: unknown[] }
+      equipment: unknown
+      facilities: unknown
+    }
+    wrongRole.faculty.faculty[0] = {
+      ...wrongRole.faculty.faculty[0],
+      employmentType: 'adjunct',
+    }
+    expect(() => parseContentSeedInputs(wrongRole)).toThrow(/faculty.*role.*manifest/iu)
+
+    const wrongLinkTag = canonicalInput() as {
+      curriculum: unknown
+      faculty: { faculty: unknown[], specialistLinks: Array<Record<string, unknown>> }
+      equipment: unknown
+      facilities: unknown
+    }
+    wrongLinkTag.faculty.specialistLinks[0] = {
+      ...wrongLinkTag.faculty.specialistLinks[0],
+      tagKey: 'promotion_video',
+    }
+    expect(() => parseContentSeedInputs(wrongLinkTag)).toThrow(/faculty.*link.*manifest/iu)
+
+    const sourceDrift = canonicalInput() as {
+      curriculum: Array<Record<string, unknown>>
+      faculty: unknown
+      equipment: unknown
+      facilities: unknown
+    }
+    sourceDrift.curriculum[0] = {
+      ...sourceDrift.curriculum[0],
+      summary: '검수되지 않은 변경',
+    }
+    expect(() => parseContentSeedInputs(sourceDrift)).toThrow(/manifest.*approved/iu)
   })
 })
