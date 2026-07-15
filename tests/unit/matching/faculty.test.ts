@@ -532,6 +532,44 @@ describe('recommendFaculty', () => {
     expect(() => recommend(socialDocumentaryStudent(), malformedName)).toThrow()
   })
 
+  it('선택하지 않은 교차 트랙 점수의 라벨을 요구하지 않고 실제 social 선택 근거를 사용한다', () => {
+    const result = recommend(student(
+      { documentary: 80, art_photo: 70, commercial: 60, video: 50 },
+      { social: 1 },
+      { social: '사회와 사람의 기록' },
+    ))
+
+    expect(result.primary.id).toBe(1)
+    expect(result.primary.reason).toContain('사회와 사람의 기록')
+    expect(result.backup.reason).toContain('사회와 사람의 기록')
+  })
+
+  it('표준 트랙 점수로 전문 링크를 열고 별도 result·career 신호로 50점 전문가를 연계한다', () => {
+    const faculty = facultyFixture().slice(0, 3)
+    faculty.push({
+      ...clone(facultyFixture()[4]),
+      id: 70,
+      name: '트랙 링크 전문가',
+      tags: [
+        tag('video', '영상촬영', 'specialist'),
+        tag('project_signal', '프로젝트 제작', 'result'),
+        tag('career_signal', '콘텐츠 진로', 'career'),
+      ],
+    })
+    const result = recommend(
+      student(
+        { ...zeroTracks(), video: 100 },
+        { project_signal: 1, career_signal: 1 },
+        { project_signal: '프로젝트 제작', career_signal: '콘텐츠 진로' },
+      ),
+      faculty,
+      [{ primaryFacultyId: 2, specialistFacultyId: 70, tagKey: 'video', priority: 1 }],
+    )
+
+    expect(result.primary.id).toBe(2)
+    expect(result.specialists.map(({ id }) => id)).toContain(70)
+  })
+
   it('교수·태그·링크·라벨 입력 순서가 바뀌어도 ID와 사유가 같다', () => {
     const evidence = videoDroneStudent()
     const baseline = recommend(evidence)

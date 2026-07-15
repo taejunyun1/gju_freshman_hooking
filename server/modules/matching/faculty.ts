@@ -257,11 +257,6 @@ const assertLabelEvidence = (student: ParsedStudent): void => {
       throw new Error('FACULTY_LABEL_EVIDENCE_MISSING')
     }
   }
-  for (const key of trackKeys) {
-    if (student.trackScores[key] > 0 && student.selectedLabels[key] === undefined) {
-      throw new Error('FACULTY_LABEL_EVIDENCE_MISSING')
-    }
-  }
 }
 
 interface PrimaryScore {
@@ -282,16 +277,8 @@ const scorePrimary = (student: ParsedStudent, candidate: ParsedFaculty): Primary
 }
 
 const strongestGlobalEvidenceKey = (student: ParsedStudent): string | null => {
-  const signals = new Map<string, number>()
-  for (const [key, value] of Object.entries(student.interestVector)) {
-    if (value > 0) signals.set(key, value * 100)
-  }
-  for (const key of trackKeys) {
-    if (student.trackScores[key] > 0) {
-      signals.set(key, Math.max(signals.get(key) ?? 0, student.trackScores[key]))
-    }
-  }
-  return [...signals]
+  return Object.entries(student.interestVector)
+    .filter(([key, signal]) => signal > 0 && student.selectedLabels[key] !== undefined)
     .sort((left, right) => right[1] - left[1] || compareText(left[0], right[0]))[0]?.[0] ?? null
 }
 
@@ -301,7 +288,9 @@ const strongestFacultyEvidenceKey = (
 ): string => {
   const matched = [...candidate.tags]
     .map(tag => ({ tag, signal: signalForTag(student, tag) }))
-    .filter(match => match.signal > 0 && match.tag.weight > 0)
+    .filter(match => match.signal > 0
+      && match.tag.weight > 0
+      && student.selectedLabels[match.tag.key] !== undefined)
     .sort((left, right) => (
       right.signal * right.tag.weight - left.signal * left.tag.weight
       || right.tag.weight - left.tag.weight
@@ -373,6 +362,11 @@ const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): Spec
   return { candidate, rawScore: specialist * 0.50 + result * 0.30 + career * 0.20 }
 }
 
+const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean => (
+  (student.interestVector[tagKey] ?? 0) > 0
+  || (trackKeySet.has(tagKey) && student.trackScores[tagKey as TrackKey] > 0)
+)
+
 const deepFreeze = <Value>(value: Value): Value => {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
   for (const child of Object.values(value)) deepFreeze(child)
@@ -407,7 +401,7 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
   const eligibleSpecialistIds = new Set(input.specialistLinks
     .filter(link => (link.primaryFacultyId === null
       || link.primaryFacultyId === chosenPrimary.candidate.id)
-      && (input.student.interestVector[link.tagKey] ?? 0) > 0)
+      && hasPositiveLinkSignal(input.student, link.tagKey))
     .map(link => link.specialistFacultyId))
 
   const specialistScores = input.faculty
