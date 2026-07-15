@@ -35,7 +35,7 @@ describe('administrator shell', () => {
   })
 
   it('assigns the admin layout and middleware as protected-page metadata without manual wrappers', () => {
-    for (const pagePath of ['app/pages/admin/index.vue', 'app/pages/admin/recovery.vue']) {
+    for (const pagePath of ['app/pages/admin/index.vue', 'app/pages/admin/recovery.vue', 'app/pages/admin/counseling.vue']) {
       const page = readFileSync(pagePath, 'utf8')
 
       expect(page).toContain("definePageMeta({ layout: 'admin', middleware: 'admin' })")
@@ -157,6 +157,7 @@ describe('administrator shell', () => {
     })
 
     expect(wrapper.get('nav').text()).toContain('복구 대기열')
+    expect(wrapper.get('nav').text()).toContain('상담 운영')
     expect(wrapper.text()).toContain('세션 만료')
     expect(wrapper.text()).toContain('operator content')
   })
