@@ -262,7 +262,7 @@ commit;
 `
 }
 
-const rootSeedSql = '\\ir seed/assessment-options.sql\n'
+const rootSeedSql = '\\ir seed/assessment-options.sql\n\\ir seed/content-2026.sql\n'
 
 export const writeOrCheckAssessmentSeed = (mode: '--write' | '--check', cwd = process.cwd()) => {
   const jsonPath = resolve(cwd, 'supabase/seed/assessment-options.json')

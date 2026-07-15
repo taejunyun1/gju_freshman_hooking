@@ -129,8 +129,12 @@ describe('assessment catalog seed', () => {
       scripts: Record<string, string>
     }
 
-    expect(config).toContain('sql_paths = ["./seed/assessment-options.sql"]')
-    expect(rootSeed).toBe('\\ir seed/assessment-options.sql\n')
+    expect(config).toContain(
+      'sql_paths = ["./seed/assessment-options.sql", "./seed/content-2026.sql"]',
+    )
+    expect(rootSeed).toBe(
+      '\\ir seed/assessment-options.sql\n\\ir seed/content-2026.sql\n',
+    )
     expect(packageJson.scripts['test:assessment-seed']).toBe(
       'vitest run --project local-integration tests/local/assessment-seed-artifact.test.ts',
     )

@@ -1,0 +1,101 @@
+[
+  {
+    "facilityKey": "studio_a_horizon",
+    "title": "스튜디오 A(호리존)",
+    "facilityType": "촬영 스튜디오",
+    "coreActivity": "호리존을 활용한 인물·패션·제품·광고·영상 촬영",
+    "tags": [
+      "studio",
+      "horizon",
+      "portrait",
+      "fashion",
+      "product",
+      "commercial",
+      "lighting",
+      "video"
+    ],
+    "exampleCourses": [
+      "라이팅과 스튜디오",
+      "커머셜 포토그라피 기초 워크숍",
+      "커머셜 포토그라피 심화 워크숍",
+      "커머셜 포토그라피 세미나",
+      "커머셜 포토그라피 랩"
+    ],
+    "operationNote": "학과 확인 필요",
+    "status": "draft",
+    "visibility": "public",
+    "sourceDate": "2026-07-14",
+    "lastVerifiedAt": null
+  },
+  {
+    "facilityKey": "studio_b",
+    "title": "스튜디오 B",
+    "facilityType": "촬영 스튜디오",
+    "coreActivity": "인물·제품·조명·사진영상 제작 실습",
+    "tags": [
+      "studio",
+      "portrait",
+      "product",
+      "lighting",
+      "photography",
+      "video"
+    ],
+    "exampleCourses": [
+      "기초사진실기",
+      "라이팅과 스튜디오",
+      "응용 디지털 촬영"
+    ],
+    "operationNote": "학과 확인 필요",
+    "status": "draft",
+    "visibility": "public",
+    "sourceDate": "2026-07-14",
+    "lastVerifiedAt": null
+  },
+  {
+    "facilityKey": "darkroom",
+    "title": "암실",
+    "facilityType": "사진 제작 시설",
+    "coreActivity": "흑백필름 현상과 인화 실습",
+    "tags": [
+      "darkroom",
+      "film",
+      "black_and_white",
+      "developing",
+      "printing",
+      "photography"
+    ],
+    "exampleCourses": [
+      "흑백사진과 암실"
+    ],
+    "operationNote": "약품·장비·안전교육·운영 시간 확인 필요",
+    "status": "draft",
+    "visibility": "public",
+    "sourceDate": "2026-07-14",
+    "lastVerifiedAt": null
+  },
+  {
+    "facilityKey": "computer_lab",
+    "title": "컴퓨터실",
+    "facilityType": "디지털 후반작업 시설",
+    "coreActivity": "사진 보정, 영상 편집·색보정, 디지털 이미지 제작",
+    "tags": [
+      "computer_lab",
+      "editing",
+      "color_grading",
+      "post_production",
+      "digital_image",
+      "video"
+    ],
+    "exampleCourses": [
+      "디지털 포토 에디팅",
+      "디지털 이미지 제작과 프린트",
+      "영상 컬러와 포스트 프로덕션",
+      "AI와 이미지 메이킹"
+    ],
+    "operationNote": "컴퓨터 수량·사양·설치 소프트웨어·운영 시간 확인 필요",
+    "status": "draft",
+    "visibility": "public",
+    "sourceDate": "2026-07-14",
+    "lastVerifiedAt": null
+  }
+]

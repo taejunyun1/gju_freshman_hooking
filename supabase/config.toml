@@ -69,8 +69,8 @@ enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 # The CLI executes seed files as SQL batches and does not expand psql `\ir` commands.
-# Keep seed.sql as the operator-facing include and reset from the generated artifact directly.
-sql_paths = ["./seed/assessment-options.sql"]
+# Keep seed.sql as the operator-facing include and reset from generated artifacts directly.
+sql_paths = ["./seed/assessment-options.sql", "./seed/content-2026.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.
