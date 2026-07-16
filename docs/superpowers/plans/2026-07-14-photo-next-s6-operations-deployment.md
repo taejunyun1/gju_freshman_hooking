@@ -287,6 +287,7 @@ git commit -m "test: enforce performance and load budgets"
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/deploy.yml`
 - Create: `scripts/deploy.sh`
+- Create: `scripts/deploy-photo-next-remote.mjs`
 - Create: `scripts/smoke.mjs`
 - Create: `docs/operations/deployment-runbook.md`
 - Modify: `wrangler.jsonc`
@@ -333,6 +334,14 @@ node scripts/smoke.mjs "$STAGING_URL"
 ```
 
 Expected: existing Cloudflare account authenticates, deployment succeeds, three smoke paths return 2xx.
+
+For the approved single-project first release, run the tracked fail-closed deployment runner from a clean commit that exactly matches its upstream:
+
+```bash
+node scripts/deploy-photo-next-remote.mjs
+```
+
+The tracked runner rejects any tracked file marked `assume-unchanged` or `skip-worktree`, requires clean index and working-tree diffs, and verifies that its own blob exactly matches `HEAD`. It applies linked migrations and seed data, builds without private runtime values, scans both public and server artifacts for exact secret leakage, deploys staging and production with the same persisted secret state, provisions the administrator, and writes only the final URL/credential handoff to a mode-`0600` ignored result file. Every Wrangler process removes inherited `CLOUDFLARE_ENV`; staging commands select only `--env staging` from `wrangler.jsonc`, while production uses the top-level configuration without a name or environment override. Before and after each Worker deployment it removes any remote `OPENAI_*`, `NUXT_PUBLIC_OPENAI*`, or `PHOTO_NEXT_OPENAI*` secret names with a mode-`0600` null-deletion manifest and verifies that none remain. Wrangler deployment remains the source of truth for plaintext vars, so config-absent OpenAI vars are removed without `--keep-vars`. It never enables the OpenAI provider.
 
 - [ ] **Step 6: Verify rollback once on staging**
 

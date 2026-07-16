@@ -188,6 +188,51 @@ describe('deployment and E2E safety contracts', () => {
     expect(wrangler).not.toMatch(/"secrets"\s*:/u)
   })
 
+  it('explicitly publishes both production and staging on workers.dev', () => {
+    const wrangler = JSON.parse(readFileSync('wrangler.jsonc', 'utf8')) as {
+      workers_dev?: boolean
+      env?: { staging?: { workers_dev?: boolean } }
+    }
+
+    expect(wrangler.workers_dev).toBe(true)
+    expect(wrangler.env?.staging?.workers_dev).toBe(true)
+  })
+
+  it('tracks the remote deployment runner and its critical fail-closed contracts', () => {
+    const runnerPath = 'scripts/deploy-photo-next-remote.mjs'
+    expect(existsSync(runnerPath)).toBe(true)
+    expect(existsSync('.superpowers/sdd/deploy-photo-next-remote.mjs')).toBe(false)
+
+    const runner = readFileSync(runnerPath, 'utf8')
+    const wranglerCli = readFileSync(
+      'node_modules/wrangler/wrangler-dist/cli.js',
+      'utf8',
+    )
+    const plan = readFileSync(
+      'docs/superpowers/plans/2026-07-14-photo-next-s6-operations-deployment.md',
+      'utf8',
+    )
+
+    expect(runner).toContain('DEPLOYMENT_LOCK_PATH')
+    expect(runner).toContain("openSync(lockPath, 'wx', PRIVATE_MODE)")
+    expect(runner).toContain("'hash-object', RUNNER_RELATIVE_PATH")
+    expect(runner).toContain('HEAD:${RUNNER_RELATIVE_PATH}')
+    expect(runner).toContain("'ls-files', '-v', '-z'")
+    expect(runner).toContain("'diff', '--quiet', '--no-ext-diff', '--cached', 'HEAD', '--'")
+    expect(runner).toContain("'diff', '--quiet', '--no-ext-diff', '--'")
+    expect(wranglerCli).toContain(
+      'return args.name && args.env && !useServiceEnvironments(config2) ? `${args.name}-${args.env}` : args.name ?? config2.name;',
+    )
+    expect(runner).toContain("? ['--env', 'staging']")
+    expect(runner).toContain('delete environment.CLOUDFLARE_ENV')
+    expect(runner).toContain('10007')
+    expect(runner).toContain("'secret', 'list'")
+    expect(runner).toContain("'secret', 'bulk'")
+    expect(runner).toContain('.output/server')
+    expect(runner).not.toContain("'deployments', 'status'")
+    expect(plan).toContain('node scripts/deploy-photo-next-remote.mjs')
+  })
+
   it('documents the exact provider-off release, minor policy, data boundary, and interactive secret workflow', () => {
     const runbook = readFileSync('docs/operations/openai-career-narrative.md', 'utf8')
 
