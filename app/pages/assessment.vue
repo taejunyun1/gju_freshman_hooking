@@ -302,7 +302,7 @@ onMounted(loadSession)
               :aria-busy="assessment.status === 'submitting' ? 'true' : undefined"
               @click="submit"
             >
-              {{ assessment.status === 'submitting' ? '결과 제출 중…' : '나의 연결 경로 보기' }}
+              {{ assessment.status === 'submitting' ? '결과와 진로 제안 정리 중…' : '나의 연결 경로 보기' }}
             </button>
           </nav>
         </section>

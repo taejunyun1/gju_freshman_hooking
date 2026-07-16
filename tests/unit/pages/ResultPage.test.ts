@@ -68,7 +68,7 @@ describe('owned result page', () => {
 
     expect(fetch).toHaveBeenCalledWith(`/api/result/${resultPublicId}`)
     expect(wrapper.get('[data-testid="result-skeleton"]').attributes('aria-busy')).toBe('true')
-    expect(wrapper.findAll('[data-skeleton-section]')).toHaveLength(8)
+    expect(wrapper.findAll('[data-skeleton-section]')).toHaveLength(9)
 
     pending.resolve({ data: makeResultSnapshot(), requestId: 'request-id' })
     await flushPromises()

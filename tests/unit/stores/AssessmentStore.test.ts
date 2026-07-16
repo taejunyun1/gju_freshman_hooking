@@ -482,6 +482,38 @@ describe('assessment store', () => {
       expect(sessionStorage.getItem(storageKey)).toContain('work.video')
     })
 
+    it('keeps a five-second submission busy, blocks a duplicate, and preserves the draft', async () => {
+      vi.useFakeTimers()
+      vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKeyA) })
+      const pendingSubmission = deferred<unknown>()
+      const fetch = vi.fn(async (url: string) => {
+        if (url === '/api/assessment/options') return success(catalog())
+        if (url === '/api/events') return success({ accepted: true })
+        if (url === '/api/assessment/submit') return pendingSubmission.promise
+        throw new Error(`unexpected ${url}`)
+      })
+      vi.stubGlobal('$fetch', fetch)
+      const store = useAssessmentStore()
+      await store.loadOptions()
+      setCompleteSelections(store)
+      const preserved = JSON.parse(JSON.stringify(store.selections)) as typeof store.selections
+
+      const first = store.submit('csrf-memory-token')
+      const second = store.submit('csrf-memory-token')
+
+      expect(store.status).toBe('submitting')
+      expect(store.announcement).toBe('결과와 짧은 진로 제안을 정리 중입니다.')
+      expect(store.selections).toEqual(preserved)
+      await expect(second).resolves.toBeNull()
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(store.status).toBe('submitting')
+      expect(fetch.mock.calls.filter(([url]) => url === '/api/assessment/submit')).toHaveLength(1)
+
+      pendingSubmission.resolve(success({ publicId }))
+      await expect(first).resolves.toBe(publicId)
+      vi.useRealTimers()
+    })
+
     it('marks an authentication failure without clearing the persisted draft', async () => {
       vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(idempotencyKeyA) })
       const authFailure = Object.assign(new Error('expired session'), {

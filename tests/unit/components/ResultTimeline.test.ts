@@ -44,6 +44,7 @@ describe('result master sequence', () => {
       section.attributes('data-result-section')
     ))).toEqual([
       'summary',
+      'career-narrative',
       'interests',
       'learning-path',
       'outcomes',

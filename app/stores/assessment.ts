@@ -653,7 +653,7 @@ export const useAssessmentStore = defineStore('assessment', () => {
       },
     }
     status.value = 'submitting'
-    announcement.value = '선택한 관심사로 결과를 제출 중입니다.'
+    announcement.value = '결과와 짧은 진로 제안을 정리 중입니다.'
     errorMessage.value = ''
     retryAction.value = null
     validatedResult.value = null

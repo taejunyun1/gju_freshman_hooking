@@ -8,6 +8,7 @@ type ResultPageState = 'loading' | 'ready' | 'not-found' | 'error' | 'unauthenti
 
 const sectionKeys = [
   'summary',
+  'career-narrative',
   'interests',
   'learning-path',
   'outcomes',
@@ -244,6 +245,7 @@ onBeforeRouteUpdate((to) => {
 }
 
 .result-page__skeleton-section--summary { min-height: 14rem; }
+.result-page__skeleton-section--career-narrative { min-height: 18rem; }
 .result-page__skeleton-section--learning-path { min-height: 20rem; }
 
 .result-page__skeleton-section span,
@@ -319,6 +321,7 @@ onBeforeRouteUpdate((to) => {
   .result-page__masthead-inner { padding-inline: 0; }
   .result-page__skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .result-page__skeleton-section--summary,
+  .result-page__skeleton-section--career-narrative,
   .result-page__skeleton-section--learning-path { grid-column: 1 / -1; }
 }
 

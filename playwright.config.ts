@@ -34,6 +34,13 @@ const localRuntimeEnvironment = (): Record<string, string> => {
   }
 
   return {
+    OPENAI_API_KEY: '',
+    OPENAI_CAREER_NARRATIVE_DAILY_CAP: '500',
+    OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID: '',
+    OPENAI_CAREER_NARRATIVE_MODEL: 'gpt-5.6-sol',
+    OPENAI_CAREER_NARRATIVE_PROSPECT_CAP: '5',
+    OPENAI_CAREER_NARRATIVE_TIMEOUT_MS: '5000',
+    OPENAI_SAFETY_HMAC_KEY: '',
     NUXT_PHONE_ENCRYPTION_KEY: randomBytes(32).toString('base64url'),
     NUXT_PHONE_HMAC_KEY: randomBytes(32).toString('base64url'),
     NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: readStatusValue(status, 'PUBLISHABLE_KEY', 'ANON_KEY'),

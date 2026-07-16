@@ -133,6 +133,17 @@ describe('deployment and E2E safety contracts', () => {
     expect(globalSetup).toContain("['exec', 'supabase', 'db', 'reset', '--local']")
   })
 
+  it('forces the E2E server onto deterministic narrative fallback even when parent secrets exist', () => {
+    const playwrightConfig = readFileSync('playwright.config.ts', 'utf8')
+
+    expect(playwrightConfig).toMatch(/OPENAI_API_KEY:\s*''/u)
+    expect(playwrightConfig).toMatch(/OPENAI_SAFETY_HMAC_KEY:\s*''/u)
+    expect(playwrightConfig).toMatch(
+      /OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID:\s*''/u,
+    )
+    expect(playwrightConfig).toMatch(/env:\s*localRuntimeEnvironment\(\)/u)
+  })
+
   it('keeps registration rate-limit isolation inside E2E support instead of the application API', () => {
     const studentSupport = readFileSync('tests/e2e/support/student.ts', 'utf8')
     const localRateLimitSupport = readFileSync('tests/e2e/support/local-registration-rate-limit.ts', 'utf8')

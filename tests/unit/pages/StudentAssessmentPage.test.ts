@@ -222,7 +222,7 @@ describe('student assessment page', () => {
     expect(sessionStorage.getItem(storageKey)).toBeNull()
   })
 
-  it('disables the assessment fieldset and announces progress while submission is pending', async () => {
+  it('disables the assessment fieldset and announces the exact progress copy while submission is pending', async () => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       step: 3,
       selections: {
@@ -249,14 +249,22 @@ describe('student assessment page', () => {
 
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="assessment-submit"]').attributes('aria-busy')).toBe('true')
-    expect(wrapper.get('[data-testid="assessment-submit"]').text()).toContain('제출 중')
+    expect(wrapper.get('[data-testid="assessment-submit"]').text()).toBe('결과와 진로 제안 정리 중…')
+    expect(wrapper.get('.assessment-page__global-status').text()).toBe(
+      '결과와 짧은 진로 제안을 정리 중입니다.',
+    )
     const before = sessionStorage.getItem(storageKey)
+    await wrapper.get('[data-testid="assessment-submit"]').trigger('click')
     await wrapper.get('[data-key="career.photo"]').trigger('click')
     expect(sessionStorage.getItem(storageKey)).toBe(before)
+    expect((globalThis.$fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([url]: [string]) => url === '/api/assessment/submit',
+    )).toHaveLength(1)
 
     pendingSubmission.resolve(success({ publicId }))
     await flushPromises()
     expect(globalThis.navigateTo).toHaveBeenCalledWith(`/result/${publicId}`)
+    expect(globalThis.navigateTo).toHaveBeenCalledTimes(1)
   })
 
   it('disables logout and does not call the logout API while assessment submission is pending', async () => {

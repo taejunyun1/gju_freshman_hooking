@@ -4,6 +4,7 @@ import { trackLabels } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CounselingCTA from '../counseling/CounselingCTA.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
+import CareerNarrative from './CareerNarrative.vue'
 import FacultyRecommendation from './FacultyRecommendation.vue'
 import InterestClip from './InterestClip.vue'
 import LearningPath from './LearningPath.vue'
@@ -37,6 +38,11 @@ const hasOutcomes = computed(() => (
         점수보다 실제 교과와 프로젝트, 결과물의 순서부터 확인해 보세요.
       </p>
     </section>
+
+    <CareerNarrative
+      :assessment-public-id="resultPublicId"
+      :narrative="snapshot.careerNarrative"
+    />
 
     <section
       class="result-timeline__section result-timeline__section--interests"
@@ -191,6 +197,7 @@ const hasOutcomes = computed(() => (
 .result-timeline {
   --result-gutter: 1.25rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(3.5rem, 10vw, 6.5rem);
   padding-block: clamp(2.75rem, 8vw, 5.5rem) 5rem;
 }
