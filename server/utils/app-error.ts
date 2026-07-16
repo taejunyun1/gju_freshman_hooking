@@ -53,6 +53,10 @@ const publicMessages: Record<AppErrorCode, string> = {
   CAMPAIGN_INVALID: '캠페인 입력값을 다시 확인해 주세요.',
   CAMPAIGN_NOT_FOUND: '요청한 캠페인을 찾을 수 없습니다.',
   CAMPAIGN_CONFLICT: '캠페인 정보가 이미 변경되었습니다. 최신 내용을 확인해 주세요.',
+  EXPORT_INVALID: '내보내기 조건을 다시 확인해 주세요.',
+  EXPORT_NOT_FOUND: '요청한 내보내기 작업을 찾을 수 없습니다.',
+  EXPORT_CONFLICT: '내보내기 작업 상태가 변경되었습니다. 새 작업을 시작해 주세요.',
+  EXPORT_FILTER_REQUIRED: '내보내기 범위를 좁혀 30,000행 이하로 조정해 주세요.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -103,6 +107,10 @@ const statusCodes: Record<AppErrorCode, number> = {
   CAMPAIGN_INVALID: 422,
   CAMPAIGN_NOT_FOUND: 404,
   CAMPAIGN_CONFLICT: 409,
+  EXPORT_INVALID: 422,
+  EXPORT_NOT_FOUND: 404,
+  EXPORT_CONFLICT: 409,
+  EXPORT_FILTER_REQUIRED: 422,
 }
 
 export class AppError extends Error {
