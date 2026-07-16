@@ -5,6 +5,7 @@ import { createAdminExportStudentsHandler } from '../../../server/api/admin/expo
 import { createAdminExportAssessmentsHandler } from '../../../server/api/admin/export/[id]/assessments.get'
 import { createAdminExportCounselingHandler } from '../../../server/api/admin/export/[id]/counseling.get'
 import { createAdminExportCompleteHandler } from '../../../server/api/admin/export/[id]/complete.post'
+import { createAdminExportDownloadedHandler } from '../../../server/api/admin/export/[id]/downloaded.post'
 import {
   createAdminExportService,
   decodeAssessmentExportRow,
@@ -70,6 +71,11 @@ const dependencies = (
   listAssessments: vi.fn(async () => []),
   listCounseling: vi.fn(async () => []),
   completeJob: vi.fn(async () => storedJob({ status: 'completed' })),
+  acknowledgeDownload: vi.fn(async () => storedJob({
+    status: 'completed',
+    completedAt: '2026-07-16T02:05:00.000Z',
+    downloadedAt: '2026-07-16T02:06:00.000Z',
+  })),
   ...overrides,
 })
 
@@ -330,11 +336,12 @@ describe('administrator export contracts', () => {
       studentRowCount: 10_000,
       participationRowCount: 10_000,
       counselingRowCount: 10_000,
-      downloaded: true,
-    }))).resolves.toMatchObject({ status: 'completed', downloaded: true })
+      downloaded: false,
+    }))).resolves.toMatchObject({ status: 'completed', downloaded: false })
     for (const body of [
       { status: 'fetching', studentRowCount: 0, participationRowCount: 0, counselingRowCount: 0 },
-      { status: 'completed', studentRowCount: 30_000, participationRowCount: 1, counselingRowCount: 0, downloaded: true },
+      { status: 'completed', studentRowCount: 10_000, participationRowCount: 10_000, counselingRowCount: 10_000, downloaded: true },
+      { status: 'completed', studentRowCount: 30_000, participationRowCount: 1, counselingRowCount: 0, downloaded: false },
       { status: 'failed', studentRowCount: 0, participationRowCount: 0, counselingRowCount: 0, downloaded: true, errorCode: 'EXPORT_FETCH_FAILED' },
       { status: 'failed', studentRowCount: 0, participationRowCount: 0, counselingRowCount: 0, downloaded: false, errorCode: 'UNSTABLE_ERROR' },
     ]) {
@@ -353,7 +360,7 @@ describe('administrator export contracts', () => {
       studentRowCount: 0,
       participationRowCount: 0,
       counselingRowCount: 0,
-      downloaded: true,
+      downloaded: false,
     }, { adminUserId: admin.userId })).rejects.toMatchObject({ code: 'EXPORT_INVALID' })
     expect(deps.completeJob).not.toHaveBeenCalled()
 
@@ -362,13 +369,58 @@ describe('administrator export contracts', () => {
       studentRowCount: 3,
       participationRowCount: 5,
       counselingRowCount: 1,
-      downloaded: true,
+      downloaded: false,
     }, { adminUserId: admin.userId })).resolves.toMatchObject({ status: 'completed' })
     expect(deps.countRows).toHaveBeenCalledWith(filterSnapshot, {
       adminUserId: admin.userId,
       cutoff: createdAt,
       jobId: 71,
     })
+  })
+
+  it('acknowledges a browser download only for the owning completed job and is idempotent', async () => {
+    const completed = storedJob({
+      status: 'completed',
+      completedAt: '2026-07-16T02:05:00.000Z',
+    })
+    const acknowledged = storedJob({
+      status: 'completed',
+      completedAt: '2026-07-16T02:05:00.000Z',
+      downloadedAt: '2026-07-16T02:06:00.000Z',
+    })
+    const deps = dependencies({
+      loadOwnedJob: vi.fn()
+        .mockResolvedValueOnce(completed)
+        .mockResolvedValueOnce(acknowledged),
+      acknowledgeDownload: vi.fn(async () => acknowledged),
+    })
+    const service = createAdminExportService(deps)
+
+    await expect(service.downloaded(71, { adminUserId: admin.userId })).resolves.toMatchObject({
+      id: 71,
+      status: 'completed',
+      downloadedAt: '2026-07-16T02:06:00.000Z',
+    })
+    await expect(service.downloaded(71, { adminUserId: admin.userId })).resolves.toMatchObject({
+      id: 71,
+      status: 'completed',
+      downloadedAt: '2026-07-16T02:06:00.000Z',
+    })
+    expect(deps.acknowledgeDownload).toHaveBeenCalledTimes(1)
+
+    const wrongOwner = dependencies({ loadOwnedJob: vi.fn(async () => null) })
+    await expect(createAdminExportService(wrongOwner).downloaded(71, {
+      adminUserId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    })).rejects.toMatchObject({ code: 'EXPORT_NOT_FOUND' })
+    expect(wrongOwner.acknowledgeDownload).not.toHaveBeenCalled()
+
+    const fetching = dependencies({
+      loadOwnedJob: vi.fn(async () => storedJob({ status: 'fetching' })),
+    })
+    await expect(createAdminExportService(fetching).downloaded(71, {
+      adminUserId: admin.userId,
+    })).rejects.toMatchObject({ code: 'EXPORT_CONFLICT' })
+    expect(fetching.acknowledgeDownload).not.toHaveBeenCalled()
   })
 
   it('applies the same recent-auth and private response boundary to all remaining endpoints', async () => {
@@ -403,7 +455,7 @@ describe('administrator export contracts', () => {
         getRequestId: () => requestId,
         readRawBody: async () => JSON.stringify({
           status: 'completed', studentRowCount: 0, participationRowCount: 0,
-          counselingRowCount: 0, downloaded: true,
+          counselingRowCount: 0, downloaded: false,
         }),
         requireAdmin: async (_event, options) => { expect(options).toEqual({ recentAuthMinutes: 15 }); return admin },
         setHeader: (event, name, value) => { (event as { headers: Record<string, string> }).headers[name] = value },
@@ -416,5 +468,24 @@ describe('administrator export contracts', () => {
       expect('data' in result).toBe(true)
       expect(event.headers['cache-control']).toBe('private, no-store')
     }
+
+    const acknowledged = storedJob({
+      status: 'completed',
+      completedAt: '2026-07-16T02:05:00.000Z',
+      downloadedAt: '2026-07-16T02:06:00.000Z',
+    })
+    const downloadedHandler = createAdminExportDownloadedHandler({
+      exports: createAdminExportService(dependencies({
+        loadOwnedJob: vi.fn(async () => acknowledged),
+      })),
+      getParam: () => '71',
+      getRequestId: () => requestId,
+      requireAdmin: async (_event, options) => { expect(options).toEqual({ recentAuthMinutes: 15 }); return admin },
+      setHeader: (event, name, value) => { (event as { headers: Record<string, string> }).headers[name] = value },
+      setStatus: () => undefined,
+    })
+    const downloadedEvent = { headers: {} as Record<string, string> }
+    expect('data' in await downloadedHandler(downloadedEvent)).toBe(true)
+    expect(downloadedEvent.headers['cache-control']).toBe('private, no-store')
   })
 })

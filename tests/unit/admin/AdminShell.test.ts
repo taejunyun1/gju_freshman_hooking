@@ -41,6 +41,7 @@ describe('administrator shell', () => {
       'app/pages/admin/counseling.vue',
       'app/pages/admin/students/index.vue',
       'app/pages/admin/students/[id].vue',
+      'app/pages/admin/export.vue',
     ]) {
       const page = readFileSync(pagePath, 'utf8')
 
@@ -180,6 +181,7 @@ describe('administrator shell', () => {
     expect(wrapper.get('nav').text()).toContain('복구 대기열')
     expect(wrapper.get('nav').text()).toContain('상담 운영')
     expect(wrapper.get('nav').text()).toContain('학생 찾기')
+    expect(wrapper.get('nav').text()).toContain('데이터 내보내기')
     expect(wrapper.text()).toContain('세션 만료')
     expect(wrapper.text()).toContain('operator content')
   })

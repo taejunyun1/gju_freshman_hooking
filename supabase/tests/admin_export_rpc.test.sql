@@ -1,20 +1,24 @@
 begin;
 
-select plan(20);
+select plan(31);
 
 select has_function('public', 'admin_export_counts', array['bigint','uuid'], 'export counts RPC exists');
 select has_function('public', 'admin_export_student_rows', array['bigint','uuid','timestamp with time zone','bigint','integer'], 'student export RPC exists');
 select has_function('public', 'admin_export_assessment_rows', array['bigint','uuid','timestamp with time zone','bigint','integer'], 'assessment export RPC exists');
 select has_function('public', 'admin_export_counseling_rows', array['bigint','uuid','timestamp with time zone','bigint','integer'], 'counseling export RPC exists');
 select has_function('public', 'record_admin_export_created', array['bigint','uuid','uuid'], 'export audit RPC exists');
+select has_function('public', 'record_admin_export_downloaded', array['bigint','uuid'], 'download acknowledgement RPC exists');
 select has_index('public', 'audit_events', 'audit_events_admin_export_job_once_idx', 'each export job has one audit row under concurrency');
 
 select function_privs_are('public', 'admin_export_counts', array['bigint','uuid'], 'anon', array[]::text[], 'anonymous cannot count export rows');
 select function_privs_are('public', 'admin_export_student_rows', array['bigint','uuid','timestamp with time zone','bigint','integer'], 'authenticated', array[]::text[], 'ordinary authenticated users cannot export students');
 select function_privs_are('public', 'record_admin_export_created', array['bigint','uuid','uuid'], 'service_role', array['EXECUTE'], 'server can atomically audit export creation');
+select function_privs_are('public', 'record_admin_export_downloaded', array['bigint','uuid'], 'service_role', array['EXECUTE'], 'server can atomically acknowledge a browser download');
 
 insert into auth.users(id) values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
 insert into public.admin_users(id, is_active) values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', true);
+insert into auth.users(id) values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+insert into public.admin_users(id, is_active) values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', true);
 insert into public.export_jobs(created_by_admin_id, filter_snapshot)
 values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '{}'::jsonb);
 
@@ -169,6 +173,80 @@ select is(
      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)),
   2,
   'counseling page applies its direct status filter just like its count'
+);
+
+update public.export_jobs
+set status = 'completed',
+    student_row_count = 2,
+    participation_row_count = 2,
+    counseling_row_count = 2,
+    completed_at = pg_catalog.clock_timestamp()
+where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  and status = 'fetching';
+
+select lives_ok(
+  $$select public.record_admin_export_downloaded(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  'creator can acknowledge a completed browser download'
+);
+select ok(
+  (select downloaded_at is not null
+   from public.export_jobs
+   where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')),
+  'download acknowledgement records downloaded_at'
+);
+select lives_ok(
+  $$select public.record_admin_export_downloaded(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  'download acknowledgement is idempotent'
+);
+select is(
+  (select count(*)::integer
+   from public.export_jobs
+   where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+     and downloaded_at is not null),
+  1,
+  'idempotent acknowledgement does not create a second audit fact'
+);
+select throws_ok(
+  $$select public.record_admin_export_downloaded(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'ffffffff-ffff-4fff-8fff-ffffffffffff')$$,
+  '22023', 'EXPORT_ACTIVE_ADMIN_REQUIRED', 'unknown administrators cannot acknowledge downloads'
+);
+select throws_ok(
+  $$select public.record_admin_export_downloaded(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd')$$,
+  'P0002', 'EXPORT_JOB_NOT_FOUND', 'another active administrator cannot acknowledge the creator download'
+);
+select is(
+  (select count(*)::integer
+   from public.export_jobs
+   where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+     and downloaded_at is not null),
+  1,
+  'rejected cross-owner acknowledgement does not add a download fact'
+);
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '{"region":"gwangju"}'::jsonb);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select throws_ok(
+  $$select public.record_admin_export_downloaded(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  'P0001', 'EXPORT_JOB_STATUS_INVALID', 'fetching jobs cannot be acknowledged as downloaded'
+);
+select is(
+  (select downloaded_at
+   from public.export_jobs
+   where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')),
+  null::timestamptz,
+  'rejected acknowledgement leaves downloaded_at empty'
 );
 
 select * from finish();

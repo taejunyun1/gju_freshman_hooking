@@ -43,6 +43,7 @@ const logout = async (): Promise<void> => {
         <NuxtLink to="/admin/resources">학과 자원</NuxtLink>
         <NuxtLink to="/admin/faculty">교수진 운영</NuxtLink>
         <NuxtLink to="/admin/campaigns">캠페인 운영</NuxtLink>
+        <NuxtLink to="/admin/export">데이터 내보내기</NuxtLink>
         <NuxtLink to="/admin/recovery">복구 대기열</NuxtLink>
       </nav>
 

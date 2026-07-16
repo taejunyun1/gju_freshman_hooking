@@ -4,11 +4,13 @@ import { z } from 'zod'
 import {
   adminExportAssessmentSchema,
   adminExportCompletionSchema,
+  adminExportCompletedJobSchema,
   adminExportCounselingSchema,
   adminExportCreateRequestSchema,
   adminExportFilterSchema,
   adminExportFailureCodeSchema,
   adminExportJobSchema,
+  adminExportDownloadedJobSchema,
   adminExportStudentSchema,
   type AdminExportAssessment,
   type AdminExportCompletion,
@@ -143,6 +145,9 @@ export type AdminExportDependencies = {
   listCounseling: (input: PageInput) => Promise<ExportRow<AdminExportCounseling>[]>
   completeJob: (input: {
     adminUserId: string, completion: AdminExportCompletion, jobId: number
+  }) => Promise<StoredExportJob | null>
+  acknowledgeDownload: (input: {
+    adminUserId: string, jobId: number
   }) => Promise<StoredExportJob | null>
 }
 
@@ -300,11 +305,42 @@ export const createAdminExportService = (dependencies: AdminExportDependencies) 
     const completed = await dependencies.completeJob({ jobId, adminUserId: context.adminUserId, completion })
     if (completed === null) throw new AppError('EXPORT_CONFLICT')
     const verified = validateStoredJob(completed)
-    return adminExportJobSchema.parse({
+    const response = {
       id: verified.id,
       status: verified.status,
       createdAt: verified.createdAt,
       filterSnapshot: verified.filterSnapshot,
+    }
+    return completion.status === 'completed'
+      ? adminExportCompletedJobSchema.parse(response)
+      : adminExportJobSchema.parse(response)
+  },
+  downloaded: async (jobId: number, context: { adminUserId: string }) => {
+    const raw = await dependencies.loadOwnedJob({ jobId, adminUserId: context.adminUserId })
+    if (raw === null) throw new AppError('EXPORT_NOT_FOUND')
+    const job = validateStoredJob(raw)
+    if (job.createdByAdminId !== context.adminUserId || job.id !== jobId) {
+      throw new Error('ADMIN_EXPORT_STORE_INVALID')
+    }
+    if (job.status !== 'completed') throw new AppError('EXPORT_CONFLICT')
+    const acknowledged = job.downloadedAt === null
+      ? await dependencies.acknowledgeDownload({ jobId, adminUserId: context.adminUserId })
+      : job
+    if (acknowledged === null) throw new AppError('EXPORT_CONFLICT')
+    const verified = validateStoredJob(acknowledged)
+    if (verified.id !== jobId
+      || verified.createdByAdminId !== context.adminUserId
+      || verified.status !== 'completed'
+      || verified.downloadedAt === null
+      || !hasSameStoredJobIdentity(job, verified)) {
+      throw new Error('ADMIN_EXPORT_STORE_INVALID')
+    }
+    return adminExportDownloadedJobSchema.parse({
+      id: verified.id,
+      status: verified.status,
+      createdAt: verified.createdAt,
+      filterSnapshot: verified.filterSnapshot,
+      downloadedAt: verified.downloadedAt,
     })
   },
 })
@@ -655,6 +691,20 @@ export const createSupabaseAdminExportDependencies = (
         .maybeSingle()
       if (error) throwStoreError(error)
       return data === null ? null : decodeJobRow(data)
+    },
+    acknowledgeDownload: async (input) => {
+      const { data, error } = await client.rpc('record_admin_export_downloaded', {
+        p_admin_id: input.adminUserId,
+        p_job_id: input.jobId,
+      })
+      if (error) throwStoreError(error)
+      if (data !== true) throw new Error('ADMIN_EXPORT_STORE_INVALID')
+      const { data: job, error: loadError } = await client.from('export_jobs').select(jobSelection)
+        .eq('id', input.jobId)
+        .eq('created_by_admin_id', input.adminUserId)
+        .maybeSingle()
+      if (loadError) throwStoreError(loadError)
+      return job === null ? null : decodeJobRow(job)
     },
   }
 }

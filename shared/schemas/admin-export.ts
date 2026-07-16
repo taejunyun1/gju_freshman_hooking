@@ -48,6 +48,14 @@ export const adminExportJobSchema = z.object({
   filterSnapshot: adminExportFilterSchema,
 }).strict()
 
+export const adminExportCompletedJobSchema = adminExportJobSchema.extend({
+  status: z.literal('completed'),
+}).strict()
+
+export const adminExportDownloadedJobSchema = adminExportCompletedJobSchema.extend({
+  downloadedAt: timestampSchema,
+}).strict()
+
 export const adminExportStudentSchema = z.object({
   nickname: storedText(100),
   phone: z.string().regex(/^010\d{8}$/u),
@@ -120,7 +128,7 @@ export const adminExportCompletionSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
     ...rowCountsShape,
-    downloaded: z.boolean(),
+    downloaded: z.literal(false),
   }).strict(),
   z.object({
     status: z.literal('failed'),
@@ -136,6 +144,8 @@ export const adminExportCompletionSchema = z.discriminatedUnion('status', [
 
 export type AdminExportFilter = z.infer<typeof adminExportFilterSchema>
 export type AdminExportJob = z.infer<typeof adminExportJobSchema>
+export type AdminExportCompletedJob = z.infer<typeof adminExportCompletedJobSchema>
+export type AdminExportDownloadedJob = z.infer<typeof adminExportDownloadedJobSchema>
 export type AdminExportStudent = z.infer<typeof adminExportStudentSchema>
 export type AdminExportAssessment = z.infer<typeof adminExportAssessmentSchema>
 export type AdminExportCounseling = z.infer<typeof adminExportCounselingSchema>
