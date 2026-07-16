@@ -6,6 +6,91 @@ import { describe, expect, it } from 'vitest'
 import { runPreviewDeploy } from '../../../scripts/deploy-preview.mjs'
 
 describe('deployment and E2E safety contracts', () => {
+  const baseEnvironment = () => ({
+    HOME: process.env.HOME ?? '',
+    PATH: process.env.PATH ?? '',
+    NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
+    NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
+    NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
+    NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',
+    NUXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
+    NUXT_PASSWORD_PEPPER: 'safe-password-pepper',
+    NUXT_SUPABASE_SECRET_KEY: 'safe-secret-key',
+  })
+
+  const verifyEnvironment = (overrides: Record<string, string | undefined> = {}) => {
+    const env: Record<string, string> = baseEnvironment()
+    for (const [name, value] of Object.entries(overrides)) {
+      if (value === undefined) Reflect.deleteProperty(env, name)
+      else env[name] = value
+    }
+    return spawnSync(process.execPath, ['scripts/verify-env.mjs'], {
+      encoding: 'utf8',
+      env,
+    })
+  }
+
+  it('keeps OpenAI server secrets optional as a deterministic production fallback', () => {
+    const result = verifyEnvironment()
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Environment contract verified.')
+  })
+
+  it.each([
+    [{ OPENAI_API_KEY: 'server-key' }, 'OPENAI_API_KEY and OPENAI_SAFETY_HMAC_KEY must be configured together'],
+    [{
+      OPENAI_API_KEY: 'server-key',
+      OPENAI_SAFETY_HMAC_KEY: 'not-base64url!',
+    }, 'must encode exactly 32 bytes as unpadded base64url'],
+    [{
+      OPENAI_CAREER_NARRATIVE_MODEL: 'gpt-5.6',
+    }, 'must be gpt-5.6-sol or gpt-5.6-luna'],
+    [{
+      OPENAI_CAREER_NARRATIVE_TIMEOUT_MS: '1999',
+    }, 'must be an integer from 2000 through 8000'],
+    [{
+      OPENAI_CAREER_NARRATIVE_DAILY_CAP: '10001',
+    }, 'must be an integer from 1 through 10000'],
+    [{
+      OPENAI_CAREER_NARRATIVE_PROSPECT_CAP: '4',
+    }, 'must remain exactly 5'],
+    [{
+      NUXT_PUBLIC_OPENAI_API_KEY: '',
+    }, 'public OpenAI variables are forbidden'],
+  ] as const)('rejects an unsafe OpenAI deployment environment: %#', (overrides, message) => {
+    const result = verifyEnvironment(overrides)
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain(message)
+  })
+
+  it('keeps production provider activation closed until the minor rollout evidence exists', () => {
+    const result = verifyEnvironment({
+      NODE_ENV: 'production',
+      OPENAI_API_KEY: 'server-key',
+      OPENAI_SAFETY_HMAC_KEY: 'A'.repeat(43),
+      OPENAI_CAREER_NARRATIVE_MODEL: 'gpt-5.6-sol',
+    })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID')
+    expect(result.stderr).toContain('docs/operations/evidence/openai-career-model-eval.md')
+  })
+
+  it('documents only blank OpenAI secrets and bounded non-secret defaults', () => {
+    const example = readFileSync('.env.example', 'utf8')
+
+    expect(example).toContain('OPENAI_API_KEY=\n')
+    expect(example).toContain('OPENAI_SAFETY_HMAC_KEY=\n')
+    expect(example).toContain('OPENAI_CAREER_NARRATIVE_MODEL=gpt-5.6-sol\n')
+    expect(example).toContain('OPENAI_CAREER_NARRATIVE_TIMEOUT_MS=5000\n')
+    expect(example).toContain('OPENAI_CAREER_NARRATIVE_DAILY_CAP=500\n')
+    expect(example).toContain('OPENAI_CAREER_NARRATIVE_PROSPECT_CAP=5\n')
+    expect(example).not.toContain('server-test-key')
+    expect(example).not.toMatch(/^NUXT_PUBLIC_OPENAI/mu)
+  })
+
   it('enables local authenticator MFA without enabling phone MFA', () => {
     const config = readFileSync('supabase/config.toml', 'utf8')
     const section = (name: string): string => {
