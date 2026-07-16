@@ -1,4 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const requiredNames = [
@@ -107,6 +115,60 @@ for (const [name, value] of Object.entries(process.env)) {
   }
   if (name.startsWith('NUXT_PUBLIC_OPENAI')) {
     issues.push({ name, reason: 'public OpenAI variables are forbidden' })
+  }
+}
+
+const publicOutputRelativePath = '.output/public'
+const publicOutputPath = fileURLToPath(new URL(`../${publicOutputRelativePath}`, import.meta.url))
+const forbiddenPublicMarkers = ['OPENAI_API_KEY', 'server-test-key']
+const forbiddenPublicMarkerBuffers = forbiddenPublicMarkers.map(marker => Buffer.from(marker))
+const publicScanChunkBytes = 64 * 1024
+const publicScanOverlapBytes = Math.max(
+  ...forbiddenPublicMarkerBuffers.map(marker => marker.byteLength),
+) - 1
+const fileContainsForbiddenPublicMarker = (path) => {
+  const descriptor = openSync(path, 'r')
+  const chunk = Buffer.allocUnsafe(publicScanChunkBytes)
+  let overlap = Buffer.alloc(0)
+  try {
+    while (true) {
+      const bytesRead = readSync(descriptor, chunk, 0, chunk.byteLength, null)
+      if (bytesRead === 0) return false
+      const current = overlap.byteLength === 0
+        ? chunk.subarray(0, bytesRead)
+        : Buffer.concat([overlap, chunk.subarray(0, bytesRead)])
+      if (forbiddenPublicMarkerBuffers.some(marker => current.includes(marker))) return true
+      overlap = Buffer.from(current.subarray(
+        Math.max(0, current.byteLength - publicScanOverlapBytes),
+      ))
+    }
+  }
+  finally {
+    closeSync(descriptor)
+  }
+}
+
+if (existsSync(publicOutputPath)) {
+  const pending = [publicOutputPath]
+  let markerFound = false
+  while (pending.length > 0 && !markerFound) {
+    const current = pending.pop()
+    if (current === undefined) break
+    for (const name of readdirSync(current)) {
+      const path = `${current}/${name}`
+      const stat = statSync(path)
+      if (stat.isDirectory()) pending.push(path)
+      else if (stat.isFile() && fileContainsForbiddenPublicMarker(path)) {
+        markerFound = true
+        break
+      }
+    }
+  }
+  if (markerFound) {
+    issues.push({
+      name: publicOutputRelativePath,
+      reason: 'public build contains a forbidden OpenAI secret marker',
+    })
   }
 }
 

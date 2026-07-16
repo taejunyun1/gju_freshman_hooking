@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -95,6 +103,134 @@ describe('deployment and E2E safety contracts', () => {
     expect(result.stderr).toContain('docs/operations/evidence/openai-career-model-eval.md')
   })
 
+  it('keeps the paid model evaluation closed by default without provider calls or evidence', () => {
+    const artifact = join(tmpdir(), `photo-next-paid-eval-${crypto.randomUUID()}.json`)
+    const result = spawnSync(process.execPath, ['scripts/eval-openai-career-narrative.mjs'], {
+      encoding: 'utf8',
+      env: {
+        HOME: process.env.HOME ?? '',
+        PATH: process.env.PATH ?? '',
+        OPENAI_API_KEY: 'must-not-be-used',
+        PHOTO_NEXT_OPENAI_EVAL_ARTIFACT: artifact,
+      },
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('Paid OpenAI evaluation is disabled.')
+    expect(existsSync(artifact)).toBe(false)
+    expect(existsSync('docs/operations/evidence/openai-career-model-eval.md')).toBe(false)
+  })
+
+  it('gates a synthetic aggregate-only sol/luna evaluation and never writes approval evidence', () => {
+    const source = readFileSync('scripts/eval-openai-career-narrative.mjs', 'utf8')
+
+    expect(source).toContain("PHOTO_NEXT_RUN_PAID_OPENAI_EVAL !== '1'")
+    expect(source).toContain('PHOTO_NEXT_OPENAI_EVAL_API_KEY')
+    expect(source).not.toMatch(/process\.env\.OPENAI_API_KEY/u)
+    expect(source).toContain("'gpt-5.6-sol'")
+    expect(source).toContain("'gpt-5.6-luna'")
+    expect(source).toContain('20')
+    expect(source).toContain('documentary-social')
+    expect(source).toContain('documentary-archive')
+    expect(source).toContain('art-photo')
+    expect(source).toContain('commercial')
+    expect(source).toContain('video-ai-drone')
+    expect(source).toContain('prompt-injection-title')
+    expect(source).toContain('refusal')
+    expect(source).not.toContain('docs/operations/evidence/openai-career-model-eval.md')
+    expect(source).not.toMatch(/nickname|phone|school|careerOther|equipment|facility/iu)
+  })
+
+  it('scans built public assets for both the OpenAI key name and test marker', () => {
+    const verifier = readFileSync('scripts/verify-env.mjs', 'utf8')
+
+    expect(verifier).toContain('.output/public')
+    expect(verifier).toContain('OPENAI_API_KEY')
+    expect(verifier).toContain('server-test-key')
+  })
+
+  it('scans forbidden markers beyond the first 8 MiB without loading the whole asset', () => {
+    const root = mkdtempSync(join(tmpdir(), 'photo-next-public-scan-'))
+    const scripts = join(root, 'scripts')
+    const publicOutput = join(root, '.output', 'public')
+    const verifier = join(scripts, 'verify-env.mjs')
+    mkdirSync(scripts, { recursive: true })
+    mkdirSync(publicOutput, { recursive: true })
+    writeFileSync(verifier, readFileSync('scripts/verify-env.mjs'))
+    writeFileSync(
+      join(publicOutput, 'large-client-bundle.js'),
+      Buffer.concat([
+        Buffer.alloc(8 * 1024 * 1024 + 17, 0x61),
+        Buffer.from('OPENAI_API_KEY'),
+      ]),
+    )
+
+    try {
+      const result = spawnSync(process.execPath, [verifier], {
+        encoding: 'utf8',
+        env: baseEnvironment(),
+      })
+
+      expect(result.status).not.toBe(0)
+      expect(result.stderr).toContain('public build contains a forbidden OpenAI secret marker')
+    }
+    finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps OpenAI out of Wrangler required secrets and preserves the approved runtime date', () => {
+    const wrangler = readFileSync('wrangler.jsonc', 'utf8')
+
+    expect(wrangler).toContain('"compatibility_date": "2026-07-14"')
+    expect(wrangler).toContain('"nodejs_compat"')
+    expect(wrangler).not.toMatch(/OPENAI_API_KEY|OPENAI_SAFETY_HMAC_KEY/u)
+    expect(wrangler).not.toMatch(/"secrets"\s*:/u)
+  })
+
+  it('documents the exact provider-off release, minor policy, data boundary, and interactive secret workflow', () => {
+    const runbook = readFileSync('docs/operations/openai-career-narrative.md', 'utf8')
+
+    for (const command of [
+      'pnpm wrangler secret put OPENAI_API_KEY --env staging',
+      'pnpm wrangler secret put OPENAI_SAFETY_HMAC_KEY --env staging',
+      'pnpm wrangler secret put OPENAI_API_KEY',
+      'pnpm wrangler secret put OPENAI_SAFETY_HMAC_KEY',
+    ]) {
+      expect(runbook).toContain(command)
+    }
+    expect(runbook).toContain('프로덕션 기본값: provider 비활성')
+    expect(runbook).toContain('under-14 or unknown')
+    expect(runbook).toContain('같은 영업일')
+    expect(runbook).toContain('resolved_inaccurate')
+    expect(runbook).toContain('resolved_unsafe')
+    expect(runbook).toContain('resolved_copy')
+    expect(runbook).toContain('dismissed')
+    expect(runbook).toContain('store:false')
+    expect(runbook).toContain('최대 30일')
+    expect(runbook).toContain('ZDR이 승인·설정되었다고 주장하지 않는다')
+    expect(runbook).toContain('법률 자문이 아니다')
+    expect(runbook).toContain('대화창')
+    expect(runbook).toContain('shell history')
+  })
+
+  it('amends S6 retention and provider-disabled/provider-enabled performance gates', () => {
+    const s6 = readFileSync(
+      'docs/superpowers/plans/2026-07-14-photo-next-s6-operations-deployment.md',
+      'utf8',
+    )
+
+    expect(s6).toContain('assessment_narrative_generations')
+    expect(s6).toContain('career_narrative_reports')
+    expect(s6).toContain('24 hours')
+    expect(s6).toContain('30 days')
+    expect(s6).toContain('2,000ms')
+    expect(s6).toContain('7,000ms')
+    expect(s6).toContain('12,000ms')
+    expect(s6).toContain('15,000ms')
+    expect(s6).toContain('api.openai.com')
+  })
+
   it('documents only blank OpenAI secrets and bounded non-secret defaults', () => {
     const example = readFileSync('.env.example', 'utf8')
 
@@ -131,6 +267,13 @@ describe('deployment and E2E safety contracts', () => {
     expect(playwrightConfig).toMatch(/reuseExistingServer:\s*false/u)
     expect(playwrightConfig).toMatch(/workers:\s*1/u)
     expect(globalSetup).toContain("['exec', 'supabase', 'db', 'reset', '--local']")
+  })
+
+  it('serializes local integration files that share one real Supabase database', () => {
+    const vitest = readFileSync('vitest.config.ts', 'utf8')
+    const localProject = vitest.slice(vitest.indexOf("name: 'local-integration'"))
+
+    expect(localProject).toMatch(/fileParallelism:\s*false/u)
   })
 
   it('forces the E2E server onto deterministic narrative fallback even when parent secrets exist', () => {
@@ -222,6 +365,31 @@ describe('deployment and E2E safety contracts', () => {
       ['wrangler', ['deploy', '--env', 'staging', '--dry-run'], { stdio: 'inherit' }],
     ])
   })
+
+  it('keeps the generated staging worker free of duplicate object keys', () => {
+    const build = spawnSync('pnpm', ['build'], {
+      encoding: 'utf8',
+      env: baseEnvironment(),
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60_000,
+    })
+    const buildOutput = `${build.stdout ?? ''}${build.stderr ?? ''}`
+    expect(build.status, buildOutput).toBe(0)
+
+    const preview = spawnSync(
+      'pnpm',
+      ['exec', 'wrangler', 'deploy', '--env', 'staging', '--dry-run'],
+      {
+        encoding: 'utf8',
+        env: baseEnvironment(),
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 60_000,
+      },
+    )
+    const previewOutput = `${preview.stdout ?? ''}${preview.stderr ?? ''}`
+    expect(preview.status, previewOutput).toBe(0)
+    expect(previewOutput).not.toContain('[duplicate-object-key]')
+  }, 120_000)
 
   it('keeps the package preview command behind verification and the closed wrapper', () => {
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {

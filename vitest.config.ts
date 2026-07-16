@@ -23,6 +23,7 @@ export default defineConfig({
         test: {
           name: 'local-integration',
           environment: 'node',
+          fileParallelism: false,
           include: ['tests/local/**/*.test.ts'],
         },
       },

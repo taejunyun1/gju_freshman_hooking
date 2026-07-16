@@ -482,12 +482,11 @@ export const useXlsxExport = (
     let jobId: number | null = null
     let terminalSent = false
     try {
-      patchState(version, {
-        ...initialState(),
-        busy: true,
-        message: '필터 범위를 검증하고 있습니다.',
-        phase: 'checking',
-      })
+      const checkingState = initialState()
+      checkingState.busy = true
+      checkingState.message = '필터 범위를 검증하고 있습니다.'
+      checkingState.phase = 'checking'
+      patchState(version, checkingState)
       const filters = adminExportFilterSchema.parse(rawFilters)
       requireCurrent(version)
       patchState(version, { message: '최근 15분 내 인증 상태를 확인하고 있습니다.', phase: 'authenticating' })

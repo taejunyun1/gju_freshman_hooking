@@ -101,6 +101,14 @@ Expected: FAIL because purge RPC does not exist.
 
 Select at most `batch_size` prospect IDs with `last_active_at < now() - interval '1 year'` using `for update skip locked`, null event prospect IDs, delete dependent counseling/result/session/credential/recovery rows by FK, then delete prospects. Delete expired rate buckets, recovery codes, and completed export job metadata older than 30 days in separate bounded statements. Return counts and elapsed time without identities. Schedule at `20 18 * * *` UTC.
 
+2026-07-16 진로 제안 보존 보완:
+
+- `assessment_narrative_generations`에서 완료된 assessment에 연결된 행은 recent-three 평가 정리와 assessment cascade를 함께 따른다.
+- assessment에 연결되지 않은 terminal generation 행은 24 hours 이후 bounded batch로 정리한다. 중단된 claim은 12초 lease가 끝난 뒤 terminal fallback으로 먼저 수렴해야 한다.
+- `input_tokens`와 `output_tokens` 같은 token-count metadata는 30 days 이후 bounded batch에서 null 처리하거나 해당 terminal 행과 함께 삭제한다.
+- `career_narrative_reports`의 resolved metadata는 대학이 승인한 incident/audit 보존기간을 따른다. 생성 문장 원문은 report table이나 audit metadata에 복사하지 않고 immutable assessment snapshot에만 둔다.
+- 열린 신고와 resolved 신고가 연결된 assessment는 incident review가 끝날 때까지 recent-three 삭제에서 보호한다.
+
 - [ ] **Step 4: Verify and commit retention**
 
 Run: `supabase test db`
@@ -241,6 +249,15 @@ Use pre-created test students and idempotency keys; do not log credentials. Exer
 - [ ] **Step 2: Add Lighthouse and API budgets**
 
 `lighthouserc.json` requires mobile performance ≥0.80, accessibility ≥0.95, best practices ≥0.90, and LCP ≤3,000ms on landing and a seeded result. `measure-api.mjs` runs 20 warm requests and fails if assessment submit or admin filter p95 exceeds 2,000ms.
+
+2026-07-16 진로 제안 성능 보완:
+
+- provider-disabled 또는 즉시 deterministic fallback 평가 제출은 기존 p95 2,000ms 예산을 유지한다.
+- 스테이징 provider-enabled 생성은 별도 p95 7,000ms 목표를 사용한다.
+- authoritative generation lease polling ceiling은 12,000ms, Cloudflare-compatible hard request ceiling은 15,000ms다.
+- provider abort는 기본 5,000ms, 최대 8,000ms이며 fetch header뿐 아니라 streamed response body decode까지 포함한다.
+- owner finalization은 12초 lease 안에 끝나야 하고, lease 만료에 도달한 waiter도 settlement, completion, response를 15초 ceiling 안에 마쳐야 한다.
+- provider-disabled load test는 DNS·fetch spy로 `api.openai.com` 호출이 0임을 증명한다.
 
 - [ ] **Step 3: Run staging performance gate**
 

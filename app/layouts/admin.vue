@@ -45,6 +45,7 @@ const logout = async (): Promise<void> => {
         <NuxtLink to="/admin/campaigns">캠페인 운영</NuxtLink>
         <NuxtLink to="/admin/export">데이터 내보내기</NuxtLink>
         <NuxtLink to="/admin/recovery">복구 대기열</NuxtLink>
+        <NuxtLink to="/admin/narrative-reports">AI 문장 신고</NuxtLink>
       </nav>
 
       <div class="admin-shell__session">
