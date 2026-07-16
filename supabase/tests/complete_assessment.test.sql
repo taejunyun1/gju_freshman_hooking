@@ -1,12 +1,42 @@
 begin;
 
-select plan(36);
+select plan(40);
 
 select has_function(
   'public',
   'complete_assessment',
   array['bigint', 'uuid', 'bigint', 'jsonb', 'numeric', 'jsonb', 'jsonb'],
   'complete_assessment has the locked completion signature'
+);
+
+select ok(
+  pg_catalog.to_regprocedure(
+    'public.complete_assessment(bigint,uuid,bigint,jsonb,numeric,jsonb,jsonb,bigint)'
+  ) is null,
+  'complete_assessment has no ambiguous eight-argument overload'
+);
+
+select has_function(
+  'public',
+  'complete_assessment_with_narrative',
+  array['bigint', 'uuid', 'bigint', 'jsonb', 'numeric', 'jsonb', 'jsonb', 'bigint'],
+  'the narrative-aware completion signature is distinct'
+);
+
+select has_function(
+  'public',
+  'complete_assessment_internal_v2',
+  array['bigint', 'uuid', 'bigint', 'jsonb', 'numeric', 'jsonb', 'jsonb', 'bigint', 'boolean'],
+  'both completion wrappers share one internal transaction body'
+);
+
+select function_privs_are(
+  'public',
+  'complete_assessment_internal_v2',
+  array['bigint', 'uuid', 'bigint', 'jsonb', 'numeric', 'jsonb', 'jsonb', 'bigint', 'boolean'],
+  'service_role',
+  array[]::text[],
+  'service_role cannot bypass the completion wrappers'
 );
 
 select is(
