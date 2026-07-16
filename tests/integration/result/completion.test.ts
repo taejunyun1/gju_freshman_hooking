@@ -3,16 +3,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { parseAssessmentCatalog } from '../../../scripts/seed-assessment-options'
 import { createSubmitAssessmentHandler } from '../../../server/api/assessment/submit.post'
+import {
+  buildCareerNarrativeBrief,
+  buildDeterministicCareerNarrativeChoice,
+  renderCareerNarrative,
+} from '../../../server/modules/assessment/career-narrative'
 import { createAssessmentCatalogRevision } from '../../../server/modules/assessment/catalog-revision'
 import {
+  createAssessmentResponseFingerprint,
   createAssessmentCompletionService,
   createSupabaseAssessmentCompletionDependencies,
 } from '../../../server/modules/assessment/completion'
 import type { FacultyRecommendationCandidate } from '../../../server/modules/matching/faculty'
 import type { ResourceCandidate } from '../../../server/modules/matching/resources'
 import { AppError } from '../../../server/utils/app-error'
+import { createAbsoluteDeadline } from '../../../server/utils/absolute-deadline'
 import { RequestBodyLimitError } from '../../../server/utils/bounded-request-body'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
+import type { CareerNarrative } from '../../../shared/types/career-narrative'
 import type { AssessmentSelections } from '../../../shared/types/domain'
 
 vi.hoisted(() => {
@@ -24,7 +32,14 @@ const anonymousId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const sessionToken = 'opaque-student-session'
 const idempotencyKey = '11111111-1111-4111-8111-11111111111a'
 const publicId = '22222222-2222-4222-8222-22222222222b'
+const generationId = 91
 const completedAt = '2026-07-15T11:30:00+09:00'
+
+const adapterDeadline = () => createAbsoluteDeadline({
+  durationMs: 15_000,
+  monotonicNow: () => 0,
+  runWithDeadline: async operation => operation(),
+})
 
 const catalog = () => parseAssessmentCatalog(JSON.parse(
   readFileSync('supabase/seed/assessment-options.json', 'utf8'),
@@ -216,6 +231,19 @@ const envelope = (revision: string) => ({
   idempotencyKey,
 })
 
+const completedSubmission = async (
+  overrides: Record<string, unknown> = {},
+) => {
+  const storedSelections = (overrides.selections ?? selections()) as AssessmentSelections
+  return {
+    publicId,
+    responseFingerprint: await createAssessmentResponseFingerprint(storedSelections),
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([key]) => key !== 'selections'),
+    ),
+  }
+}
+
 const serviceDependencies = (
   overrides: Record<string, unknown> = {},
 ) => ({
@@ -227,6 +255,19 @@ const serviceDependencies = (
   loadResourceCandidates: vi.fn(async () => resourceCandidates()),
   loadFacultyCandidates: vi.fn(async () => facultyCandidates()),
   completeAssessment: vi.fn(async () => ({ assessmentId: 701, publicId, created: true })),
+  loadCompletedAssessmentByIdempotency: vi.fn(async () => null),
+  resolveCareerNarrative: vi.fn(async ({ coreSnapshot }) => {
+    const brief = buildCareerNarrativeBrief(coreSnapshot)
+    return {
+      kind: 'narrative_ready' as const,
+      generationId,
+      narrative: renderCareerNarrative(
+        brief,
+        buildDeterministicCareerNarrativeChoice(brief),
+        'deterministic',
+      ),
+    }
+  }),
   loadOwnedAssessment: vi.fn(async () => null),
   loadAssessmentHistory: vi.fn(async () => []),
   recordEvent: vi.fn(async () => undefined),
@@ -280,6 +321,7 @@ describe('assessment completion service', () => {
       'campaignId',
       'environmentScore',
       'idempotencyKey',
+      'narrativeGenerationId',
       'prospectId',
       'responses',
       'resultSnapshot',
@@ -291,6 +333,7 @@ describe('assessment completion service', () => {
       idempotencyKey,
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
       environmentScore: 92.3,
+      narrativeGenerationId: generationId,
     })
     expect(persisted.responses).toEqual([
       {
@@ -357,6 +400,279 @@ describe('assessment completion service', () => {
       specialists: [{ id: 206, role: 'specialist' }],
     })
     expect(JSON.stringify(snapshot)).not.toContain('SECRET-INVENTORY-CODE')
+  })
+
+  it('stores the resolved narrative in the same immutable snapshot and emits only its source', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    let modelNarrative: CareerNarrative | undefined
+    const resolveCareerNarrative = vi.fn(async ({ coreSnapshot }) => {
+      const brief = buildCareerNarrativeBrief(coreSnapshot)
+      modelNarrative = renderCareerNarrative(
+        brief,
+        buildDeterministicCareerNarrativeChoice(brief),
+        'openai',
+      )
+      return {
+        kind: 'narrative_ready' as const,
+        generationId,
+        narrative: modelNarrative,
+      }
+    })
+    const recordEvent = vi.fn(async () => undefined)
+    const service = createAssessmentCompletionService(serviceDependencies({
+      completeAssessment,
+      resolveCareerNarrative,
+      recordEvent,
+    }))
+
+    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+
+    expect(resolveCareerNarrative).toHaveBeenCalledOnce()
+    expect(Object.keys(resolveCareerNarrative.mock.calls[0]![0]).sort())
+      .toEqual(['coreSnapshot', 'deadline', 'idempotencyKey', 'prospectId', 'responseFingerprint'])
+    const persisted = completeAssessment.mock.calls[0]![0]
+    expect(persisted.narrativeGenerationId).toBe(generationId)
+    expect(decodeResultSnapshot(persisted.resultSnapshot).careerNarrative).toEqual(modelNarrative)
+    expect(recordEvent.mock.calls[0]![0].properties).toEqual({
+      assessment_id: 701,
+      top_track: 'commercial',
+      narrative_source: 'openai',
+    })
+  })
+
+  it('returns a completed sequential retry before catalog, matching, or narrative work', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const loadCompletedAssessmentByIdempotency = vi.fn(async () => completedSubmission())
+    const loadActiveOptions = vi.fn(async () => catalog())
+    const loadResourceCandidates = vi.fn(async () => resourceCandidates())
+    const resolveCareerNarrative = vi.fn()
+    const completeAssessment = vi.fn()
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadCompletedAssessmentByIdempotency,
+      loadActiveOptions,
+      loadResourceCandidates,
+      resolveCareerNarrative,
+      completeAssessment,
+    }))
+
+    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+
+    expect(loadCompletedAssessmentByIdempotency).toHaveBeenCalledWith(expect.objectContaining({
+      prospectId: 42,
+      idempotencyKey,
+    }))
+    expect(loadActiveOptions).not.toHaveBeenCalled()
+    expect(loadResourceCandidates).not.toHaveBeenCalled()
+    expect(resolveCareerNarrative).not.toHaveBeenCalled()
+    expect(completeAssessment).not.toHaveBeenCalled()
+  })
+
+  it('returns the original completed result across a catalog revision change', async () => {
+    const loadActiveOptions = vi.fn(async () => catalog())
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadCompletedAssessmentByIdempotency: vi.fn(async () => completedSubmission()),
+      loadActiveOptions,
+    }))
+
+    await expect(service.submitAssessment(
+      envelope(`sha256:${'0'.repeat(64)}`),
+      context,
+    )).resolves.toEqual({ publicId })
+    expect(loadActiveOptions).not.toHaveBeenCalled()
+  })
+
+  it('passes one submit-level absolute deadline into narrative resolution after prior work', async () => {
+    let monotonic = 1_000
+    const deadlines: number[] = []
+    const runWithDeadline = async <Value>(
+      operation: () => Promise<Value>,
+      remainingMs: number,
+    ): Promise<Value> => {
+      deadlines.push(remainingMs)
+      const value = await operation()
+      monotonic += 100
+      return value
+    }
+    const resolveCareerNarrative = vi.fn(async (input) => {
+      expect(input.deadline.expiresAt).toBe(16_000)
+      expect(input.deadline.remaining()).toBeLessThan(15_000)
+      const brief = buildCareerNarrativeBrief(input.coreSnapshot)
+      return {
+        kind: 'narrative_ready' as const,
+        generationId,
+        narrative: renderCareerNarrative(
+          brief,
+          buildDeterministicCareerNarrativeChoice(brief),
+          'deterministic',
+        ),
+      }
+    })
+    const service = createAssessmentCompletionService(serviceDependencies({
+      monotonicNow: () => monotonic,
+      runWithDeadline,
+      resolveCareerNarrative,
+    }))
+
+    await service.submitAssessment(
+      envelope(await createAssessmentCatalogRevision(catalog())),
+      context,
+    )
+
+    expect(deadlines.length).toBeGreaterThanOrEqual(7)
+    expect(new Set(deadlines).size).toBeGreaterThan(1)
+  })
+
+  it('returns committed success without waiting for forever-pending telemetry', async () => {
+    const recordEvent = vi.fn(() => new Promise<void>(() => undefined))
+    const service = createAssessmentCompletionService(serviceDependencies({ recordEvent }))
+    const revision = await createAssessmentCatalogRevision(catalog())
+
+    const outcome = await Promise.race([
+      service.submitAssessment(envelope(revision), context),
+      new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 100)),
+    ])
+
+    expect(outcome).toEqual({ publicId })
+    expect(recordEvent).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    'auth',
+    'rate-limit',
+    'early-lookup',
+    'catalog',
+    'campaign',
+    'resources',
+    'faculty',
+    'narrative',
+    'completion',
+  ] as const)('fails closed within one submit deadline when %s never resolves', async (stage) => {
+    let monotonic = 0
+    const never = () => new Promise<never>(() => undefined)
+    const runWithDeadline = async <Value>(
+      operation: () => Promise<Value>,
+      remainingMs: number,
+    ): Promise<Value> => {
+      let settled = false
+      const pending = operation().finally(() => { settled = true })
+      for (let index = 0; index < 10 && !settled; index += 1) await Promise.resolve()
+      if (settled) return pending
+      monotonic += remainingMs
+      throw new Error('ASSESSMENT_SUBMIT_DEADLINE_EXCEEDED')
+    }
+    const service = createAssessmentCompletionService(serviceDependencies({
+      monotonicNow: () => monotonic,
+      runWithDeadline,
+      ...(stage === 'auth' ? { getStudentSession: never } : {}),
+      ...(stage === 'rate-limit' ? { consumeRateLimit: never } : {}),
+      ...(stage === 'early-lookup' ? { loadCompletedAssessmentByIdempotency: never } : {}),
+      ...(stage === 'catalog' ? { loadActiveOptions: never } : {}),
+      ...(stage === 'resources' ? { loadResourceCandidates: never } : {}),
+      ...(stage === 'faculty' ? { loadFacultyCandidates: never } : {}),
+      ...(stage === 'narrative' ? { resolveCareerNarrative: never } : {}),
+      ...(stage === 'completion' ? { completeAssessment: never } : {}),
+    }))
+    const submitContext = stage === 'campaign'
+      ? { ...context, resolveCampaignId: never }
+      : context
+
+    await expect(service.submitAssessment(
+      envelope(await createAssessmentCatalogRevision(catalog())),
+      submitContext,
+    )).rejects.toMatchObject({ code: 'INTERNAL_ERROR' })
+    expect(monotonic).toBeLessThanOrEqual(15_000)
+  })
+
+  it('fails closed on a late completion commit and returns that original result on retry', async () => {
+    let monotonic = 0
+    let committed = false
+    let resolveLateCommit: (() => void) | undefined
+    let rejectDeadline: ((error: Error) => void) | undefined
+    let deadlineSignal = new Promise<never>((_resolve, reject) => { rejectDeadline = reject })
+    const completeAssessment = vi.fn(() => new Promise<{
+      assessmentId: number
+      publicId: string
+      created: boolean
+    }>((resolve) => {
+      resolveLateCommit = () => {
+        committed = true
+        resolve({ assessmentId: 701, publicId, created: true })
+      }
+      queueMicrotask(() => {
+        monotonic = 15_000
+        rejectDeadline?.(new Error('ASSESSMENT_SUBMIT_DEADLINE_EXCEEDED'))
+      })
+    }))
+    const runWithDeadline = async <Value>(
+      operation: () => Promise<Value>,
+      _remainingMs: number,
+    ): Promise<Value> => Promise.race([operation(), deadlineSignal])
+    const resolveCareerNarrative = serviceDependencies().resolveCareerNarrative
+    const service = createAssessmentCompletionService(serviceDependencies({
+      monotonicNow: () => monotonic,
+      runWithDeadline,
+      completeAssessment,
+      resolveCareerNarrative,
+      loadCompletedAssessmentByIdempotency: vi.fn(async () => (
+        committed ? completedSubmission() : null
+      )),
+    }))
+    const revision = await createAssessmentCatalogRevision(catalog())
+
+    await expect(service.submitAssessment(envelope(revision), context))
+      .rejects.toMatchObject({ code: 'INTERNAL_ERROR' })
+    resolveLateCommit?.()
+    await Promise.resolve()
+    deadlineSignal = new Promise<never>((_resolve, reject) => { rejectDeadline = reject })
+
+    await expect(service.submitAssessment(envelope(revision), context))
+      .resolves.toEqual({ publicId })
+    expect(resolveCareerNarrative).toHaveBeenCalledOnce()
+    expect(completeAssessment).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a reused idempotency key when the submitted response content differs', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const loadActiveOptions = vi.fn(async () => catalog())
+    const resolveCareerNarrative = vi.fn()
+    const completeAssessment = vi.fn()
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadCompletedAssessmentByIdempotency: vi.fn(async () => completedSubmission({
+        selections: {
+          ...selections(),
+          work: ['work.documentary_people'],
+        },
+      })),
+      loadActiveOptions,
+      resolveCareerNarrative,
+      completeAssessment,
+    }))
+
+    await expect(service.submitAssessment(envelope(revision), context))
+      .rejects.toMatchObject({
+        code: 'ASSESSMENT_IDEMPOTENCY_CONFLICT',
+        statusCode: 409,
+      })
+    expect(loadActiveOptions).not.toHaveBeenCalled()
+    expect(resolveCareerNarrative).not.toHaveBeenCalled()
+    expect(completeAssessment).not.toHaveBeenCalled()
+  })
+
+  it('maps an authoritative narrative hash conflict to the stable public 409 code', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const completeAssessment = vi.fn()
+    const service = createAssessmentCompletionService(serviceDependencies({
+      resolveCareerNarrative: vi.fn(async () => ({ kind: 'conflict' as const })),
+      completeAssessment,
+    }))
+
+    await expect(service.submitAssessment(envelope(revision), context))
+      .rejects.toMatchObject({
+        code: 'ASSESSMENT_IDEMPOTENCY_CONFLICT',
+        statusCode: 409,
+      })
+    expect(completeAssessment).not.toHaveBeenCalled()
   })
 
   it('completes with generic narrative wording when required administrator facts are unsafe or maximal', async () => {
@@ -678,7 +994,11 @@ describe('assessment completion service', () => {
       eventName: 'assessment_completed',
       path: '/api/assessment/submit',
       prospectId: 42,
-      properties: { assessment_id: 701, top_track: 'commercial' },
+      properties: {
+        assessment_id: 701,
+        top_track: 'commercial',
+        narrative_source: 'deterministic',
+      },
       requestId,
     })
     expect(JSON.stringify(event)).not.toMatch(/freeText|optionLabel|trackWeights|reason|email|phone/u)
@@ -717,6 +1037,12 @@ describe('assessment completion service', () => {
       name: 'malformed RPC response',
       overrides: () => ({
         completeAssessment: async () => ({ assessmentId: 0, publicId: 'not-a-uuid', created: 'yes' }),
+      }),
+    },
+    {
+      name: 'narrative generation store failure',
+      overrides: () => ({
+        resolveCareerNarrative: async () => { throw new Error('PRIVATE_GENERATION_DB_DETAIL') },
       }),
     },
   ])('fails closed for $name without exposing a raw content/store error', async ({ overrides }) => {
@@ -913,7 +1239,90 @@ describe('Supabase completion dependency decoding', () => {
       environmentScore: 92.3,
       resultSnapshot: {} as never,
       responses: [],
+      narrativeGenerationId: generationId,
     })).resolves.toEqual({ assessmentId: 701, publicId, created: true })
+    expect(rpc).toHaveBeenCalledWith('complete_assessment_with_narrative', expect.objectContaining({
+      p_narrative_generation_id: generationId,
+    }))
+  })
+
+  it('reconstructs the exact stored submission without loading catalog or provider data', async () => {
+    const assessmentQuery = {
+      select: () => assessmentQuery,
+      eq: () => assessmentQuery,
+      maybeSingle: async () => ({
+        data: { id: 701, public_id: publicId },
+        error: null,
+      }),
+    }
+    const responseRows = [
+      { question_group: 'career', option_key: 'career.explore', free_text: '브랜드 영상감독' },
+      { question_group: 'result', option_key: 'result.commercial_fashion', free_text: null },
+      { question_group: 'style', option_key: 'style.studio', free_text: null },
+      { question_group: 'work', option_key: 'work.commercial_image', free_text: null },
+    ]
+    const responseQuery = {
+      select: () => responseQuery,
+      eq: () => responseQuery,
+      order: () => responseQuery,
+      then: <Result>(resolve: (value: { data: typeof responseRows, error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({ data: responseRows, error: null }).then(resolve)
+      ),
+    }
+    const dependencies = createSupabaseAssessmentCompletionDependencies({
+      from: vi.fn((table: string) => table === 'assessments' ? assessmentQuery : responseQuery),
+    } as never)
+
+    await expect(dependencies.loadCompletedAssessmentByIdempotency({
+      prospectId: 42,
+      idempotencyKey,
+      deadline: adapterDeadline(),
+    })).resolves.toEqual({
+      publicId,
+      responseFingerprint: await createAssessmentResponseFingerprint({
+        work: ['work.commercial_image'],
+        result: ['result.commercial_fashion'],
+        style: ['style.studio'],
+        career: ['career.explore'],
+        careerOther: '브랜드 영상감독',
+      }),
+    })
+  })
+
+  it('rejects malformed stored response rows instead of trusting the idempotency key', async () => {
+    const assessmentQuery = {
+      select: () => assessmentQuery,
+      eq: () => assessmentQuery,
+      maybeSingle: async () => ({
+        data: { id: 701, public_id: publicId },
+        error: null,
+      }),
+    }
+    const responseQuery = {
+      select: () => responseQuery,
+      eq: () => responseQuery,
+      order: () => responseQuery,
+      then: <Result>(resolve: (value: { data: unknown[], error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({
+          data: [{
+            question_group: 'work',
+            option_key: 'work.commercial_image',
+            free_text: null,
+            private_field: 'reject',
+          }],
+          error: null,
+        }).then(resolve)
+      ),
+    }
+    const dependencies = createSupabaseAssessmentCompletionDependencies({
+      from: vi.fn((table: string) => table === 'assessments' ? assessmentQuery : responseQuery),
+    } as never)
+
+    await expect(dependencies.loadCompletedAssessmentByIdempotency({
+      prospectId: 42,
+      idempotencyKey,
+      deadline: adapterDeadline(),
+    })).rejects.toThrow('ASSESSMENT_STORE_INVALID')
   })
 
   it.each([
@@ -942,6 +1351,7 @@ describe('Supabase completion dependency decoding', () => {
       environmentScore: 92.3,
       resultSnapshot: {} as never,
       responses: [],
+      narrativeGenerationId: generationId,
     })).rejects.toThrow()
   })
 })
@@ -972,6 +1382,8 @@ describe('POST /api/assessment/submit', () => {
   it.each([
     ['auth', new AppError('AUTH_FAILED'), 401, 'AUTH_FAILED'],
     ['rate', new AppError('RATE_LIMITED'), 429, 'RATE_LIMITED'],
+    ['idempotency', new AppError('ASSESSMENT_IDEMPOTENCY_CONFLICT'), 409, 'ASSESSMENT_IDEMPOTENCY_CONFLICT'],
+    ['deadline', new Error('ASSESSMENT_SUBMIT_DEADLINE_EXCEEDED: private operation'), 500, 'INTERNAL_ERROR'],
     ['content', new Error('FACULTY_CONTENT_NOT_READY: internal faculty row'), 500, 'INTERNAL_ERROR'],
   ])('sanitizes %s failures', async (_name, error, status, code) => {
     const handler = createSubmit({ submitAssessment: async () => { throw error } })

@@ -19,8 +19,16 @@ import type {
   ResultSnapshotCore,
   SelectedInterest,
 } from '../../../shared/types/result'
+import {
+  createAbsoluteDeadline,
+  defaultDeadlineRunner,
+  isDeadlineExceeded,
+  type AbsoluteDeadline,
+  type DeadlineRunner,
+} from '../../utils/absolute-deadline'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
+import { sha256, utf8 } from '../../utils/web-crypto'
 import { createSupabaseStudentSessionReader } from '../identity/service'
 import { createEventWriter, type EventWriter } from '../metrics/events'
 import {
@@ -39,10 +47,9 @@ import {
   type ResourceCandidate,
 } from '../matching/resources'
 import {
-  buildCareerNarrativeBrief,
-  buildDeterministicCareerNarrativeChoice,
-  renderCareerNarrative,
-} from './career-narrative'
+  createServerCareerNarrativeResolver,
+  type CareerNarrativeResolution,
+} from './career-narrative-generation'
 import { createAssessmentCatalogRevision } from './catalog-revision'
 import { AssessmentScoringError, scoreAssessment } from './scoring'
 import { decodeStoredResultSnapshot } from './stored-result'
@@ -97,12 +104,18 @@ export type CompleteAssessmentInput = {
   environmentScore: number
   resultSnapshot: ResultSnapshot
   responses: readonly AssessmentResponseSnapshot[]
+  narrativeGenerationId: number
 }
 
 export type CompleteAssessmentResult = {
   assessmentId: number
   publicId: string
   created: boolean
+}
+
+export type StoredCompletedAssessmentSubmission = {
+  publicId: string
+  responseFingerprint: string
 }
 
 export type StoredOwnedAssessment = {
@@ -130,11 +143,27 @@ export type AssessmentCompletionDependencies = {
     faculty: readonly FacultyRecommendationCandidate[]
     specialistLinks: readonly FacultySpecialistLink[]
   }>
+  loadCompletedAssessmentByIdempotency: (
+    identity: {
+      prospectId: number
+      idempotencyKey: string
+      deadline: AbsoluteDeadline
+    },
+  ) => Promise<StoredCompletedAssessmentSubmission | null>
+  resolveCareerNarrative: (input: {
+    prospectId: number
+    idempotencyKey: string
+    responseFingerprint: string
+    coreSnapshot: ResultSnapshotCore
+    deadline: AbsoluteDeadline
+  }) => Promise<CareerNarrativeResolution>
   completeAssessment: (input: CompleteAssessmentInput) => Promise<CompleteAssessmentResult>
   loadOwnedAssessment: (identity: { prospectId: number, publicId: string }) => Promise<StoredOwnedAssessment | null>
   loadAssessmentHistory: (prospectId: number) => Promise<readonly StoredOwnedAssessment[]>
   recordEvent: EventWriter
   now?: () => string
+  monotonicNow?: () => number
+  runWithDeadline?: DeadlineRunner
 }
 
 type SubmissionEnvelope = {
@@ -463,6 +492,39 @@ const validCompletionResult = (value: unknown): value is CompleteAssessmentResul
   && typeof value.created === 'boolean'
 )
 
+const canonicalSelections = (
+  selections: AssessmentSelections,
+): string => JSON.stringify({
+  work: [...selections.work].sort((left, right) => left.localeCompare(right, 'en')),
+  result: [...selections.result].sort((left, right) => left.localeCompare(right, 'en')),
+  style: [...selections.style].sort((left, right) => left.localeCompare(right, 'en')),
+  career: [...selections.career].sort((left, right) => left.localeCompare(right, 'en')),
+  careerOther: selections.careerOther,
+})
+
+const hexEncode = (value: Uint8Array) => Array.from(
+  value,
+  byte => byte.toString(16).padStart(2, '0'),
+).join('')
+
+export const createAssessmentResponseFingerprint = async (
+  selections: AssessmentSelections,
+): Promise<string> => `sha256:${hexEncode(
+  await sha256(utf8(canonicalSelections(selections))),
+)}`
+
+const validCompletedAssessmentSubmission = (
+  value: unknown,
+): value is StoredCompletedAssessmentSubmission => {
+  if (!isRecord(value)
+    || Object.keys(value).sort().join('|') !== 'publicId|responseFingerprint'
+    || typeof value.publicId !== 'string'
+    || !canonicalUuidPattern.test(value.publicId)
+    || typeof value.responseFingerprint !== 'string'
+    || !catalogRevisionPattern.test(value.responseFingerprint)) return false
+  return true
+}
+
 const validateStoredAssessment = (value: unknown): StoredOwnedAssessment => {
   if (!isRecord(value)
     || Object.keys(value).sort().join('|') !== 'assessmentId|campaignId|completedAt|publicId|resultSnapshot'
@@ -504,19 +566,42 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
     rawInput: unknown,
     context: AssessmentCompletionContext,
   ): Promise<{ publicId: string }> => {
+    const deadline = createAbsoluteDeadline({
+      durationMs: 15_000,
+      monotonicNow: dependencies.monotonicNow ?? (() => performance.now()),
+      runWithDeadline: dependencies.runWithDeadline ?? defaultDeadlineRunner,
+    })
     try {
-      const session = await authenticate(dependencies, context.sessionToken)
-      const allowed = await dependencies.consumeRateLimit({
-        key: `prospect:${session.prospectId}`,
-        route: SUBMIT_ROUTE,
-        limit: 10,
-        window: '5 minutes',
-      })
+      const session = await deadline.run(() => authenticate(dependencies, context.sessionToken))
+      const allowed = await deadline.run(() => dependencies.consumeRateLimit({
+          key: `prospect:${session.prospectId}`,
+          route: SUBMIT_ROUTE,
+          limit: 10,
+          window: '5 minutes',
+        }))
       if (!allowed) throw new AppError('RATE_LIMITED')
 
       const input = parseEnvelope(rawInput)
-      const catalog = normalizeCatalog(await dependencies.loadActiveOptions())
-      const revision = await createAssessmentCatalogRevision(catalog)
+      const responseFingerprint = await deadline.run(() => (
+        createAssessmentResponseFingerprint(input.selections)
+      ))
+      const existing = await deadline.run(() => (
+        dependencies.loadCompletedAssessmentByIdempotency({
+          prospectId: session.prospectId,
+          idempotencyKey: input.idempotencyKey,
+          deadline,
+        })
+      ))
+      if (existing !== null) {
+        if (!validCompletedAssessmentSubmission(existing)) throw new Error('ASSESSMENT_STORE_INVALID')
+        if (existing.responseFingerprint !== responseFingerprint) {
+          throw new AppError('ASSESSMENT_IDEMPOTENCY_CONFLICT')
+        }
+        return { publicId: existing.publicId }
+      }
+
+      const catalog = normalizeCatalog(await deadline.run(dependencies.loadActiveOptions))
+      const revision = await deadline.run(() => createAssessmentCatalogRevision(catalog))
       if (input.catalogRevision !== revision) throw new AppError('ASSESSMENT_CATALOG_STALE')
 
       let scored
@@ -533,10 +618,14 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       const selectedInterests = resultSelectedInterests(selected)
       const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
       const campaignId = context.resolveCampaignId
-        ? await Promise.resolve().then(context.resolveCampaignId).catch(() => null)
+        ? await deadline.run(() => Promise.resolve().then(context.resolveCampaignId))
+            .catch((error) => {
+              if (isDeadlineExceeded(error)) throw error
+              return null
+            })
         : null
 
-      const candidates = await dependencies.loadResourceCandidates()
+      const candidates = await deadline.run(dependencies.loadResourceCandidates)
       assertResourceCandidates(candidates)
       const preparedResources = prepareResourceCandidates({
         candidates,
@@ -583,7 +672,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       }
       const learningPath = buildLearningPath(ranked.course)
 
-      const facultyCandidates = await dependencies.loadFacultyCandidates()
+      const facultyCandidates = await deadline.run(dependencies.loadFacultyCandidates)
       const facultyRecommendation = recommendFaculty({
         student: {
           trackScores: scored.trackScores,
@@ -628,39 +717,53 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         resources,
         faculty,
       }
-      const narrativeBrief = buildCareerNarrativeBrief(resultSnapshotCore)
+      const resolvedNarrative = await deadline.run(() => dependencies.resolveCareerNarrative({
+          prospectId: session.prospectId,
+          idempotencyKey: input.idempotencyKey,
+          responseFingerprint,
+          coreSnapshot: resultSnapshotCore,
+          deadline,
+        }))
+      if (resolvedNarrative.kind === 'existing_assessment') {
+        if (!canonicalUuidPattern.test(resolvedNarrative.publicId)) {
+          throw new Error('ASSESSMENT_STORE_INVALID')
+        }
+        return { publicId: resolvedNarrative.publicId }
+      }
+      if (resolvedNarrative.kind === 'conflict') {
+        throw new AppError('ASSESSMENT_IDEMPOTENCY_CONFLICT')
+      }
+
       const resultSnapshot = decodeResultSnapshot({
         ...resultSnapshotCore,
-        careerNarrative: renderCareerNarrative(
-          narrativeBrief,
-          buildDeterministicCareerNarrativeChoice(narrativeBrief),
-          'deterministic',
-        ),
+        careerNarrative: resolvedNarrative.narrative,
       })
-      const completed = await dependencies.completeAssessment({
-        prospectId: session.prospectId,
-        idempotencyKey: input.idempotencyKey,
-        campaignId,
-        trackScores: scored.trackScores,
-        environmentScore,
-        resultSnapshot,
-        responses: responseSnapshots(selected, input.selections),
-      })
+      const completed = await deadline.run(() => dependencies.completeAssessment({
+          prospectId: session.prospectId,
+          idempotencyKey: input.idempotencyKey,
+          campaignId,
+          trackScores: scored.trackScores,
+          environmentScore,
+          resultSnapshot,
+          responses: responseSnapshots(selected, input.selections),
+          narrativeGenerationId: resolvedNarrative.generationId,
+        }))
       if (!validCompletionResult(completed)) throw new Error('ASSESSMENT_RPC_INVALID')
 
       if (completed.created) {
-        await recordSafely(dependencies.recordEvent, {
-          anonymousId: context.anonymousId,
-          campaignId,
-          eventName: 'assessment_completed',
-          path: SUBMIT_ROUTE,
-          prospectId: session.prospectId,
-          properties: {
-            assessment_id: completed.assessmentId,
-            top_track: resultSnapshot.rankedTracks[0],
-          },
-          requestId: context.requestId,
-        })
+        void deadline.run(() => dependencies.recordEvent({
+            anonymousId: context.anonymousId,
+            campaignId,
+            eventName: 'assessment_completed',
+            path: SUBMIT_ROUTE,
+            prospectId: session.prospectId,
+            properties: {
+              assessment_id: completed.assessmentId,
+              top_track: resultSnapshot.rankedTracks[0],
+              narrative_source: resultSnapshot.careerNarrative.source,
+            },
+            requestId: context.requestId,
+          })).catch(() => undefined)
       }
       return { publicId: completed.publicId }
     }
@@ -897,6 +1000,27 @@ const rawCompletionRowSchema = z.object({
   created: z.boolean(),
 }).strict()
 
+const rawCompletedIdentitySchema = z.object({
+  id: z.number().int().positive().safe(),
+  public_id: z.string().regex(canonicalUuidPattern),
+}).strict()
+
+const rawCompletedResponseSchema = z.object({
+  question_group: z.enum(questionGroups),
+  option_key: z.string().min(6).max(71),
+  free_text: z.string().min(1).max(30).nullable(),
+}).strict().superRefine((value, context) => {
+  if (!value.option_key.startsWith(`${value.question_group}.`)) {
+    context.addIssue({ code: 'custom', message: 'stored response group mismatch' })
+  }
+  if (
+    value.free_text !== null
+    && (value.question_group !== 'career' || value.option_key !== 'career.explore')
+  ) {
+    context.addIssue({ code: 'custom', message: 'stored response free text mismatch' })
+  }
+})
+
 const storedAssessmentFromRow = (input: unknown): StoredOwnedAssessment => {
   if (!isRecord(input)) throw new Error('ASSESSMENT_STORE_INVALID')
   return validateStoredAssessment({
@@ -913,6 +1037,72 @@ export const createSupabaseAssessmentCompletionDependencies = (
   createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
 ): AssessmentCompletionDependencies => {
   let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  const loadCompletedAssessmentByIdempotency = async ({
+    prospectId,
+    idempotencyKey,
+    deadline,
+  }: {
+    prospectId: number
+    idempotencyKey: string
+    deadline: AbsoluteDeadline
+  }): Promise<StoredCompletedAssessmentSubmission | null> => {
+    const { data, error } = await deadline.run(() => Promise.resolve(
+      client.from('assessments')
+        .select('id,public_id')
+        .eq('prospect_id', prospectId)
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle(),
+    ))
+    if (error) throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
+    if (data === null) return null
+    const parsed = rawCompletedIdentitySchema.safeParse(data)
+    if (!parsed.success) throw new Error('ASSESSMENT_STORE_INVALID')
+    const responsesResult = await deadline.run(() => Promise.resolve(
+      client.from('assessment_responses')
+        .select('question_group,option_key,free_text')
+        .eq('assessment_id', parsed.data.id)
+        .order('question_group')
+        .order('option_key'),
+    ))
+    if (responsesResult.error || !Array.isArray(responsesResult.data)) {
+      throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
+    }
+
+    const storedSelections: Record<QuestionGroup, string[]> = {
+      work: [],
+      result: [],
+      style: [],
+      career: [],
+    }
+    const identities = new Set<string>()
+    let careerOther: string | null = null
+    for (const rawResponse of responsesResult.data) {
+      const response = rawCompletedResponseSchema.safeParse(rawResponse)
+      if (!response.success) throw new Error('ASSESSMENT_STORE_INVALID')
+      const identity = `${response.data.question_group}:${response.data.option_key}`
+      if (identities.has(identity)) throw new Error('ASSESSMENT_STORE_INVALID')
+      identities.add(identity)
+      storedSelections[response.data.question_group].push(response.data.option_key)
+      if (response.data.option_key === 'career.explore') {
+        careerOther = response.data.free_text
+      }
+    }
+    const selections = assessmentSelectionsSchema.safeParse({
+      ...storedSelections,
+      careerOther,
+    })
+    if (!selections.success) throw new Error('ASSESSMENT_STORE_INVALID')
+    return {
+      publicId: parsed.data.public_id,
+      responseFingerprint: await createAssessmentResponseFingerprint(
+        selections.data as AssessmentSelections,
+      ),
+    }
+  }
+  const resolveCareerNarrative = createServerCareerNarrativeResolver(
+    client,
+    loadCompletedAssessmentByIdempotency,
+  )
   return {
     getStudentSession: token => (
       sessionReader ??= createSessionReader(client)
@@ -1009,8 +1199,10 @@ export const createSupabaseAssessmentCompletionDependencies = (
         specialistLinks: decodeRawLinks(linksResult.data, faculty),
       }
     },
+    loadCompletedAssessmentByIdempotency,
+    resolveCareerNarrative,
     completeAssessment: async (input) => {
-      const { data, error } = await client.rpc('complete_assessment', {
+      const { data, error } = await client.rpc('complete_assessment_with_narrative', {
         p_prospect_id: input.prospectId,
         p_idempotency_key: input.idempotencyKey,
         p_campaign_id: input.campaignId,
@@ -1024,7 +1216,11 @@ export const createSupabaseAssessmentCompletionDependencies = (
           weight_snapshot: response.trackWeights,
           free_text: response.freeText,
         })),
+        p_narrative_generation_id: input.narrativeGenerationId,
       })
+      if (error && isRecord(error) && error.code === '23505') {
+        throw new AppError('ASSESSMENT_IDEMPOTENCY_CONFLICT')
+      }
       if (error || !Array.isArray(data) || data.length !== 1) {
         throw new Error('ASSESSMENT_STORE_UNAVAILABLE')
       }

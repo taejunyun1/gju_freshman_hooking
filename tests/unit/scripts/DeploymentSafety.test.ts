@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runPreviewDeploy } from '../../../scripts/deploy-preview.mjs'
+import { isMinorRolloutApprovalId } from '../../../server/utils/openai-career-approval'
 
 describe('deployment and E2E safety contracts', () => {
   const baseEnvironment = () => ({
@@ -75,6 +76,22 @@ describe('deployment and E2E safety contracts', () => {
 
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID')
+    expect(result.stderr).toContain('docs/operations/evidence/openai-career-model-eval.md')
+  })
+
+  it('uses the same colon-form approval identifier in deployment and runtime gates', () => {
+    const approvalId = 'minor-rollout:2026-07-16:privacy-owner'
+    const result = verifyEnvironment({
+      NODE_ENV: 'production',
+      OPENAI_API_KEY: 'server-key',
+      OPENAI_SAFETY_HMAC_KEY: 'A'.repeat(43),
+      OPENAI_CAREER_NARRATIVE_MODEL: 'gpt-5.6-sol',
+      OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID: approvalId,
+    })
+
+    expect(isMinorRolloutApprovalId(approvalId)).toBe(true)
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).not.toContain('OPENAI_CAREER_NARRATIVE_MINOR_ROLLOUT_APPROVAL_ID')
     expect(result.stderr).toContain('docs/operations/evidence/openai-career-model-eval.md')
   })
 

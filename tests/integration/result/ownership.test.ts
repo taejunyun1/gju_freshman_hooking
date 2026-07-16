@@ -120,6 +120,19 @@ const serviceDependencies = (overrides: Record<string, unknown> = {}) => ({
   loadActiveOptions: vi.fn(async () => []),
   loadResourceCandidates: vi.fn(async () => []),
   loadFacultyCandidates: vi.fn(async () => ({ faculty: [], specialistLinks: [] })),
+  loadCompletedAssessmentByIdempotency: vi.fn(async () => null),
+  resolveCareerNarrative: vi.fn(async ({ coreSnapshot }) => {
+    const brief = buildCareerNarrativeBrief(coreSnapshot)
+    return {
+      kind: 'narrative_ready' as const,
+      generationId: 91,
+      narrative: renderCareerNarrative(
+        brief,
+        buildDeterministicCareerNarrativeChoice(brief),
+        'deterministic',
+      ),
+    }
+  }),
   completeAssessment: vi.fn(async () => ({
     assessmentId: 701,
     publicId: ownedPublicId,
