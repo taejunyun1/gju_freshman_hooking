@@ -233,6 +233,27 @@ describe('deployment and E2E safety contracts', () => {
     expect(plan).toContain('node scripts/deploy-photo-next-remote.mjs')
   })
 
+  it('self-checks that a fresh staging Worker skips secret listing and reaches deployment', () => {
+    const result = spawnSync(process.execPath, [
+      'scripts/deploy-photo-next-remote.mjs',
+      '--self-check',
+    ], {
+      encoding: 'utf8',
+      env: {
+        HOME: process.env.HOME ?? '',
+        PATH: process.env.PATH ?? '',
+      },
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain(
+      'Remote deployment runner self-check passed (network calls: 0, remote writes: 0).',
+    )
+    expect(result.stdout).toContain(
+      'Fresh staging Worker deployment branch self-check passed.',
+    )
+  })
+
   it('documents the exact provider-off release, minor policy, data boundary, and interactive secret workflow', () => {
     const runbook = readFileSync('docs/operations/openai-career-narrative.md', 'utf8')
 

@@ -670,9 +670,9 @@ const workerNotFound = output => (
   || /code[":\s]+10090/iu.test(output)
 )
 
-const remoteWorkerExists = environment => {
+const remoteWorkerExists = (environment, runner = runCapture) => {
   const name = WORKERS[environment]
-  const result = runCapture(
+  const result = runner(
     WRANGLER,
     ['deployments', 'list', '--json', ...workerTargetArguments(environment)],
     { label: `Cloudflare Worker ${name} 조회`, timeout: 120_000 },
@@ -738,6 +738,7 @@ const listWorkerSecretNames = (environment, runner = runCapture) => {
 }
 
 const ensureRemoteProviderOff = (environment, runner = runCapture) => {
+  if (!remoteWorkerExists(environment, runner)) return { missing: true }
   const before = listWorkerSecretNames(environment, runner)
   if (before.missing) return { missing: true }
   const forbidden = before.names.filter(isForbiddenRemoteOpenAiName)
@@ -963,11 +964,20 @@ const verifyAndBuild = state => {
   assertArtifactsContainNoPrivateSecrets(state)
 }
 
-const deployEnvironment = (environment, state) => {
+const deployEnvironment = (
+  environment,
+  state,
+  runner = runCapture,
+  persistState = saveState,
+) => {
   const deployment = state.deployments[environment]
   const workerName = WORKERS[environment]
-  ensureRemoteProviderOff(environment)
+  const beforeProviderOff = ensureRemoteProviderOff(environment, runner)
   if (deployment.deployed) {
+    assert(
+      !beforeProviderOff.missing,
+      `${environment} Worker가 배포 완료 state와 달리 존재하지 않습니다.`,
+    )
     return
   }
 
@@ -977,7 +987,7 @@ const deployEnvironment = (environment, state) => {
     const args = environment === 'staging'
       ? ['deploy', '--env', 'staging', '--secrets-file', secretsFile, '--message', `Deploy ${state.commit}`]
       : ['deploy', '--secrets-file', secretsFile, '--message', `Deploy ${state.commit}`]
-    const result = runCapture(WRANGLER, args, {
+    const result = runner(WRANGLER, args, {
       label: `Cloudflare ${environment} 배포`,
       env: cleanRuntimeEnvironment(state),
       timeout: 10 * 60_000,
@@ -989,11 +999,15 @@ const deployEnvironment = (environment, state) => {
       `${result.stdout}\n${result.stderr}`,
       workerName,
     )
-    Object.assign(deployment, completed)
-    saveState(state)
     // Wrangler deploy is the source of truth for plaintext vars: no --keep-vars
     // means remote vars absent from wrangler.jsonc are removed during deployment.
-    ensureRemoteProviderOff(environment)
+    const afterProviderOff = ensureRemoteProviderOff(environment, runner)
+    assert(
+      !afterProviderOff.missing,
+      `${environment} Worker가 배포 직후 provider-off 검증 중 존재하지 않습니다.`,
+    )
+    Object.assign(deployment, completed)
+    persistState(state)
   }
   finally {
     safeUnlink(secretsFile)
@@ -1369,10 +1383,25 @@ const runSelfCheck = () => {
   )
 
   const providerCalls = []
+  let providerExistenceCount = 0
   let providerListCount = 0
   let providerDeletionPath = null
   const providerRunner = (command, args) => {
     providerCalls.push([command, args])
+    if (args[0] === 'deployments' && args[1] === 'list') {
+      providerExistenceCount += 1
+      assert(
+        JSON.stringify(args) === JSON.stringify([
+          'deployments',
+          'list',
+          '--json',
+          '--env',
+          'staging',
+        ]),
+        'staging Worker existence argv가 정확하지 않습니다.',
+      )
+      return { status: 0, stdout: JSON.stringify([{ id: 'existing-deployment' }]), stderr: '' }
+    }
     if (args[0] === 'secret' && args[1] === 'list') {
       assert(
         JSON.stringify(args) === JSON.stringify([
@@ -1423,6 +1452,7 @@ const runSelfCheck = () => {
     return { status: 0, stdout: '', stderr: '' }
   }
   ensureRemoteProviderOff('staging', providerRunner)
+  assert(providerExistenceCount === 1, '기존 Worker의 provider-off 검증 전 존재를 확인하지 않았습니다.')
   assert(providerListCount === 2, 'OpenAI secret 삭제 후 재검증하지 않았습니다.')
   assert(providerDeletionPath !== null && !existsSync(providerDeletionPath), 'OpenAI deletion JSON이 남았습니다.')
   for (const [, args] of providerCalls) {
@@ -1430,20 +1460,179 @@ const runSelfCheck = () => {
     assert(args.includes('--env') && args.includes('staging'), 'staging Wrangler env가 빠졌습니다.')
   }
 
-  let missingWorkerCalls = 0
-  const missingWorker = ensureRemoteProviderOff('production', (_command, args) => {
-    missingWorkerCalls += 1
-    assert(
-      JSON.stringify(args) === JSON.stringify(['secret', 'list', '--format', 'json']),
-      'production top-level secret list argv가 정확하지 않습니다.',
-    )
-    return {
-      status: 1,
-      stdout: '',
-      stderr: 'This Worker does not exist on your account. [code: 10007]',
+  const freshDeployState = makeSelfCheckState()
+  const freshDeployUrl = `https://${WORKERS.staging}.self-check.workers.dev`
+  const freshDeployCalls = []
+  let freshExistenceCount = 0
+  let freshPersistCount = 0
+  let freshSecretsPath = null
+  const freshDeployRunner = (command, args) => {
+    assert(command === WRANGLER, '신규 staging 배포가 Wrangler 외의 명령을 호출했습니다.')
+    freshDeployCalls.push([command, args])
+    if (args[0] === 'deployments' && args[1] === 'list') {
+      freshExistenceCount += 1
+      assert(
+        JSON.stringify(args) === JSON.stringify([
+          'deployments',
+          'list',
+          '--json',
+          '--env',
+          'staging',
+        ]),
+        '신규 staging Worker의 existence argv가 정확하지 않습니다.',
+      )
+      return freshExistenceCount === 1
+        ? {
+            status: 1,
+            stdout: '',
+            stderr: 'The requested script was not found in this account. [code: 10090]',
+          }
+        : {
+            status: 0,
+            stdout: JSON.stringify([{ id: 'fresh-deployment' }]),
+            stderr: '',
+          }
     }
-  })
-  assert(missingWorker.missing && missingWorkerCalls === 1, '새 Worker의 secret list not-found 처리가 잘못되었습니다.')
+    if (args[0] === 'deploy') {
+      assert(freshExistenceCount === 1, '신규 Worker 존재 확인 전에 배포했습니다.')
+      assert(
+        args[1] === '--env'
+          && args[2] === 'staging'
+          && args[3] === '--secrets-file'
+          && args[5] === '--message'
+          && args[6] === `Deploy ${freshDeployState.commit}`,
+        '신규 staging deploy argv가 정확하지 않습니다.',
+      )
+      freshSecretsPath = args[4]
+      privateStat(freshSecretsPath)
+      return { status: 0, stdout: `Deployed ${freshDeployUrl}`, stderr: '' }
+    }
+    if (args[0] === 'secret' && args[1] === 'list') {
+      assert(freshExistenceCount === 2, '배포 후 Worker 존재 재검증 전에 secret을 조회했습니다.')
+      assert(
+        JSON.stringify(args) === JSON.stringify([
+          'secret',
+          'list',
+          '--format',
+          'json',
+          '--env',
+          'staging',
+        ]),
+        '배포 후 staging secret list argv가 정확하지 않습니다.',
+      )
+      return { status: 0, stdout: '[]', stderr: '' }
+    }
+    fail('신규 staging 배포 self-check에서 예상하지 못한 명령입니다.')
+  }
+  deployEnvironment(
+    'staging',
+    freshDeployState,
+    freshDeployRunner,
+    persistedState => {
+      assert(persistedState === freshDeployState, '신규 staging 배포가 다른 state를 저장하려 했습니다.')
+      freshPersistCount += 1
+    },
+  )
+  assert(
+    freshDeployCalls.map(([, args]) => args[0]).join(',')
+      === 'deployments,deploy,deployments,secret',
+    '신규 staging Worker의 precheck/deploy/postcheck 순서가 잘못되었습니다.',
+  )
+  assert(
+    freshDeployState.deployments.staging.deployed
+      && freshDeployState.deployments.staging.url === freshDeployUrl
+      && freshPersistCount === 1,
+    '신규 staging Worker의 검증된 배포 완료 state가 저장되지 않았습니다.',
+  )
+  assert(
+    freshSecretsPath !== null && !existsSync(freshSecretsPath),
+    '신규 staging Worker 배포의 임시 secret 파일이 남았습니다.',
+  )
+
+  const missingPostState = makeSelfCheckState()
+  const missingPostCalls = []
+  let missingPostExistenceCount = 0
+  let missingPostPersistCount = 0
+  let missingPostSecretsPath = null
+  const missingPostRunner = (command, args) => {
+    assert(command === WRANGLER, '배포 후 missing self-check가 Wrangler 외의 명령을 호출했습니다.')
+    missingPostCalls.push([command, args])
+    if (args[0] === 'deployments' && args[1] === 'list') {
+      missingPostExistenceCount += 1
+      return {
+        status: 1,
+        stdout: '',
+        stderr: missingPostExistenceCount === 1
+          ? 'The requested script was not found in this account. [code: 10090]'
+          : 'This Worker does not exist on your account. [code: 10007]',
+      }
+    }
+    if (args[0] === 'deploy') {
+      missingPostSecretsPath = args[4]
+      privateStat(missingPostSecretsPath)
+      return { status: 0, stdout: `Deployed ${freshDeployUrl}`, stderr: '' }
+    }
+    fail('배포 후 missing Worker에 secret list를 호출했습니다.')
+  }
+  assert(
+    rejectsSafely(() => deployEnvironment(
+      'staging',
+      missingPostState,
+      missingPostRunner,
+      () => { missingPostPersistCount += 1 },
+    )),
+    '배포 후 사라진 staging Worker를 성공으로 처리했습니다.',
+  )
+  assert(
+    missingPostCalls.map(([, args]) => args[0]).join(',') === 'deployments,deploy,deployments',
+    '배포 후 missing Worker 검증 순서가 잘못되었습니다.',
+  )
+  assert(
+    !missingPostState.deployments.staging.deployed
+      && missingPostState.deployments.staging.url === null
+      && missingPostPersistCount === 0,
+    '배포 후 missing Worker를 완료 state로 저장했습니다.',
+  )
+  assert(
+    missingPostSecretsPath !== null && !existsSync(missingPostSecretsPath),
+    '배포 후 missing self-check의 임시 secret 파일이 남았습니다.',
+  )
+
+  const completedMissingState = makeSelfCheckState()
+  completedMissingState.deployments.staging = { deployed: true, url: freshDeployUrl }
+  let completedMissingCalls = 0
+  let completedMissingPersistCount = 0
+  assert(
+    rejectsSafely(() => deployEnvironment(
+      'staging',
+      completedMissingState,
+      (_command, args) => {
+        completedMissingCalls += 1
+        assert(
+          JSON.stringify(args) === JSON.stringify([
+            'deployments',
+            'list',
+            '--json',
+            '--env',
+            'staging',
+          ]),
+          '완료 state의 missing Worker existence argv가 정확하지 않습니다.',
+        )
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'This Worker does not exist on your account. [code: 10007]',
+        }
+      },
+      () => { completedMissingPersistCount += 1 },
+    )),
+    '배포 완료 state의 missing Worker를 성공으로 처리했습니다.',
+  )
+  assert(
+    completedMissingCalls === 1 && completedMissingPersistCount === 0,
+    '배포 완료 state의 missing Worker 검증이 fail-closed가 아닙니다.',
+  )
+  console.log('Fresh staging Worker deployment branch self-check passed.')
 
   const lockRoot = resolve(SDD_DIR, `.self-check-lock-${process.pid}-${randomUUID()}`)
   const lockPath = resolve(lockRoot, 'deploy.lock')
