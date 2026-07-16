@@ -57,18 +57,80 @@ export const studentWorkAdminResourceMetadataSchema = z.object({
   related_track: z.string().trim().max(64).optional(),
 }).strict()
 
+const archiveTrackSchema = z.enum(['documentary', 'art_photo', 'commercial', 'video'])
+const archiveHttpsUrlSchema = z.url().max(500).refine((value) => {
+  try {
+    return new URL(value).protocol === 'https:'
+  }
+  catch {
+    return false
+  }
+}, '출처 URL은 HTTPS만 사용할 수 있습니다.')
+
+export const archiveSourceMetadataSchema = z.object({
+  sourceUrl: archiveHttpsUrlSchema,
+  sourcePageTitle: cleanText(1, 200),
+  sourceLastEditedDate: z.iso.date(),
+  evidenceStatus: z.enum(['historical', 'verify_required', 'recurring', 'snapshot']),
+  trackEvidence: z.array(archiveTrackSchema).min(1).max(4)
+    .refine(values => new Set(values).size === values.length),
+  interestEvidence: z.array(adminResourceTagSchema.shape.key).min(1).max(30)
+    .refine(values => new Set(values).size === values.length),
+  verificationNote: cleanText(1, 1000),
+}).strict()
+
+const archiveActivityAdminResourceMetadataSchema = z.object({
+  seedKey: cleanText(1, 300),
+  archive: archiveSourceMetadataSchema,
+  periodLabel: nullableCleanText(100),
+}).strict()
+
+const graduationYearCandidateSchema = z.object({
+  year: z.number().int().min(1994).max(2100),
+  sourceUrl: archiveHttpsUrlSchema,
+}).strict()
+
+export const archiveCareerAdminResourceMetadataSchema = z.object({
+  seedKey: cleanText(1, 300),
+  archive: archiveSourceMetadataSchema,
+  publicName: cleanText(1, 100),
+  graduationYear: z.number().int().min(1994).max(2100).nullable(),
+  graduationYearStatus: z.enum(['confirmed', 'conflicted']),
+  graduationYearCandidates: z.array(graduationYearCandidateSchema).max(2),
+  roleAtSource: nullableCleanText(200),
+  roleCandidates: z.array(cleanText(1, 200)).max(2),
+  roleStatus: z.enum(['title_confirmed', 'body_only', 'conflicted']),
+}).strict().superRefine((person, context) => {
+  const graduationValid = person.graduationYearStatus === 'confirmed'
+    ? person.graduationYear !== null && person.graduationYearCandidates.length === 0
+    : person.graduationYear === null
+      && person.graduationYearCandidates.length === 2
+      && new Set(person.graduationYearCandidates.map(candidate => candidate.year)).size === 2
+  if (!graduationValid) {
+    context.addIssue({ code: 'custom', path: ['graduationYearStatus'], message: '졸업연도 근거 상태가 일치하지 않습니다.' })
+  }
+  const roleValid = person.roleStatus === 'conflicted'
+    ? person.roleAtSource === null && person.roleCandidates.length === 2
+      && new Set(person.roleCandidates).size === 2
+    : person.roleAtSource !== null && person.roleCandidates.length === 0
+  if (!roleValid) {
+    context.addIssue({ code: 'custom', path: ['roleStatus'], message: '직무 근거 상태가 일치하지 않습니다.' })
+  }
+})
+
 export const facilityAdminResourceMetadataSchema = z.object({
   location_label: z.string().trim().max(120).optional(),
-  operation_note: z.string().trim().max(1000).optional(),
+  operation_note: z.string().trim().max(1000).nullable().optional(),
   activities: z.array(cleanText(1, 200)).max(30).optional(),
   last_verified_at: z.iso.datetime({ offset: true }).max(40).nullable().optional(),
   seedKey: cleanText(1, 300).optional(),
   facilityKey: cleanText(1, 100).optional(),
   facilityType: cleanText(1, 100).optional(),
   exampleCourses: z.array(cleanText(1, 200)).max(30).optional(),
-  operationNote: cleanText(1, 1000).optional(),
+  operationNote: nullableCleanText(1000).optional(),
   lastVerifiedAt: z.iso.datetime({ offset: true }).max(40).nullable().optional(),
   supportingEvidence: z.boolean().optional(),
+  archive: archiveSourceMetadataSchema.optional(),
 }).strict()
 
 const equipmentMetadataWriteShape = {
@@ -90,6 +152,14 @@ export const equipmentAdminResourceMetadataSchema = z.object({
 }).strict()
 
 const emptyMetadataSchema = z.object({}).strict()
+const archiveActivityOrEmptyMetadataSchema = z.union([
+  emptyMetadataSchema,
+  archiveActivityAdminResourceMetadataSchema,
+])
+const archiveCareerOrEmptyMetadataSchema = z.union([
+  emptyMetadataSchema,
+  archiveCareerAdminResourceMetadataSchema,
+])
 const commonWriteShape = {
   title: cleanText(1, 200),
   summary: cleanText(1, 1000),
@@ -102,22 +172,65 @@ const commonWriteShape = {
     .refine(path => !/(^|\/)\.{1,2}(\/|$)/u.test(path)).nullable(),
 }
 
+const refineArchiveEvidence = (resource: {
+  type: string
+  summary: string
+  sourceDate: string | null
+  tags: Array<{ key: string, isPrimary: boolean }>
+  metadata: unknown
+}, context: z.RefinementCtx) => {
+  const metadata = resource.metadata as {
+    archive?: z.infer<typeof archiveSourceMetadataSchema>
+    supportingEvidence?: boolean
+  }
+  const archive = metadata.archive
+  if (!archive) return
+
+  const primaryKey = resource.tags.find(tag => tag.isPrimary)?.key
+  if (!archive.trackEvidence.some(track => track === primaryKey)) {
+    context.addIssue({ code: 'custom', path: ['tags'], message: '아카이브 기본 태그는 근거 트랙이어야 합니다.' })
+  }
+  if (!archive.interestEvidence.some(interest => resource.tags.some(tag => tag.key === interest))) {
+    context.addIssue({ code: 'custom', path: ['tags'], message: '아카이브 관심 근거 태그가 하나 이상 필요합니다.' })
+  }
+  if (resource.sourceDate !== archive.sourceLastEditedDate) {
+    context.addIssue({ code: 'custom', path: ['sourceDate'], message: '아카이브 출처 날짜가 일치하지 않습니다.' })
+  }
+  if (archive.evidenceStatus === 'historical' && !resource.summary.includes('과거 운영 사례')) {
+    context.addIssue({ code: 'custom', path: ['summary'], message: '과거 활동임을 요약에 표시해야 합니다.' })
+  }
+  if (resource.type === 'facility' && metadata.supportingEvidence !== true) {
+    context.addIssue({ code: 'custom', path: ['metadata', 'supportingEvidence'], message: '시설은 보조 근거로만 사용할 수 있습니다.' })
+  }
+}
+
 export const adminResourceWriteSchema = z.discriminatedUnion('type', [
   z.object({ ...commonWriteShape, type: z.literal('course'), metadata: courseAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('equipment'), metadata: equipmentAdminResourceWriteMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('facility'), metadata: facilityAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('student_work'), metadata: studentWorkAdminResourceMetadataSchema }).strict(),
-  z.object({ ...commonWriteShape, type: z.literal('extracurricular'), metadata: emptyMetadataSchema }).strict(),
-  z.object({ ...commonWriteShape, type: z.literal('project'), metadata: emptyMetadataSchema }).strict(),
-  z.object({ ...commonWriteShape, type: z.literal('career'), metadata: emptyMetadataSchema }).strict(),
+  z.object({ ...commonWriteShape, type: z.literal('extracurricular'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonWriteShape, type: z.literal('project'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonWriteShape, type: z.literal('career'), metadata: archiveCareerOrEmptyMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('support'), metadata: emptyMetadataSchema }).strict(),
 ]).superRefine((resource, context) => {
+  refineArchiveEvidence(resource, context)
   const keys = resource.tags.map(tag => tag.key)
   if (new Set(keys).size !== keys.length) {
     context.addIssue({ code: 'custom', path: ['tags'], message: '태그는 중복할 수 없습니다.' })
   }
   if (resource.tags.filter(tag => tag.isPrimary).length !== 1) {
     context.addIssue({ code: 'custom', path: ['tags'], message: '기본 태그는 하나여야 합니다.' })
+  }
+  if (resource.type === 'career' && 'archive' in resource.metadata) {
+    const conflicted = resource.metadata.roleStatus === 'conflicted'
+      || resource.metadata.graduationYearStatus === 'conflicted'
+    if (conflicted && (resource.visibility !== 'admin_only'
+      || resource.metadata.archive.evidenceStatus !== 'verify_required')) {
+      context.addIssue({
+        code: 'custom', path: ['visibility'], message: '충돌한 졸업생 근거는 관리자 검수 전 공개할 수 없습니다.',
+      })
+    }
   }
 })
 
@@ -174,11 +287,23 @@ export const adminResourceSchema = z.discriminatedUnion('type', [
   z.object({ ...commonResourceShape, type: z.literal('equipment'), metadata: equipmentAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('facility'), metadata: facilityAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('student_work'), metadata: studentWorkAdminResourceMetadataSchema }).strict(),
-  z.object({ ...commonResourceShape, type: z.literal('extracurricular'), metadata: emptyMetadataSchema }).strict(),
-  z.object({ ...commonResourceShape, type: z.literal('project'), metadata: emptyMetadataSchema }).strict(),
-  z.object({ ...commonResourceShape, type: z.literal('career'), metadata: emptyMetadataSchema }).strict(),
+  z.object({ ...commonResourceShape, type: z.literal('extracurricular'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonResourceShape, type: z.literal('project'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonResourceShape, type: z.literal('career'), metadata: archiveCareerOrEmptyMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('support'), metadata: emptyMetadataSchema }).strict(),
-])
+]).superRefine((resource, context) => {
+  refineArchiveEvidence(resource, context)
+  if (resource.type === 'career' && 'archive' in resource.metadata) {
+    const conflicted = resource.metadata.roleStatus === 'conflicted'
+      || resource.metadata.graduationYearStatus === 'conflicted'
+    if (conflicted && (resource.visibility !== 'admin_only'
+      || resource.metadata.archive.evidenceStatus !== 'verify_required')) {
+      context.addIssue({
+        code: 'custom', path: ['visibility'], message: '충돌한 졸업생 근거는 관리자 검수 전 공개할 수 없습니다.',
+      })
+    }
+  }
+})
 
 export type AdminResourceWrite = z.infer<typeof adminResourceWriteSchema>
 export type AdminResource = z.infer<typeof adminResourceSchema>

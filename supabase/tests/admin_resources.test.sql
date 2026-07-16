@@ -1,6 +1,6 @@
 begin;
 
-select plan(99);
+select plan(115);
 
 create function pg_temp.capture_json(p_sql text)
 returns jsonb
@@ -333,11 +333,16 @@ insert into public.resources(
   ('facility', 'SQL 엄격 시설', '설명', '연결', 'draft', 'public', 0, '2026-07-14',
     '{"location_label":"본관","operation_note":"예약 운영","activities":["촬영"],"last_verified_at":"2026-07-14T01:00:00Z"}', null),
   ('equipment', 'SQL 재고 기자재', '설명', '연결', 'draft', 'public', 0, '2026-07-14',
-    '{"category":"camera","confirmedQuantity":999}', null);
+    '{"category":"camera","confirmedQuantity":999}', null),
+  ('project', 'SQL 검수 필요 아카이브', '검수 전 프로그램 후보', '관심을 프로그램과 연결합니다.',
+    'draft', 'public', 0, '2026-05-26',
+    '{"seedKey":"archive:project:sql_review","archive":{"evidenceStatus":"verify_required"}}', null);
 
 insert into public.resource_tags(resource_id, tag_key, weight, is_primary)
 select id, 'photography', 3, true
-from public.resources where title in ('SQL 엄격 교과', 'SQL 엄격 작품', 'SQL 엄격 시설', 'SQL 재고 기자재');
+from public.resources where title in (
+  'SQL 엄격 교과', 'SQL 엄격 작품', 'SQL 엄격 시설', 'SQL 재고 기자재', 'SQL 검수 필요 아카이브'
+);
 
 insert into public.equipment_inventory_items(
   equipment_resource_id, inventory_code, source_row, location_key, access_mode,
@@ -346,6 +351,94 @@ insert into public.equipment_inventory_items(
 select id, 'CAM-001', 1, 'department_equipment_room', 'reservation',
   'available', null, 'verified', '2026-07-14'
 from public.resources where title = 'SQL 재고 기자재';
+
+create temp table archive_publish_before as
+select status, updated_at, (select count(*) from public.audit_events) as audit_count
+from public.resources where title = 'SQL 검수 필요 아카이브';
+
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
+  (select id from public.resources where title = 'SQL 검수 필요 아카이브'), 'active'))$capture$) ->> 'code',
+  'RESOURCE_ARCHIVE_VERIFICATION_REQUIRED', 'verify-required archive evidence cannot be published');
+select is((select status from public.resources where title = 'SQL 검수 필요 아카이브'), 'draft',
+  'rejected archive publish leaves the resource draft');
+select is((select updated_at from public.resources where title = 'SQL 검수 필요 아카이브'),
+  (select updated_at from archive_publish_before),
+  'rejected archive publish preserves updated_at');
+select is((select count(*) from public.audit_events), (select audit_count from archive_publish_before),
+  'rejected archive publish writes no audit event');
+
+create temp table archive_integrity_before as
+select
+  pg_catalog.jsonb_build_object(
+    'title', resource.title,
+    'metadata', resource.metadata,
+    'status', resource.status,
+    'updatedAt', resource.updated_at
+  ) as resource_state,
+  (select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+    'key', tag_key, 'weight', weight, 'isPrimary', is_primary
+  ) order by tag_key) from public.resource_tags where resource_id = resource.id) as tags,
+  (select count(*) from public.audit_events) as audit_count
+from public.resources resource where title = 'SQL 검수 필요 아카이브';
+
+select is(public.update_admin_resource(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select updated_at from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '77777777-7777-4777-8777-777777777777',
+  (select id from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '{"type":"project","title":"마커 제거 시도","summary":"설명","connectionTemplate":"연결","sourceDate":"2026-05-26","visibility":"public","priority":0,"metadata":{},"imagePath":null}',
+  '[{"key":"tampered","weight":3,"isPrimary":true}]'
+) ->> 'code', 'RESOURCE_ARCHIVE_IDENTITY_REQUIRED', 'archive marker removal is rejected');
+select is((select pg_catalog.jsonb_build_object(
+  'title', title, 'metadata', metadata, 'status', status, 'updatedAt', updated_at
+) from public.resources where title = 'SQL 검수 필요 아카이브'),
+  (select resource_state from archive_integrity_before), 'marker rejection preserves the resource row');
+select is((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+  'key', tag_key, 'weight', weight, 'isPrimary', is_primary
+) order by tag_key) from public.resource_tags
+  where resource_id = (select id from public.resources where title = 'SQL 검수 필요 아카이브')),
+  (select tags from archive_integrity_before), 'marker rejection preserves resource tags');
+select is((select count(*) from public.audit_events), (select audit_count from archive_integrity_before),
+  'marker rejection writes no audit event');
+
+select is(public.update_admin_resource(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select updated_at from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '77777777-7777-4777-8777-777777777777',
+  (select id from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '{"type":"project","title":"키 변경 시도","summary":"설명","connectionTemplate":"연결","sourceDate":"2026-05-26","visibility":"public","priority":0,"metadata":{"seedKey":"archive:project:changed","archive":{"evidenceStatus":"verify_required"}},"imagePath":null}',
+  '[{"key":"tampered","weight":3,"isPrimary":true}]'
+) ->> 'code', 'RESOURCE_ARCHIVE_IDENTITY_REQUIRED', 'archive seed key change is rejected');
+select is((select pg_catalog.jsonb_build_object(
+  'title', title, 'metadata', metadata, 'status', status, 'updatedAt', updated_at
+) from public.resources where title = 'SQL 검수 필요 아카이브'),
+  (select resource_state from archive_integrity_before), 'seed-key rejection preserves the resource row');
+select is((select pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+  'key', tag_key, 'weight', weight, 'isPrimary', is_primary
+) order by tag_key) from public.resource_tags
+  where resource_id = (select id from public.resources where title = 'SQL 검수 필요 아카이브')),
+  (select tags from archive_integrity_before), 'seed-key rejection preserves resource tags');
+select is((select count(*) from public.audit_events), (select audit_count from archive_integrity_before),
+  'seed-key rejection writes no audit event');
+
+select is(public.update_admin_resource(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  (select updated_at from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '77777777-7777-4777-8777-777777777777',
+  (select id from public.resources where title = 'SQL 검수 필요 아카이브'),
+  '{"type":"project","title":"SQL 검수 완료 아카이브","summary":"검수된 프로그램 스냅샷","connectionTemplate":"관심을 프로그램과 연결합니다.","sourceDate":"2026-05-26","visibility":"public","priority":0,"metadata":{"seedKey":"archive:project:sql_review","archive":{"evidenceStatus":"snapshot"}},"imagePath":null}',
+  '[{"key":"video","weight":3,"isPrimary":true}]'
+) ->> 'status', 'updated', 'archive evidence status can be reviewed without changing identity');
+select is((select metadata from public.resources where title = 'SQL 검수 완료 아카이브'),
+  '{"seedKey":"archive:project:sql_review","archive":{"evidenceStatus":"snapshot"}}'::jsonb,
+  'reviewed archive preserves its seed key and snapshot state');
+select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777',
+  (select id from public.resources where title = 'SQL 검수 완료 아카이브'), 'active'))$capture$) ->> 'status',
+  'updated', 'reviewed archive evidence can be published after changing to snapshot');
+select is((select status from public.resources where title = 'SQL 검수 완료 아카이브'), 'active',
+  'reviewed archive evidence becomes active');
 
 update public.resources set metadata = metadata || '{"academic_year":2026.5}'::jsonb where title = 'SQL 엄격 교과';
 select is(pg_temp.capture_json($capture$select pg_catalog.to_jsonb(pg_temp.transition_admin_resource_current(

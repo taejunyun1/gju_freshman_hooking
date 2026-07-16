@@ -394,6 +394,66 @@ describe('assessment completion service', () => {
     expect(decodeResultSnapshot(snapshot)).toEqual(snapshot)
   })
 
+  it('strips archive source and audit metadata from the assessment result snapshot', async () => {
+    const sourceUrl = 'https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link'
+    const row = {
+      id: 206,
+      type: 'career',
+      title: '졸업생 진로 사례 · 박진우',
+      summary: '영상 제작 경험이 영상 촬영 기자 업무로 연결된 졸업생 사례입니다.',
+      status: 'active',
+      visibility: 'public',
+      priority: 10,
+      source_date: '2025-11-06',
+      metadata: {
+        seedKey: 'archive:career:park_jinwoo',
+        archive: {
+          sourceUrl,
+          sourcePageTitle: '졸업생 인터뷰',
+          sourceLastEditedDate: '2025-11-06',
+          evidenceStatus: 'snapshot',
+          trackEvidence: ['video', 'documentary'],
+          interestEvidence: ['news', 'field', 'drone'],
+          verificationNote: '본문 기반 역할 상태입니다.',
+        },
+        publicName: '박진우',
+        graduationYear: 2022,
+        graduationYearStatus: 'confirmed',
+        graduationYearCandidates: [],
+        roleAtSource: '영상 촬영 기자',
+        roleStatus: 'body_only',
+      },
+      image_path: null,
+      resource_tags: [{ tag_key: 'commercial', weight: 3, is_primary: true }],
+    }
+    const query = {
+      eq: () => query,
+      in: () => query,
+      select: () => query,
+      then: <Result>(resolve: (value: { data: (typeof row)[], error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({ data: [row], error: null }).then(resolve)
+      ),
+    }
+    const adapter = createSupabaseAssessmentCompletionDependencies({ from: vi.fn(() => query) } as never)
+    const loaded = await adapter.loadResourceCandidates()
+    expect(loaded).toMatchObject([{ type: 'career', metadata: {} }])
+
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => [
+        ...resourceCandidates().filter(candidate => candidate.type !== 'career'),
+        ...loaded,
+      ],
+      completeAssessment,
+    }))
+    await service.submitAssessment(envelope(await createAssessmentCatalogRevision(catalog())), context)
+
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    expect(snapshot.resources.career[0]?.displayMetadata).toEqual({})
+    expect(JSON.stringify(snapshot)).not.toContain(sourceUrl)
+    expect(JSON.stringify(snapshot)).not.toContain('verificationNote')
+  })
+
   it('uses verified inventory truth instead of a stored equipment quantity in the public result', async () => {
     const equipmentRow = {
       id: 102,

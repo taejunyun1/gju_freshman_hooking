@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
@@ -15,6 +16,7 @@ const canonicalInput = () => ({
   faculty: readJson('supabase/seed/faculty-2026.json'),
   equipment: readJson('supabase/seed/equipment-inventory-2026-07-14.json'),
   facilities: readJson('supabase/seed/facilities-2026.json'),
+  departmentArchive: readJson('supabase/seed/department-archive-2026-05-26.json'),
 })
 
 const expectedCourseTitles = [
@@ -238,11 +240,119 @@ describe('verified department content seed', () => {
     expect(equipment.every(item => item.sourceDate === '2026-07-14')).toBe(true)
   })
 
+  it('keeps every approved internal canonical source byte-for-byte unchanged', () => {
+    const expectedHashes = {
+      'supabase/seed/curriculum-2026.json': '832a19636a0a24703903b0f2f769146879eb17231cb3edab81a5717dc8f00324',
+      'supabase/seed/equipment-inventory-2026-07-14.json': 'efbef180c706b7412ab0ea6f51a920e698c3ec00c159d7449818dfaad60728eb',
+      'supabase/seed/facilities-2026.json': 'e89bddf2101d0a15ab43f3ce4dbf688f29dbebeb71fdc95f5fc3128c9df9acc8',
+      'supabase/seed/faculty-2026.json': '6d1fad7509cf88559e2101b96263fb62fe7f618a5f5e034f86acc9a0b6aeeb00',
+    }
+
+    for (const [path, expected] of Object.entries(expectedHashes)) {
+      expect(createHash('sha256').update(readFileSync(path)).digest('hex')).toBe(expected)
+    }
+  })
+
+  it('adds only bounded draft archive evidence with exact alumni, activity, and facility counts', () => {
+    const parsed = parseContentSeedInputs(canonicalInput())
+    const seed = deriveContentSeed(parsed)
+    const archiveResources = seed.resources.filter(resource => resource.seedKey.startsWith('archive:'))
+    const career = archiveResources.filter(resource => resource.type === 'career')
+    const extracurricular = archiveResources.filter(resource => resource.type === 'extracurricular')
+    const projects = archiveResources.filter(resource => resource.type === 'project')
+    const facilities = archiveResources.filter(resource => resource.type === 'facility')
+
+    expect(parsed.departmentArchive.alumni.map(person => person.name)).toEqual([
+      '서재훈', '김수성', '설소영', '김민범', '윤동규', '노하윤', '박지우', '박준희',
+      '임승찬', '최관호', '김병준', '유성현', '정해찬', '김윤교', '박래현', '박진우', '유승현',
+    ])
+    expect(career).toHaveLength(17)
+    expect(extracurricular).toHaveLength(5)
+    expect(projects).toHaveLength(5)
+    expect(facilities.map(resource => resource.metadata.facilityKey)).toEqual([
+      'studio_c_video', 'print_lab', 'portfolio_review_lab',
+    ])
+    expect(seed.resources.filter(resource => resource.type === 'facility')).toHaveLength(7)
+    expect(seed.resources).toHaveLength(158)
+    expect(seed.equipmentInventory).toHaveLength(144)
+    expect(archiveResources.every(resource => resource.status === 'draft')).toBe(true)
+    expect(archiveResources.some(resource => resource.type === 'student_work')).toBe(false)
+    expect(JSON.stringify(parsed.departmentArchive)).not.toMatch(/동아리|학생회|학생자치/u)
+
+    const evidenceStatuses = archiveResources.map(resource => (
+      (resource.metadata.archive as { evidenceStatus: string }).evidenceStatus
+    ))
+    expect(Object.fromEntries(['snapshot', 'historical', 'verify_required', 'recurring'].map(status => [
+      status,
+      evidenceStatuses.filter(value => value === status).length,
+    ]))).toEqual({ snapshot: 15, historical: 6, verify_required: 8, recurring: 1 })
+    expect(archiveResources.filter(resource => (
+      (resource.metadata.archive as { evidenceStatus: string }).evidenceStatus === 'historical'
+    )).every(resource => resource.summary.includes('과거 운영 사례'))).toBe(true)
+  })
+
+  it('preserves source, role-state, and track evidence without exposing unverified conflict', () => {
+    const seed = deriveContentSeed(parseContentSeedInputs(canonicalInput()))
+    const archiveResources = seed.resources.filter(resource => resource.seedKey.startsWith('archive:'))
+    const careers = archiveResources.filter(resource => resource.type === 'career')
+    const roleStatuses = careers.map(resource => resource.metadata.roleStatus)
+    const conflicted = careers.find(resource => resource.metadata.publicName === '김병준')
+    const graduationConflict = careers.find(resource => resource.metadata.publicName === '윤동규')
+    const trackKeys = new Set(['documentary', 'art_photo', 'commercial', 'video'])
+
+    expect(roleStatuses.filter(status => status === 'title_confirmed')).toHaveLength(10)
+    expect(roleStatuses.filter(status => status === 'body_only')).toHaveLength(6)
+    expect(roleStatuses.filter(status => status === 'conflicted')).toHaveLength(1)
+    expect(conflicted).toMatchObject({ visibility: 'admin_only' })
+    expect(conflicted?.metadata).toMatchObject({
+      graduationYear: 2023,
+      roleStatus: 'conflicted',
+      roleAtSource: null,
+      roleCandidates: ['VFX 영상편집자', '1인 프로덕션 CP'],
+    })
+    expect(graduationConflict).toMatchObject({ visibility: 'admin_only' })
+    expect(graduationConflict?.metadata).toMatchObject({
+      graduationYear: null,
+      graduationYearStatus: 'conflicted',
+      graduationYearCandidates: [
+        {
+          year: 2024,
+          sourceUrl: 'https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link',
+        },
+        { year: 2023, sourceUrl: 'https://gjuphoto.com/?kboard_content_redirect=12' },
+      ],
+    })
+    expect(careers.filter(resource => resource.metadata.graduationYearStatus === 'confirmed'))
+      .toHaveLength(16)
+    expect(archiveResources.every((resource) => {
+      const archive = resource.metadata.archive as {
+        sourceUrl: string
+        sourceLastEditedDate: string
+        trackEvidence: string[]
+      }
+      return archive.sourceUrl.startsWith('https://')
+        && /^\d{4}-\d{2}-\d{2}$/u.test(archive.sourceLastEditedDate)
+        && archive.trackEvidence.length >= 1
+        && archive.trackEvidence.every(track => trackKeys.has(track))
+    })).toBe(true)
+
+    for (const resource of archiveResources) {
+      const tags = seed.resourceTags.filter(tag => tag.resourceSeedKey === resource.seedKey)
+      expect(tags.filter(tag => tag.isPrimary)).toHaveLength(1)
+      expect(trackKeys.has(tags.find(tag => tag.isPrimary)!.tagKey)).toBe(true)
+      expect(tags.some(tag => !trackKeys.has(tag.tagKey))).toBe(true)
+    }
+
+    expect(seed.resources.filter(resource => resource.type === 'equipment' || resource.type === 'facility')
+      .every(resource => resource.metadata.supportingEvidence === true)).toBe(true)
+  })
+
   it('groups public equipment without codes and retains four support facilities exactly', () => {
     const seed = deriveContentSeed(parseContentSeedInputs(canonicalInput()))
     const publicEquipment = seed.resources.filter(resource => resource.type === 'equipment'
       && resource.visibility === 'public')
-    const facilities = seed.resources.filter(resource => resource.type === 'facility')
+    const facilities = seed.resources.filter(resource => resource.type === 'facility'
+      && !resource.seedKey.startsWith('archive:'))
 
     expect(seed.resources.filter(resource => resource.type === 'equipment')).toHaveLength(83)
     expect(publicEquipment).toHaveLength(72)
@@ -253,7 +363,8 @@ describe('verified department content seed', () => {
       0,
     )).toBe(128)
     expect(publicEquipment.every(resource => resource.status === 'draft')).toBe(true)
-    expect(seed.resources).toHaveLength(128)
+    expect(seed.resources.filter(resource => !resource.seedKey.startsWith('archive:'))).toHaveLength(128)
+    expect(seed.resources).toHaveLength(158)
     expect(seed.resources.every(resource => resource.status === 'draft')).toBe(true)
     expect(publicEquipment.every(resource => resource.metadata.reservationUrl
       === 'https://gjureserve.co.kr')).toBe(true)
@@ -295,10 +406,13 @@ describe('verified department content seed', () => {
     expect(summarizeContentSeed(seed)).toMatchObject({
       courses: 41,
       equipmentItems: 144,
-      facilities: 4,
+      facilities: 7,
+      careers: 17,
+      extracurricular: 5,
+      projects: 5,
       faculty: 6,
       verifiedEquipmentItems: 128,
-      resources: 128,
+      resources: 158,
       equipmentGroups: 83,
       publicEquipmentGroups: 72,
       adminOnlyEquipmentGroups: 11,
@@ -306,7 +420,7 @@ describe('verified department content seed', () => {
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:2c4b0c5dfd8273b3914af083f8099a8f1be0a9c864d4d840a89fb6db296a69aa',
+      'sha256:455036fccc0e36e320b1717861e52e037a33cefb0493079a06956c76b1c78ec9',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')
@@ -321,6 +435,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     malformed.curriculum = malformed.curriculum.slice(1)
     expect(() => parseContentSeedInputs(malformed)).toThrow(/curriculum.*41/iu)
@@ -332,6 +447,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     unknownField.curriculum[0] = { ...unknownField.curriculum[0], unexpected: true }
     expect(() => parseContentSeedInputs(unknownField)).toThrow(/curriculum.*invalid/iu)
@@ -341,6 +457,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     duplicateCourse.curriculum[1] = {
       ...duplicateCourse.curriculum[1],
@@ -353,6 +470,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: Array<Record<string, unknown>>
       facilities: unknown
+      departmentArchive: unknown
     }
     brokenInventory.equipment[0] = { ...brokenInventory.equipment[0], sourceRow: 144 }
     expect(() => parseContentSeedInputs(brokenInventory)).toThrow(/equipment.*source.*row/iu)
@@ -362,6 +480,7 @@ describe('verified department content seed', () => {
       faculty: { faculty: unknown[], specialistLinks: Array<Record<string, unknown>> }
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     brokenLink.faculty.specialistLinks[0] = {
       ...brokenLink.faculty.specialistLinks[0],
@@ -374,6 +493,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: Array<Record<string, unknown>>
       facilities: unknown
+      departmentArchive: unknown
     }
     wrongLocation.equipment[0] = {
       ...wrongLocation.equipment[0],
@@ -386,6 +506,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: Array<Record<string, unknown>>
       facilities: unknown
+      departmentArchive: unknown
     }
     wrongAccess.equipment[0] = { ...wrongAccess.equipment[0], accessMode: 'inquiry' }
     expect(() => parseContentSeedInputs(wrongAccess)).toThrow(/equipment.*access.*count/iu)
@@ -395,6 +516,7 @@ describe('verified department content seed', () => {
       faculty: { faculty: Array<Record<string, unknown>>, specialistLinks: unknown[] }
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     wrongRole.faculty.faculty[0] = {
       ...wrongRole.faculty.faculty[0],
@@ -407,6 +529,7 @@ describe('verified department content seed', () => {
       faculty: { faculty: unknown[], specialistLinks: Array<Record<string, unknown>> }
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     wrongLinkTag.faculty.specialistLinks[0] = {
       ...wrongLinkTag.faculty.specialistLinks[0],
@@ -419,6 +542,7 @@ describe('verified department content seed', () => {
       faculty: unknown
       equipment: unknown
       facilities: unknown
+      departmentArchive: unknown
     }
     sourceDrift.curriculum[0] = {
       ...sourceDrift.curriculum[0],

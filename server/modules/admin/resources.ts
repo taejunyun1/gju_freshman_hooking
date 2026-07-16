@@ -371,6 +371,26 @@ const splitWrite = (write: AdminResourceWrite) => {
   return { resource, tags }
 }
 
+const archiveSeedKey = (metadata: unknown): string | null => {
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return null
+  const candidate = metadata as { archive?: unknown, seedKey?: unknown }
+  if (typeof candidate.archive !== 'object' || candidate.archive === null || Array.isArray(candidate.archive)) {
+    return null
+  }
+  return typeof candidate.seedKey === 'string' ? candidate.seedKey : ''
+}
+
+const assertArchiveIdentityPreserved = (
+  current: StoredAdminResource,
+  next: AdminResourceWrite,
+): void => {
+  const currentSeedKey = archiveSeedKey(current.metadata)
+  if (currentSeedKey === null) return
+  if (currentSeedKey === '' || archiveSeedKey(next.metadata) !== currentSeedKey) {
+    throw new AppError('RESOURCE_ARCHIVE_IDENTITY_REQUIRED')
+  }
+}
+
 const assertPublishable = (
   resource: StoredAdminResource,
   inventory: AdminEquipmentInventoryItem[],
@@ -378,6 +398,10 @@ const assertPublishable = (
   if (!resource.sourceDate) throw new AppError('RESOURCE_SOURCE_REQUIRED')
   if (resource.tags.filter(tag => tag.isPrimary).length !== 1) {
     throw new AppError('RESOURCE_PRIMARY_TAG_REQUIRED')
+  }
+  const archive = 'archive' in resource.metadata ? resource.metadata.archive : undefined
+  if (archive && !new Set<string>(['snapshot', 'recurring', 'historical']).has(archive.evidenceStatus)) {
+    throw new AppError('RESOURCE_ARCHIVE_VERIFICATION_REQUIRED')
   }
   if (resource.type === 'course') {
     const metadata = resource.metadata
@@ -461,6 +485,10 @@ export const createAdminResourcesService = (dependencies: AdminResourcesServiceD
     return publicResource(dependencies, created)
   },
   update: async (id: number, input: { expectedUpdatedAt: string, resource: AdminResourceWrite }, context: ResourceMutationContext) => {
+    const current = await loadResource(dependencies, id)
+    if (sameResourceVersion(current.updatedAt, input.expectedUpdatedAt)) {
+      assertArchiveIdentityPreserved(current, input.resource)
+    }
     const result = await dependencies.updateResource({ id, expectedUpdatedAt: input.expectedUpdatedAt, ...splitWrite(input.resource), ...context })
     if (result.kind === 'conflict') {
       const current = await publicResource(dependencies, parseStoredResource(result.current))
@@ -607,6 +635,8 @@ const resourceMutationErrorCodeSchema = z.enum([
   'RESOURCE_INVALID',
   'RESOURCE_SOURCE_REQUIRED',
   'RESOURCE_PRIMARY_TAG_REQUIRED',
+  'RESOURCE_ARCHIVE_VERIFICATION_REQUIRED',
+  'RESOURCE_ARCHIVE_IDENTITY_REQUIRED',
   'COURSE_METADATA_REQUIRED',
   'WORK_CONSENT_REQUIRED',
   'WORK_MEDIA_REQUIRED',

@@ -184,6 +184,35 @@ const equipmentWrite = () => ({
   },
 })
 
+const archiveCareerWrite = () => ({
+  ...courseWrite(),
+  type: 'career' as const,
+  sourceDate: '2025-11-06',
+  tags: [
+    { key: 'video', weight: 3, isPrimary: true },
+    { key: 'news', weight: 2, isPrimary: false },
+  ],
+  metadata: {
+    seedKey: 'archive:career:park_jinwoo',
+    archive: {
+      sourceUrl: 'https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link',
+      sourcePageTitle: '졸업생 인터뷰',
+      sourceLastEditedDate: '2025-11-06',
+      evidenceStatus: 'snapshot',
+      trackEvidence: ['video', 'documentary'],
+      interestEvidence: ['news', 'field', 'drone'],
+      verificationNote: '인터뷰 본문에만 직무가 있어 body_only 상태로 보존합니다.',
+    },
+    publicName: '박진우',
+    graduationYear: 2022,
+    graduationYearStatus: 'confirmed',
+    graduationYearCandidates: [],
+    roleAtSource: '영상 촬영 기자',
+    roleCandidates: [],
+    roleStatus: 'body_only',
+  },
+})
+
 describe('administrator resource list and detail', () => {
   beforeEach(() => vi.stubGlobal('defineEventHandler', (handler: unknown) => handler))
 
@@ -350,6 +379,155 @@ describe('administrator resource writes', () => {
     }
   })
 
+  it('strictly round-trips bounded archive evidence and accepts HTTPS sources only', () => {
+    expect(parseAdminResourceWrite(archiveCareerWrite())).toEqual(archiveCareerWrite())
+
+    expect(() => parseAdminResourceWrite({
+      ...archiveCareerWrite(),
+      tags: [
+        { key: 'news', weight: 3, isPrimary: true },
+        { key: 'video', weight: 2, isPrimary: false },
+      ],
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    expect(() => parseAdminResourceWrite({
+      ...archiveCareerWrite(),
+      tags: [{ key: 'video', weight: 3, isPrimary: true }],
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    expect(() => parseAdminResourceWrite({
+      ...archiveCareerWrite(),
+      sourceDate: '2025-11-07',
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    expect(() => parseAdminResourceWrite({
+      ...archiveCareerWrite(),
+      metadata: {
+        ...archiveCareerWrite().metadata,
+        archive: {
+          ...archiveCareerWrite().metadata.archive,
+          sourceUrl: 'http://gjphoto94.notion.site/alumni',
+        },
+      },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    expect(() => parseAdminResourceWrite({
+      ...archiveCareerWrite(),
+      metadata: { ...archiveCareerWrite().metadata, privateEmail: 'student@example.com' },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    const archiveFacilityWrite = {
+      ...courseWrite(),
+      type: 'facility',
+      sourceDate: '2025-05-05',
+      tags: [
+        { key: 'video', weight: 3, isPrimary: true },
+        { key: 'studio', weight: 2, isPrimary: false },
+      ],
+      metadata: {
+        seedKey: 'archive:facility:studio_c_video',
+        facilityKey: 'studio_c_video',
+        facilityType: '영상 촬영 스튜디오',
+        activities: ['영상·인터뷰 촬영 후보'],
+        exampleCourses: ['영상 인터뷰 내러티브 워크숍'],
+        operation_note: null,
+        last_verified_at: null,
+        supportingEvidence: true,
+        archive: {
+          sourceUrl: 'https://gjuphoto.com/facilities/',
+          sourcePageTitle: '학과 시설 및 기자재',
+          sourceLastEditedDate: '2025-05-05',
+          evidenceStatus: 'verify_required',
+          trackEvidence: ['video', 'commercial'],
+          interestEvidence: ['studio', 'interview'],
+          verificationNote: '세부 사양과 현재 운영 상태를 확인해야 합니다.',
+        },
+      },
+    } as const
+    expect(parseAdminResourceWrite(archiveFacilityWrite)).toMatchObject({ type: 'facility' })
+    expect(() => parseAdminResourceWrite({
+      ...archiveFacilityWrite,
+      metadata: { ...archiveFacilityWrite.metadata, supportingEvidence: false },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    expect(decodeAdminResourceRow(rawResourceRow({
+      type: 'career',
+      source_date: archiveCareerWrite().sourceDate,
+      metadata: archiveCareerWrite().metadata,
+      resource_tags: archiveCareerWrite().tags.map(tag => ({
+        tag_key: tag.key, weight: tag.weight, is_primary: tag.isPrimary,
+      })),
+    }))).toMatchObject({ type: 'career', metadata: archiveCareerWrite().metadata })
+    expect(() => decodeAdminResourceRow(rawResourceRow({
+      type: 'career',
+      source_date: archiveCareerWrite().sourceDate,
+      metadata: archiveCareerWrite().metadata,
+      resource_tags: [
+        { tag_key: 'news', weight: 3, is_primary: true },
+        { tag_key: 'video', weight: 2, is_primary: false },
+      ],
+    }))).toThrow('ADMIN_RESOURCE_STORE_INVALID')
+  })
+
+  it.each(['marker removal', 'seed key change'] as const)(
+    'blocks archive identity mutation in the service before the update dependency: %s',
+    async (mutation) => {
+      const write = archiveCareerWrite()
+      const current = storedResource({
+        ...write,
+        metadata: {
+          ...write.metadata,
+          archive: { ...write.metadata.archive, evidenceStatus: 'verify_required' },
+        },
+      })
+      const updateResource = vi.fn(async () => ({
+        kind: 'updated' as const,
+        resource: storedResource({ ...write, metadata: {} }),
+      }))
+      const next = {
+        ...write,
+        metadata: mutation === 'marker removal'
+          ? {}
+          : { ...write.metadata, seedKey: 'archive:career:changed_identity' },
+      }
+
+      await expect(createAdminResourcesService(dependencies({
+        loadResource: vi.fn(async () => current),
+        updateResource,
+      })).update(42, { expectedUpdatedAt: updatedAt, resource: next }, {
+        adminUserId: admin.userId,
+        requestId,
+      })).rejects.toMatchObject({ code: 'RESOURCE_ARCHIVE_IDENTITY_REQUIRED', statusCode: 422 })
+      expect(updateResource).not.toHaveBeenCalled()
+    },
+  )
+
+  it('allows a reviewed archive evidence-state update when its marker and seed key remain unchanged', async () => {
+    const next = archiveCareerWrite()
+    const current = storedResource({
+      ...next,
+      metadata: {
+        ...next.metadata,
+        archive: { ...next.metadata.archive, evidenceStatus: 'verify_required' },
+      },
+    })
+    const updateResource = vi.fn(async () => ({
+      kind: 'updated' as const,
+      resource: storedResource(next),
+    }))
+
+    const updated = await createAdminResourcesService(dependencies({
+      loadResource: vi.fn(async () => current),
+      updateResource,
+    })).update(42, { expectedUpdatedAt: updatedAt, resource: next }, {
+      adminUserId: admin.userId,
+      requestId,
+    })
+
+    expect(updated.resource.metadata).toEqual(next.metadata)
+    expect(updateResource).toHaveBeenCalledOnce()
+  })
+
   it('creates resource and tags atomically with the authenticated audit context', async () => {
     const createResource = vi.fn(async input => storedResource({ ...input.resource, tags: input.tags }))
     const target = event()
@@ -440,6 +618,21 @@ describe('administrator resource writes', () => {
       adminUserId: admin.userId,
       requestId,
     })).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' })
+
+    const identityAdapter = createSupabaseAdminResourcesDependencies({
+      rpc: vi.fn(async () => ({
+        data: { status: 'validation_error', code: 'RESOURCE_ARCHIVE_IDENTITY_REQUIRED' },
+        error: null,
+      })),
+    } as never)
+    await expect(identityAdapter.updateResource({
+      id: 42,
+      expectedUpdatedAt: updatedAt,
+      resource: record,
+      tags,
+      adminUserId: admin.userId,
+      requestId,
+    })).rejects.toMatchObject({ code: 'RESOURCE_ARCHIVE_IDENTITY_REQUIRED', statusCode: 422 })
 
     const publishAdapter = createSupabaseAdminResourcesDependencies({
       rpc: vi.fn(async () => ({
@@ -651,6 +844,61 @@ describe('publishing, archiving, and inventory truth', () => {
     })
   })
 
+  it('blocks verify-required archive evidence until an administrator changes it to a publishable state', async () => {
+    const archiveWrite = archiveCareerWrite()
+    const verifyRequired = storedResource({
+      type: archiveWrite.type,
+      title: archiveWrite.title,
+      sourceDate: archiveWrite.sourceDate,
+      visibility: archiveWrite.visibility,
+      tags: archiveWrite.tags,
+      metadata: {
+        ...archiveWrite.metadata,
+        archive: { ...archiveWrite.metadata.archive, evidenceStatus: 'verify_required' },
+      },
+    })
+    const blockedTransition = vi.fn(async () => ({
+      kind: 'updated' as const,
+      resource: storedResource({ status: 'active' }),
+    }))
+    const blockedTarget = event()
+    const blockedHandler = createPublishAdminResourceHandler({
+      resources: createAdminResourcesService(dependencies({
+        loadResource: vi.fn(async () => verifyRequired),
+        transitionResource: blockedTransition,
+      })),
+      getParam: () => '42',
+      requireAdmin: async () => admin,
+      ...jsonRequestDependencies({ expectedUpdatedAt: updatedAt }),
+      ...responseDependencies(blockedTarget),
+    })
+
+    expect(await blockedHandler(blockedTarget)).toMatchObject({ error: {
+      code: 'RESOURCE_ARCHIVE_VERIFICATION_REQUIRED',
+    } })
+    expect(blockedTarget.status).toBe(422)
+    expect(blockedTransition).not.toHaveBeenCalled()
+
+    const reviewed = storedResource({
+      ...verifyRequired,
+      metadata: {
+        ...verifyRequired.metadata,
+        archive: { ...verifyRequired.metadata.archive, evidenceStatus: 'snapshot' },
+      },
+    })
+    const reviewedTransition = vi.fn(async () => ({
+      kind: 'updated' as const,
+      resource: storedResource({ ...reviewed, status: 'active', updatedAt: '2026-07-15T03:00:00.000Z' }),
+    }))
+    const published = await createAdminResourcesService(dependencies({
+      loadResource: vi.fn(async () => reviewed),
+      transitionResource: reviewedTransition,
+    })).publish(42, updatedAt, { adminUserId: admin.userId, requestId })
+
+    expect(published.resource.status).toBe('active')
+    expect(reviewedTransition).toHaveBeenCalledOnce()
+  })
+
   it.each([
     ['publish', 'active'] as const,
     ['archive', 'archived'] as const,
@@ -753,6 +1001,24 @@ describe('publishing, archiving, and inventory truth', () => {
       p_resource_id: 42,
       p_status: 'active',
     })
+  })
+
+  it('maps the archive verification RPC outcome to the stable public business error', async () => {
+    const adapter = createSupabaseAdminResourcesDependencies({
+      rpc: vi.fn(async () => ({
+        data: { status: 'validation_error', code: 'RESOURCE_ARCHIVE_VERIFICATION_REQUIRED' },
+        error: null,
+      })),
+    } as never)
+
+    await expect(adapter.transitionResource({
+      id: 42,
+      expectedUpdatedAt: updatedAt,
+      status: 'active',
+      changedFields: ['status'],
+      adminUserId: admin.userId,
+      requestId,
+    })).rejects.toMatchObject({ code: 'RESOURCE_ARCHIVE_VERIFICATION_REQUIRED', statusCode: 422 })
   })
 
   it('strictly requires a locked resource version in updated and conflict transition outcomes', async () => {

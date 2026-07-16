@@ -69,6 +69,37 @@ const equipmentResource: AdminResource = {
   },
 }
 
+const archiveCareer: AdminResource = {
+  ...course,
+  id: 46,
+  type: 'career',
+  title: '졸업생 진로 사례 · 박진우',
+  sourceDate: '2025-11-06',
+  tags: [
+    { key: 'video', weight: 3, isPrimary: true },
+    { key: 'news', weight: 2, isPrimary: false },
+  ],
+  metadata: {
+    seedKey: 'archive:career:park_jinwoo',
+    archive: {
+      sourceUrl: 'https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link',
+      sourcePageTitle: '졸업생 인터뷰',
+      sourceLastEditedDate: '2025-11-06',
+      evidenceStatus: 'snapshot',
+      trackEvidence: ['video', 'documentary'],
+      interestEvidence: ['news', 'field', 'drone'],
+      verificationNote: '인터뷰 본문에만 직무가 있어 body_only 상태로 보존합니다.',
+    },
+    publicName: '박진우',
+    graduationYear: 2022,
+    graduationYearStatus: 'confirmed',
+    graduationYearCandidates: [],
+    roleAtSource: '영상 촬영 기자',
+    roleCandidates: [],
+    roleStatus: 'body_only',
+  },
+}
+
 const toLocalDateTimeValue = (iso: string): string => {
   const date = new Date(iso)
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -448,6 +479,21 @@ describe('administrator resource editor', () => {
     expect(payload.resource.metadata.consent_at).toMatch(/[+-]\d{2}:\d{2}$/u)
     expect(new Date(payload.resource.metadata.consent_at!).getTime())
       .toBe(new Date(2026, 7, 2, 14, 45).getTime())
+  })
+
+  it('round-trips strict archive evidence metadata without silently dropping it', async () => {
+    const wrapper = mount(ResourceEditor, {
+      props: { resource: archiveCareer, inventory: [] },
+      global: { stubs: { ResourceCard: ResourceCardStub } },
+    })
+
+    await wrapper.get('textarea[name="summary"]').setValue('진로 근거 요약을 교정했습니다.')
+    await wrapper.get('button[data-action="save"]').trigger('click')
+
+    const payload = wrapper.emitted('save')?.at(-1)?.[0] as {
+      resource: Extract<AdminResourceWrite, { type: 'career' }>
+    }
+    expect(payload.resource.metadata).toEqual(archiveCareer.metadata)
   })
 
   it('keeps unchanged consent and verification timestamps byte-for-byte', async () => {

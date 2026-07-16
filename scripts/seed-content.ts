@@ -7,7 +7,7 @@ import { z, ZodError } from 'zod'
 const SOURCE_DATE = '2026-07-14'
 const RESERVATION_URL = 'https://gjureserve.co.kr'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:2c4b0c5dfd8273b3914af083f8099a8f1be0a9c864d4d840a89fb6db296a69aa'
+const EXPECTED_CONTENT_REVISION = 'sha256:455036fccc0e36e320b1717861e52e037a33cefb0493079a06956c76b1c78ec9'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -28,6 +28,23 @@ const expectedCourseTitles = [
 
 const expectedFacultyNames = ['조대연', '윤태준', '김사라', '박재웅', '정철호', '곽동욱'] as const
 const expectedFacilityKeys = ['studio_a_horizon', 'studio_b', 'darkroom', 'computer_lab'] as const
+const expectedArchiveAlumniNames = [
+  '서재훈', '김수성', '설소영', '김민범', '윤동규', '노하윤', '박지우', '박준희',
+  '임승찬', '최관호', '김병준', '유성현', '정해찬', '김윤교', '박래현', '박진우', '유승현',
+] as const
+const expectedArchiveActivityKeys = [
+  'content_one_campus_2019_2022',
+  'regional_innovation_smart_drone_2020_2024',
+  'interview_sound_workshop',
+  'advertising_studio_visit',
+  'summer_winter_field_practice',
+  'jeju_tunnel_archive_project_lab',
+  'gwangju_biennale_linked_exhibition_2023',
+  'graduation_exhibition',
+  'global_challenge_frame_in_52_2025',
+  'underwater_drone_vr_jeju_2025',
+] as const
+const expectedArchiveFacilityKeys = ['studio_c_video', 'print_lab', 'portfolio_review_lab'] as const
 const expectedFacultyRoles = [
   '조대연|full_time|primary', '윤태준|full_time|primary', '김사라|full_time|primary',
   '박재웅|adjunct|specialist', '정철호|adjunct|specialist', '곽동욱|adjunct|specialist',
@@ -53,6 +70,15 @@ const canonicalize = (value: unknown): unknown => {
 }
 
 const tagKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u)
+const trackKeySchema = z.enum(['documentary', 'art_photo', 'commercial', 'video'])
+const httpsUrlSchema = z.url().max(500).refine((value) => {
+  try {
+    return new URL(value).protocol === 'https:'
+  }
+  catch {
+    return false
+  }
+}, 'source URL must use HTTPS')
 const sourceDateSchema = z.literal(SOURCE_DATE)
 const draftSchema = z.literal('draft')
 
@@ -156,11 +182,114 @@ const facilityRecordSchema = z.object({
   lastVerifiedAt: z.null(),
 }).strict()
 
+const uniqueTrackEvidenceSchema = z.array(trackKeySchema).min(1).max(4)
+  .refine(values => new Set(values).size === values.length)
+const uniqueInterestEvidenceSchema = z.array(tagKeySchema).min(1).max(30)
+  .refine(values => new Set(values).size === values.length)
+const archiveEvidenceStatusSchema = z.enum(['historical', 'verify_required', 'recurring', 'snapshot'])
+const archiveSourceShape = {
+  sourceUrl: httpsUrlSchema,
+  sourcePageTitle: z.string().trim().min(1).max(200),
+  sourceLastEditedDate: z.iso.date(),
+  evidenceStatus: archiveEvidenceStatusSchema,
+  verificationNote: z.string().trim().min(1).max(1000),
+}
+const archiveResourceShape = {
+  summary: z.string().trim().min(1).max(1000),
+  connectionTemplate: z.string().trim().min(1).max(1000),
+  trackEvidence: uniqueTrackEvidenceSchema,
+  interestTags: uniqueInterestEvidenceSchema,
+  status: draftSchema,
+  visibility: z.enum(['public', 'admin_only']),
+  priority: z.number().int().min(0).max(32767),
+  sourceDate: z.iso.date(),
+  ...archiveSourceShape,
+}
+
+const graduationYearCandidateSchema = z.object({
+  year: z.number().int().min(1994).max(2100),
+  sourceUrl: httpsUrlSchema,
+}).strict()
+
+const archiveAlumniRecordSchema = z.object({
+  personKey: tagKeySchema,
+  name: z.string().trim().min(1).max(100),
+  graduationYear: z.number().int().min(1994).max(2100).nullable(),
+  graduationYearStatus: z.enum(['confirmed', 'conflicted']),
+  graduationYearCandidates: z.array(graduationYearCandidateSchema).max(2),
+  roleAtSource: z.string().trim().min(1).max(200).nullable(),
+  roleCandidates: z.array(z.string().trim().min(1).max(200)).max(2),
+  roleStatus: z.enum(['title_confirmed', 'body_only', 'conflicted']),
+  ...archiveResourceShape,
+}).strict().superRefine((person, context) => {
+  const graduationConfirmed = person.graduationYearStatus === 'confirmed'
+    && person.graduationYear !== null
+    && person.graduationYearCandidates.length === 0
+  const graduationConflicted = person.graduationYearStatus === 'conflicted'
+    && person.graduationYear === null
+    && person.graduationYearCandidates.length === 2
+    && new Set(person.graduationYearCandidates.map(candidate => candidate.year)).size === 2
+  if (!graduationConfirmed && !graduationConflicted) {
+    context.addIssue({ code: 'custom', path: ['graduationYearStatus'], message: 'invalid graduation year evidence state' })
+  }
+  const roleConfirmed = person.roleStatus !== 'conflicted'
+    && person.roleAtSource !== null
+    && person.roleCandidates.length === 0
+  const roleConflicted = person.roleStatus === 'conflicted'
+    && person.roleAtSource === null
+    && person.roleCandidates.length === 2
+    && new Set(person.roleCandidates).size === 2
+  if (!roleConfirmed && !roleConflicted) {
+    context.addIssue({ code: 'custom', path: ['roleStatus'], message: 'invalid role evidence state' })
+  }
+  if ((person.graduationYearStatus === 'conflicted' || person.roleStatus === 'conflicted')
+    && (person.visibility !== 'admin_only' || person.evidenceStatus !== 'verify_required')) {
+    context.addIssue({ code: 'custom', path: ['visibility'], message: 'conflicted alumni evidence must remain admin only' })
+  }
+})
+
+const archiveActivityRecordSchema = z.object({
+  activityKey: tagKeySchema,
+  resourceType: z.enum(['extracurricular', 'project']),
+  title: z.string().trim().min(1).max(200),
+  periodLabel: z.string().trim().min(1).max(100).nullable(),
+  ...archiveResourceShape,
+}).strict().superRefine((activity, context) => {
+  if (activity.evidenceStatus === 'historical' && !activity.summary.includes('과거 운영 사례')) {
+    context.addIssue({ code: 'custom', path: ['summary'], message: 'historical summary must state that it is a past operating example' })
+  }
+})
+
+const archiveFacilityRecordSchema = z.object({
+  facilityKey: z.enum(expectedArchiveFacilityKeys),
+  title: z.string().trim().min(1).max(200),
+  facilityType: z.string().trim().min(1).max(100),
+  coreActivity: z.string().trim().min(1).max(1000),
+  trackEvidence: uniqueTrackEvidenceSchema,
+  interestTags: uniqueInterestEvidenceSchema,
+  exampleCourses: z.array(z.string().trim().min(1).max(200)).min(1).max(30),
+  operationNote: z.null(),
+  status: draftSchema,
+  visibility: z.literal('public'),
+  sourceDate: z.iso.date(),
+  lastVerifiedAt: z.null(),
+  ...archiveSourceShape,
+}).strict().refine(facility => facility.evidenceStatus === 'verify_required', {
+  path: ['evidenceStatus'], message: 'archive facilities require verification',
+})
+
+const departmentArchiveInputSchema = z.object({
+  alumni: z.array(archiveAlumniRecordSchema),
+  activities: z.array(archiveActivityRecordSchema),
+  facilities: z.array(archiveFacilityRecordSchema),
+}).strict()
+
 export interface RawContentSeedInputs {
   curriculum: unknown
   faculty: unknown
   equipment: unknown
   facilities: unknown
+  departmentArchive: unknown
 }
 
 type CurriculumSource = z.infer<typeof curriculumRecordSchema>
@@ -168,6 +297,15 @@ type FacultySource = z.infer<typeof facultyRecordSchema>
 type EquipmentSource = z.infer<typeof equipmentRecordSchema>
 type FacilitySource = z.infer<typeof facilityRecordSchema>
 type SpecialistLinkSource = z.infer<typeof specialistLinkSchema>
+type ArchiveAlumniSource = z.infer<typeof archiveAlumniRecordSchema>
+type ArchiveActivitySource = z.infer<typeof archiveActivityRecordSchema>
+type ArchiveFacilitySource = z.infer<typeof archiveFacilityRecordSchema>
+
+interface DepartmentArchiveSource {
+  alumni: ArchiveAlumniSource[]
+  activities: ArchiveActivitySource[]
+  facilities: ArchiveFacilitySource[]
+}
 
 export interface ParsedCurriculum extends CurriculumSource {
   gradeYear: number
@@ -179,11 +317,12 @@ export interface ParsedContentSeedInputs {
   specialistLinks: SpecialistLinkSource[]
   equipment: EquipmentSource[]
   facilities: FacilitySource[]
+  departmentArchive: DepartmentArchiveSource
 }
 
 export interface DerivedResource {
   seedKey: string
-  type: 'course' | 'equipment' | 'facility'
+  type: 'course' | 'equipment' | 'facility' | 'extracurricular' | 'project' | 'career'
   title: string
   summary: string
   connectionTemplate: string
@@ -334,12 +473,52 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
     throw new Error('facilities seed contains a broken course reference')
   }
 
+  const departmentArchive = parseSection(
+    'department archive', departmentArchiveInputSchema, input.departmentArchive,
+  )
+  assertExactOrder(
+    'department archive alumni',
+    departmentArchive.alumni.map(person => person.name),
+    expectedArchiveAlumniNames,
+  )
+  assertExactOrder(
+    'department archive activities',
+    departmentArchive.activities.map(activity => activity.activityKey),
+    expectedArchiveActivityKeys,
+  )
+  assertExactOrder(
+    'department archive facilities',
+    departmentArchive.facilities.map(facility => facility.facilityKey),
+    expectedArchiveFacilityKeys,
+  )
+  if (departmentArchive.activities.filter(activity => activity.resourceType === 'extracurricular').length !== 5
+    || departmentArchive.activities.filter(activity => activity.resourceType === 'project').length !== 5) {
+    throw new Error('department archive activity type count differs from the approved manifest')
+  }
+  if (departmentArchive.facilities.some(facility => (
+    facility.exampleCourses.some(title => !courseTitles.has(title))
+  ))) {
+    throw new Error('department archive facilities contain a broken canonical course reference')
+  }
+  const archiveRecords = [
+    ...departmentArchive.alumni,
+    ...departmentArchive.activities,
+    ...departmentArchive.facilities,
+  ]
+  if (archiveRecords.some(record => record.sourceDate !== record.sourceLastEditedDate)) {
+    throw new Error('department archive source dates must preserve the audited last-edited date')
+  }
+  if (/동아리|학생회|학생자치/u.test(JSON.stringify(departmentArchive))) {
+    throw new Error('department archive seed must not invent club or student-government records')
+  }
+
   const parsed = {
     curriculum,
     faculty: facultyInput.faculty,
     specialistLinks: facultyInput.specialistLinks,
     equipment,
     facilities,
+    departmentArchive,
   }
   const contentRevision = createContentRevision(parsed)
   if (contentRevision !== EXPECTED_CONTENT_REVISION) {
@@ -357,6 +536,38 @@ const locationLabel = (key: EquipmentSource['locationKey']) => key === 'departme
   : '판타지랩'
 
 const unique = <T>(values: T[]) => [...new Set(values)]
+
+const archiveMetadata = (source: {
+  sourceUrl: string
+  sourcePageTitle: string
+  sourceLastEditedDate: string
+  evidenceStatus: 'historical' | 'verify_required' | 'recurring' | 'snapshot'
+  trackEvidence: Array<'documentary' | 'art_photo' | 'commercial' | 'video'>
+  interestTags: string[]
+  verificationNote: string
+}) => ({
+  sourceUrl: source.sourceUrl,
+  sourcePageTitle: source.sourcePageTitle,
+  sourceLastEditedDate: source.sourceLastEditedDate,
+  evidenceStatus: source.evidenceStatus,
+  trackEvidence: source.trackEvidence,
+  interestEvidence: source.interestTags,
+  verificationNote: source.verificationNote,
+})
+
+const pushArchiveResourceTags = (
+  target: DerivedResourceTag[],
+  resourceSeedKey: string,
+  trackEvidence: string[],
+  interestTags: string[],
+) => {
+  unique([...trackEvidence, ...interestTags]).forEach((tagKey, index) => target.push({
+    resourceSeedKey,
+    tagKey,
+    weight: index === 0 ? 3 : 2,
+    isPrimary: index === 0,
+  }))
+}
 
 const semanticTagRules: Array<[RegExp, string]> = [
   [/광고|커머셜/u, 'commercial'], [/패션/u, 'fashion'], [/제품/u, 'product'],
@@ -528,6 +739,81 @@ export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedConte
     }))
   }
 
+  for (const person of parsed.departmentArchive.alumni) {
+    const seedKey = `archive:career:${person.personKey}`
+    resources.push({
+      seedKey,
+      type: 'career',
+      title: `졸업생 진로 사례 · ${person.name}`,
+      summary: person.summary,
+      connectionTemplate: person.connectionTemplate,
+      status: person.status,
+      visibility: person.visibility,
+      priority: person.priority,
+      sourceDate: person.sourceDate,
+      metadata: {
+        seedKey,
+        archive: archiveMetadata(person),
+        publicName: person.name,
+        graduationYear: person.graduationYear,
+        graduationYearStatus: person.graduationYearStatus,
+        graduationYearCandidates: person.graduationYearCandidates,
+        roleAtSource: person.roleAtSource,
+        roleCandidates: person.roleCandidates,
+        roleStatus: person.roleStatus,
+      },
+    })
+    pushArchiveResourceTags(resourceTags, seedKey, person.trackEvidence, person.interestTags)
+  }
+
+  for (const activity of parsed.departmentArchive.activities) {
+    const seedKey = `archive:${activity.resourceType}:${activity.activityKey}`
+    resources.push({
+      seedKey,
+      type: activity.resourceType,
+      title: activity.title,
+      summary: activity.summary,
+      connectionTemplate: activity.connectionTemplate,
+      status: activity.status,
+      visibility: activity.visibility,
+      priority: activity.priority,
+      sourceDate: activity.sourceDate,
+      metadata: {
+        seedKey,
+        archive: archiveMetadata(activity),
+        periodLabel: activity.periodLabel,
+      },
+    })
+    pushArchiveResourceTags(resourceTags, seedKey, activity.trackEvidence, activity.interestTags)
+  }
+
+  for (const facility of parsed.departmentArchive.facilities) {
+    const seedKey = `archive:facility:${facility.facilityKey}`
+    resources.push({
+      seedKey,
+      type: 'facility',
+      title: facility.title,
+      summary: facility.coreActivity,
+      connectionTemplate: '선택한 ‘{interest}’ 관심과 관련된 교과·프로젝트 제작을 뒷받침하는 검증 전 시설 후보 ‘{title}’입니다.',
+      status: facility.status,
+      visibility: facility.visibility,
+      priority: 0,
+      sourceDate: facility.sourceDate,
+      metadata: {
+        seedKey,
+        facilityKey: facility.facilityKey,
+        facilityType: facility.facilityType,
+        activities: [facility.coreActivity],
+        exampleCourses: facility.exampleCourses,
+        operation_note: facility.operationNote,
+        last_verified_at: facility.lastVerifiedAt,
+        supportingEvidence: true,
+        archive: archiveMetadata(facility),
+      },
+    })
+    pushArchiveResourceTags(resourceTags, seedKey, facility.trackEvidence, facility.interestTags)
+  }
+
   const facultyTags: DerivedFacultyTag[] = []
   for (const person of parsed.faculty) {
     for (const tag of person.platformTags) {
@@ -588,6 +874,9 @@ export const summarizeContentSeed = (seed: DerivedContentSeed) => ({
   courses: seed.resources.filter(resource => resource.type === 'course').length,
   equipmentItems: seed.equipmentInventory.length,
   facilities: seed.resources.filter(resource => resource.type === 'facility').length,
+  extracurricular: seed.resources.filter(resource => resource.type === 'extracurricular').length,
+  projects: seed.resources.filter(resource => resource.type === 'project').length,
+  careers: seed.resources.filter(resource => resource.type === 'career').length,
   faculty: seed.faculty.length,
   verifiedEquipmentItems: seed.equipmentInventory
     .filter(item => item.dataQualityStatus === 'verified').length,
@@ -782,6 +1071,9 @@ const canonicalInput = (): RawContentSeedInputs => ({
   faculty: JSON.parse(readFileSync('supabase/seed/faculty-2026.json', 'utf8')) as unknown,
   equipment: JSON.parse(readFileSync('supabase/seed/equipment-inventory-2026-07-14.json', 'utf8')) as unknown,
   facilities: JSON.parse(readFileSync('supabase/seed/facilities-2026.json', 'utf8')) as unknown,
+  departmentArchive: JSON.parse(
+    readFileSync('supabase/seed/department-archive-2026-05-26.json', 'utf8'),
+  ) as unknown,
 })
 
 const runCli = () => {
@@ -807,7 +1099,8 @@ const runCli = () => {
   const summary = summarizeContentSeed(seed)
   console.log(
     `courses=${summary.courses} equipment_items=${summary.equipmentItems}`
-    + ` facilities=${summary.facilities} faculty=${summary.faculty}`
+    + ` facilities=${summary.facilities} extracurricular=${summary.extracurricular}`
+    + ` projects=${summary.projects} careers=${summary.careers} faculty=${summary.faculty}`
     + ` resources=${summary.resources} equipment_groups=${summary.equipmentGroups}`
     + ` public_equipment_groups=${summary.publicEquipmentGroups}`,
   )
