@@ -1,6 +1,7 @@
 import type { ApiFailure } from '../../shared/types/api'
 import type { AdminCounselingCurrent } from '../../shared/schemas/counseling'
 import type { AdminEquipmentInventoryItem, AdminResource } from '../../shared/schemas/admin-resources'
+import type { AdminFaculty } from '../../shared/schemas/admin-faculty'
 
 type AppErrorCode = ApiFailure['error']['code']
 
@@ -36,6 +37,19 @@ const publicMessages: Record<AppErrorCode, string> = {
   RESOURCE_IMAGE_TOO_LARGE: '이미지는 8MiB 이하여야 합니다.',
   RESOURCE_IMAGE_UPLOAD_FAILED: '이미지를 저장하지 못했습니다.',
   EQUIPMENT_IMPORT_INVALID: '기자재 가져오기 자료를 확인해 주세요.',
+  FACULTY_INVALID: '교수진 입력값을 다시 확인해 주세요.',
+  FACULTY_NOT_FOUND: '요청한 교수진 정보를 찾을 수 없습니다.',
+  FACULTY_CONFLICT: '교수진 정보가 이미 변경되었습니다. 최신 내용을 확인해 주세요.',
+  FACULTY_STATUS_INVALID: '현재 교수진 상태에서는 이 작업을 진행할 수 없습니다.',
+  FACULTY_ROLE_INVALID: '고용 형태와 상담 역할을 다시 확인해 주세요.',
+  FACULTY_CAPACITY_REQUIRED: '총괄 상담교수의 주간 상담 가능 인원을 입력해 주세요.',
+  CONTACT_VERIFICATION_REQUIRED: '공개 연락처와 마지막 검증일을 확인해 주세요.',
+  FACULTY_SPECIALIST_TAG_REQUIRED: '전문 연계 교수에게 전문 태그가 필요합니다.',
+  FACULTY_TAG_INVALID: '교수진 추천 태그를 다시 확인해 주세요.',
+  FACULTY_LINK_INVALID: '총괄교수와 전문 연계 관계를 다시 확인해 주세요.',
+  FACULTY_TAXONOMY_INVALID: '학과의 네 전공 트랙 분류를 다시 확인해 주세요.',
+  FACULTY_YOON_SCOPE_REQUIRED: '윤태준 교수의 예술사진·영상·AI·기술적 이미지 전문분야를 확인해 주세요.',
+  FACULTY_CONTENT_NOT_READY: '미리보기에 필요한 활성 총괄교수 정보를 확인해 주세요.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -70,6 +84,19 @@ const statusCodes: Record<AppErrorCode, number> = {
   RESOURCE_IMAGE_TOO_LARGE: 413,
   RESOURCE_IMAGE_UPLOAD_FAILED: 500,
   EQUIPMENT_IMPORT_INVALID: 422,
+  FACULTY_INVALID: 422,
+  FACULTY_NOT_FOUND: 404,
+  FACULTY_CONFLICT: 409,
+  FACULTY_STATUS_INVALID: 422,
+  FACULTY_ROLE_INVALID: 422,
+  FACULTY_CAPACITY_REQUIRED: 422,
+  CONTACT_VERIFICATION_REQUIRED: 422,
+  FACULTY_SPECIALIST_TAG_REQUIRED: 422,
+  FACULTY_TAG_INVALID: 422,
+  FACULTY_LINK_INVALID: 422,
+  FACULTY_TAXONOMY_INVALID: 422,
+  FACULTY_YOON_SCOPE_REQUIRED: 422,
+  FACULTY_CONTENT_NOT_READY: 422,
 }
 
 export class AppError extends Error {
@@ -114,6 +141,16 @@ export class InventoryConflictError extends AppError {
   }
 }
 
+export class FacultyConflictError extends AppError {
+  readonly current: AdminFaculty
+
+  constructor(current: AdminFaculty) {
+    super('FACULTY_CONFLICT')
+    this.name = 'FacultyConflictError'
+    this.current = current
+  }
+}
+
 export const toAppError = (error: unknown): AppError => error instanceof AppError ? error : new AppError('INTERNAL_ERROR')
 
 export const toApiFailure = (error: unknown, requestId: string): ApiFailure => {
@@ -126,6 +163,7 @@ export const toApiFailure = (error: unknown, requestId: string): ApiFailure => {
         appError instanceof CounselingConflictError
         || appError instanceof ResourceConflictError
         || appError instanceof InventoryConflictError
+        || appError instanceof FacultyConflictError
           ? { current: appError.current }
           : {}
       ),

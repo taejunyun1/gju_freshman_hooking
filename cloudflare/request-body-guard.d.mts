@@ -3,6 +3,8 @@ export const DEFAULT_MAX_REQUEST_BODY_BYTES: number
 export const RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES: number
 export const RESOURCE_IMAGE_MAX_REQUEST_BODY_BYTES: number
 export const RESOURCE_TRANSITION_MAX_REQUEST_BODY_BYTES: number
+export const FACULTY_MUTATION_MAX_REQUEST_BODY_BYTES: number
+export const FACULTY_TRANSITION_MAX_REQUEST_BODY_BYTES: number
 export const requestBodyOverflowHeader: string
 
 type WorkerLike<Environment = unknown, Context = unknown> = {
