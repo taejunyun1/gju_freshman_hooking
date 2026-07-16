@@ -1,11 +1,13 @@
 import { z } from 'zod'
 
+import { careerNarrativeSchema } from './career-narrative'
 import {
   facultyRoles,
   questionGroups,
   trackKeys,
 } from '../types/domain'
-import type { ResultSnapshot } from '../types/result'
+import type { CareerNarrative } from '../types/career-narrative'
+import type { ResultSnapshot, ResultSnapshotCore } from '../types/result'
 
 export const resultSnapshotMaxBytes = 262_144
 
@@ -316,7 +318,7 @@ export const resultFacultySchema = z.object({
   }
 })
 
-export const resultSnapshotSchema = z.object({
+const resultSnapshotCoreObjectSchema = z.object({
   completedAt: z.iso.datetime({ offset: true }).max(32),
   selectedInterests: z.array(selectedInterestSchema).min(4).max(11),
   trackScores: trackScoresSchema,
@@ -330,7 +332,16 @@ export const resultSnapshotSchema = z.object({
   learningPath: learningPathSchema,
   resources: resultResourcesSchema,
   faculty: resultFacultySchema,
-}).strict().superRefine((snapshot, context) => {
+}).strict()
+
+type ResultSnapshotSchemaInput = z.infer<typeof resultSnapshotCoreObjectSchema> & {
+  readonly careerNarrative?: unknown
+}
+
+const refineResultSnapshot = (
+  snapshot: ResultSnapshotSchemaInput,
+  context: z.RefinementCtx,
+) => {
   const interestIds = snapshot.selectedInterests.map(interest => `${interest.group}:${interest.key}`)
   if (new Set(interestIds).size !== interestIds.length) {
     context.addIssue({
@@ -423,6 +434,92 @@ export const resultSnapshotSchema = z.object({
     }
   }
 
+  if (snapshot.careerNarrative !== undefined) {
+    const narrative = snapshot.careerNarrative as CareerNarrative
+    const sameEvidence = (actual: readonly string[], expected: readonly string[]) => (
+      actual.length === expected.length
+      && actual.every((value, index) => value === expected[index])
+    )
+    const topTrackRef = `track:${snapshot.rankedTracks[0]}`
+    const secondTrackRef = `track:${snapshot.rankedTracks[1]}`
+    const directionInterestRef = `interest:${snapshot.selectedInterests[0]!.key}`
+    const learningInterest = snapshot.selectedInterests.find(interest => (
+      interest.group === 'work' || interest.group === 'result'
+    ))!
+    const careerInterest = snapshot.selectedInterests.find(interest => interest.group === 'career')!
+    const courseRefs = snapshot.resources.course.slice(0, 2).map(resource => `resource:${resource.id}`)
+    const activity = snapshot.resources.project[0] ?? snapshot.resources.extracurricular[0]
+    const activityRef = activity === undefined ? null : `resource:${activity.id}`
+    const careerRef = snapshot.resources.career[0] === undefined
+      ? null
+      : `resource:${snapshot.resources.career[0].id}`
+    const studentWorkRef = snapshot.resources.student_work[0] === undefined
+      ? null
+      : `resource:${snapshot.resources.student_work[0].id}`
+    const primaryFacultyRefs = [
+      `faculty:primary:${snapshot.faculty.primary.id}:name`,
+      `faculty:primary:${snapshot.faculty.primary.id}:title`,
+      `faculty:primary:${snapshot.faculty.primary.id}:expertise`,
+    ]
+    const firstSpecialist = snapshot.faculty.specialists[0]
+    const specialistFacultyRefs = firstSpecialist === undefined
+      ? []
+      : [
+          `faculty:specialist:${firstSpecialist.id}:name`,
+          `faculty:specialist:${firstSpecialist.id}:title`,
+          `faculty:specialist:${firstSpecialist.id}:expertise`,
+        ]
+
+    const directionEvidence = narrative.sentences[0].evidenceIds
+    const directionValid = sameEvidence(directionEvidence, [directionInterestRef, topTrackRef])
+      || sameEvidence(directionEvidence, [directionInterestRef, topTrackRef, secondTrackRef])
+
+    const learningEvidence = narrative.sentences[1].evidenceIds
+    const learningCourseValid = learningEvidence.length >= 1
+      && learningEvidence.length <= 2
+      && learningEvidence.every(ref => courseRefs.includes(ref))
+    const learningCourseActivityValid = activityRef !== null
+      && learningEvidence.length >= 2
+      && learningEvidence.length <= 3
+      && learningEvidence.at(-1) === activityRef
+      && learningEvidence.slice(0, -1).every(ref => courseRefs.includes(ref))
+    const learningFallbackValid = sameEvidence(learningEvidence, [
+      `interest:${learningInterest.key}`,
+      topTrackRef,
+    ])
+
+    const careerEvidence = narrative.sentences[2].evidenceIds
+    const careerResourceValid = careerRef !== null && (
+      sameEvidence(careerEvidence, [careerRef])
+      || (studentWorkRef !== null && sameEvidence(careerEvidence, [careerRef, studentWorkRef]))
+    )
+    const careerFallbackValid = sameEvidence(careerEvidence, [
+      `interest:${careerInterest.key}`,
+      topTrackRef,
+    ])
+
+    const facultyEvidence = narrative.sentences[3].evidenceIds
+    const facultyValid = sameEvidence(facultyEvidence, primaryFacultyRefs)
+      || (specialistFacultyRefs.length === 3
+        && sameEvidence(facultyEvidence, [...primaryFacultyRefs, ...specialistFacultyRefs]))
+
+    const slotValidity = [
+      directionValid,
+      learningCourseValid || learningCourseActivityValid || learningFallbackValid,
+      careerResourceValid || careerFallbackValid,
+      facultyValid,
+    ]
+    slotValidity.forEach((valid, sentenceIndex) => {
+      if (!valid) {
+        context.addIssue({
+          code: 'custom',
+          message: '진로 제안 근거는 문장 슬롯의 승인 사실 구조와 정확히 일치해야 합니다.',
+          path: ['careerNarrative', 'sentences', sentenceIndex, 'evidenceIds'],
+        })
+      }
+    })
+  }
+
   const snapshotBytes = serializedUtf8ByteLength(snapshot)
   if (snapshotBytes === null || snapshotBytes > resultSnapshotMaxBytes) {
     context.addIssue({
@@ -430,7 +527,14 @@ export const resultSnapshotSchema = z.object({
       message: `결과 스냅샷은 UTF-8 ${resultSnapshotMaxBytes}바이트 이하여야 합니다.`,
     })
   }
-})
+}
+
+export const legacyResultSnapshotSchema = resultSnapshotCoreObjectSchema
+  .superRefine(refineResultSnapshot)
+
+export const resultSnapshotSchema = resultSnapshotCoreObjectSchema.extend({
+  careerNarrative: careerNarrativeSchema,
+}).strict().superRefine(refineResultSnapshot)
 
 const deepFreeze = <Value>(value: Value): Value => {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
@@ -446,4 +550,9 @@ const deepFreeze = <Value>(value: Value): Value => {
 export const decodeResultSnapshot = (input: unknown): ResultSnapshot => {
   const result = resultSnapshotSchema.parse(input)
   return deepFreeze(result) as ResultSnapshot
+}
+
+export const decodeLegacyResultSnapshot = (input: unknown): ResultSnapshotCore => {
+  const result = legacyResultSnapshotSchema.parse(input)
+  return deepFreeze(result) as ResultSnapshotCore
 }

@@ -4,8 +4,17 @@ import { readFileSync } from 'node:fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { expect, test, type Page } from '@playwright/test'
 
+import {
+  buildCareerNarrativeBrief,
+  buildDeterministicCareerNarrativeChoice,
+  renderCareerNarrative,
+} from '../../server/modules/assessment/career-narrative'
 import { decodeResultSnapshot } from '../../shared/schemas/result'
-import type { FacultyResult, ResultSnapshot } from '../../shared/types/result'
+import type {
+  FacultyResult,
+  ResultSnapshot,
+  ResultSnapshotCore,
+} from '../../shared/types/result'
 import { makeResultSnapshot } from '../fixtures/result'
 import { registerAndLoginStudent, uniqueAssessmentPhone } from './support/student'
 
@@ -129,14 +138,24 @@ const resultSnapshot = (
   specialist: TestFaculty,
 ): ResultSnapshot => {
   const base = makeResultSnapshot()
-  return decodeResultSnapshot({
-    ...base,
+  const { careerNarrative: _ignored, ...baseCore } = base
+  const core: ResultSnapshotCore = {
+    ...baseCore,
     completedAt: new Date().toISOString(),
     faculty: {
       primary: { ...facultySnapshot(base.faculty.primary, primary), role: 'primary' },
       backup: { ...facultySnapshot(base.faculty.backup, backup), role: 'backup' },
       specialists: [{ ...facultySnapshot(base.faculty.specialists[0]!, specialist), role: 'specialist' }],
     },
+  }
+  const brief = buildCareerNarrativeBrief(core)
+  return decodeResultSnapshot({
+    ...core,
+    careerNarrative: renderCareerNarrative(
+      brief,
+      buildDeterministicCareerNarrativeChoice(brief),
+      'deterministic',
+    ),
   })
 }
 

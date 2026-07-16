@@ -1,5 +1,10 @@
 import { decodeResultSnapshot } from '../../shared/schemas/result'
-import type { ResultSnapshot } from '../../shared/types/result'
+import {
+  buildCareerNarrativeBrief,
+  buildDeterministicCareerNarrativeChoice,
+  renderCareerNarrative,
+} from '../../server/modules/assessment/career-narrative'
+import type { ResultSnapshot, ResultSnapshotCore } from '../../shared/types/result'
 
 const sourceDate = '2026-07-14'
 const selectedLabel = '제품·패션·광고 이미지 만들기'
@@ -19,7 +24,7 @@ const course = (id: number, gradeYear: 1 | 2 | 3 | 4, title: string, term: strin
 
 const courses = [
   course(101, 1, '기초사진실기', '1학기'),
-  course(102, 2, '응용 디지털 촬영', '2학기'),
+  course(102, 2, '스튜디오 조명 실기', '2학기'),
   course(103, 3, '커머셜 포토그라피 심화 워크숍', '2학기'),
   course(104, 4, '캡스톤 디자인 2', '1학기'),
 ] as const
@@ -164,11 +169,23 @@ const snapshotInput = () => ({
   },
 })
 
-export const makeResultSnapshot = (): ResultSnapshot => decodeResultSnapshot(snapshotInput())
+const decodeCoreWithNarrative = (core: ResultSnapshotCore): ResultSnapshot => {
+  const brief = buildCareerNarrativeBrief(core)
+  return decodeResultSnapshot({
+    ...core,
+    careerNarrative: renderCareerNarrative(
+      brief,
+      buildDeterministicCareerNarrativeChoice(brief),
+      'deterministic',
+    ),
+  })
+}
+
+export const makeResultSnapshot = (): ResultSnapshot => decodeCoreWithNarrative(snapshotInput())
 
 export const makeEmptyResultSnapshot = (): ResultSnapshot => {
   const snapshot = snapshotInput()
-  return decodeResultSnapshot({
+  return decodeCoreWithNarrative({
     ...snapshot,
     learningPath: [
       { year: 1, resources: [] },

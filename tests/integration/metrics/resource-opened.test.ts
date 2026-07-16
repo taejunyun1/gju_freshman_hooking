@@ -121,6 +121,29 @@ describe('resource_opened browser event', () => {
     )
   })
 
+  it('accepts an owned legacy snapshot without persisting its in-memory narrative upgrade', async () => {
+    const current = makeResultSnapshot()
+    const { careerNarrative: _removed, ...legacy } = current
+    const loadOwnedAssessment = vi.fn(async () => ownedAssessment(legacy))
+    const { handler, writes } = createHandler({ loadOwnedAssessment })
+    const event: EventInput = { body: resourceBody(), sessionToken: 'owner-session' }
+
+    const response = await handler(event)
+
+    expect(response).toEqual({ data: { accepted: true }, requestId })
+    expect(writes).toEqual([
+      expect.objectContaining({
+        eventName: 'resource_opened',
+        properties: {
+          assessment_id: 701,
+          resource_id: 201,
+          resource_type: 'equipment',
+        },
+      }),
+    ])
+    expect(loadOwnedAssessment).toHaveBeenCalledOnce()
+  })
+
   it('uses archived campaign A from the owned result even when current cookie B is active', async () => {
     const getCampaignId = vi.fn(async () => 29 as never)
     const { handler, writes } = createHandler({

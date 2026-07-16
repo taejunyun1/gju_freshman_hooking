@@ -321,13 +321,24 @@ const reasonFor = (
 ): string => {
   const key = strongestFacultyEvidenceKey(student, candidate)
   const label = student.selectedLabels[key]!
+  let reason: string
   if (role === 'primary') {
-    return `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴보는 추천 총괄교수입니다.`
+    reason = `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴보는 추천 총괄교수입니다.`
+  }
+  else if (role === 'backup') {
+    reason = `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴볼 예비 상담교수로 추천합니다.`
+  }
+  else {
+    reason = `선택한 ‘${label}’ 관심은 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 연결되어 선택적으로 함께 살펴볼 전문 연계입니다.`
+  }
+  if (reason.length <= 1_000) return reason
+  if (role === 'primary') {
+    return `${candidate.name} ${candidate.title}와 선택한 관심의 전체 학습경로를 함께 살펴보는 추천 총괄교수입니다.`
   }
   if (role === 'backup') {
-    return `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴볼 예비 상담교수로 추천합니다.`
+    return `${candidate.name} ${candidate.title}와 선택한 관심을 함께 살펴볼 예비 상담교수로 추천합니다.`
   }
-  return `선택한 ‘${label}’ 관심은 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 연결되어 선택적으로 함께 살펴볼 전문 연계입니다.`
+  return `${candidate.name} ${candidate.title}와 선택한 관심을 선택적으로 함께 살펴볼 전문 연계입니다.`
 }
 
 const resultFor = <Role extends 'primary' | 'backup' | 'specialist'>(

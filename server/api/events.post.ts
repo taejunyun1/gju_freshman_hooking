@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { selectionLimits } from '../../shared/schemas/assessment'
-import { decodeResultSnapshot } from '../../shared/schemas/result'
 import type { ApiFailure, ApiSuccess } from '../../shared/types/api'
 import { resourceTypes } from '../../shared/types/domain'
+import { decodeStoredResultSnapshot } from '../modules/assessment/stored-result'
 import { createSupabaseStudentSessionReader } from '../modules/identity/service'
 import { createEventWriter, type EventWriter } from '../modules/metrics/events'
 import { getAnonymousVisitorId } from '../utils/anonymous-visitor'
@@ -198,7 +198,7 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
         throw new Error('EVENT_STORE_INVALID')
       }
 
-      const snapshot = decodeResultSnapshot(stored.resultSnapshot)
+      const snapshot = decodeStoredResultSnapshot(stored.resultSnapshot)
       const resourceExists = Object.values(snapshot.resources)
         .flat()
         .some(resource => resource.id === resourceEvent.resourceId

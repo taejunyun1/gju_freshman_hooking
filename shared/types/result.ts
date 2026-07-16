@@ -4,6 +4,7 @@ import type {
   ResourceType,
   TrackKey,
 } from './domain'
+import type { CareerNarrative } from './career-narrative'
 
 export type SelectedInterest = {
   readonly [Group in QuestionGroup]: {
@@ -126,4 +127,7 @@ export interface ResultSnapshot {
   ]
   readonly resources: ResultResources
   readonly faculty: ResultFaculty
+  readonly careerNarrative: CareerNarrative
 }
+
+export type ResultSnapshotCore = Omit<ResultSnapshot, 'careerNarrative'>

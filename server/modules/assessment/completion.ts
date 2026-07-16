@@ -13,7 +13,12 @@ import type {
   QuestionGroup,
   TrackKey,
 } from '../../../shared/types/domain'
-import type { ResultResource, ResultSnapshot, SelectedInterest } from '../../../shared/types/result'
+import type {
+  ResultResource,
+  ResultSnapshot,
+  ResultSnapshotCore,
+  SelectedInterest,
+} from '../../../shared/types/result'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { createSupabaseStudentSessionReader } from '../identity/service'
@@ -33,8 +38,14 @@ import {
   rankResources,
   type ResourceCandidate,
 } from '../matching/resources'
+import {
+  buildCareerNarrativeBrief,
+  buildDeterministicCareerNarrativeChoice,
+  renderCareerNarrative,
+} from './career-narrative'
 import { createAssessmentCatalogRevision } from './catalog-revision'
 import { AssessmentScoringError, scoreAssessment } from './scoring'
+import { decodeStoredResultSnapshot } from './stored-result'
 
 const SUBMIT_ROUTE = '/api/assessment/submit' as const
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
@@ -602,15 +613,29 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         faculty: facultyRecommendation.facultyFit,
       })
       const completedAt = (dependencies.now ?? (() => new Date().toISOString()))()
-      const resultSnapshot = decodeResultSnapshot({
+      const resultSnapshotCore: ResultSnapshotCore = {
         completedAt,
         selectedInterests,
         trackScores: scored.trackScores,
-        rankedTracks: scored.rankedTracks,
+        rankedTracks: [
+          scored.rankedTracks[0]!,
+          scored.rankedTracks[1]!,
+          scored.rankedTracks[2]!,
+          scored.rankedTracks[3]!,
+        ],
         environmentScore,
         learningPath,
         resources,
         faculty,
+      }
+      const narrativeBrief = buildCareerNarrativeBrief(resultSnapshotCore)
+      const resultSnapshot = decodeResultSnapshot({
+        ...resultSnapshotCore,
+        careerNarrative: renderCareerNarrative(
+          narrativeBrief,
+          buildDeterministicCareerNarrativeChoice(narrativeBrief),
+          'deterministic',
+        ),
       })
       const completed = await dependencies.completeAssessment({
         prospectId: session.prospectId,
@@ -657,7 +682,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       })
       if (!stored) throw new AppError('RESULT_NOT_FOUND')
       const row = validateStoredAssessment(stored)
-      const snapshot = decodeResultSnapshot(row.resultSnapshot)
+      const snapshot = decodeStoredResultSnapshot(row.resultSnapshot)
       await recordSafely(dependencies.recordEvent, {
         anonymousId: context.anonymousId,
         campaignId: row.campaignId,
@@ -686,7 +711,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       if (!Array.isArray(rows)) throw new Error('ASSESSMENT_STORE_INVALID')
       const parsed = rows.map((value) => {
         const row = validateStoredAssessment(value)
-        const snapshot = decodeResultSnapshot(row.resultSnapshot)
+        const snapshot = decodeStoredResultSnapshot(row.resultSnapshot)
         return { row, snapshot }
       })
       parsed.sort((left, right) => (

@@ -19,11 +19,11 @@ import {
   type AdminExportStudent,
   type AdminExportFailureCode,
 } from '../../../shared/schemas/admin-export'
-import { decodeResultSnapshot } from '../../../shared/schemas/result'
 import { AppError } from '../../utils/app-error'
 import { bytesFromPostgresBytea } from '../../utils/postgres-bytea'
 import { base64urlEncode, decodeBase64urlSecret } from '../../utils/web-crypto'
 import { getServerSupabaseClient } from '../../utils/supabase'
+import { decodeStoredResultSnapshot } from '../assessment/stored-result'
 import { normalizeKoreanPhone, revealPhone } from '../identity/phone'
 
 const PAGE_SIZE = 1_000 as const
@@ -374,7 +374,9 @@ const decodeStudentExportRow = async (
 ): Promise<ExportRow<AdminExportStudent>> => {
   try {
     const row = rawStudentRowSchema.parse(raw)
-    const snapshot = row.latest_result_snapshot === null ? null : decodeResultSnapshot(row.latest_result_snapshot)
+    const snapshot = row.latest_result_snapshot === null
+      ? null
+      : decodeStoredResultSnapshot(row.latest_result_snapshot)
     const phone = normalizeKoreanPhone(await decryptPhone({
       ciphertext: bytesFromPostgresBytea(row.phone_ciphertext),
       iv: bytesFromPostgresBytea(row.phone_iv),
@@ -418,7 +420,7 @@ const rawAssessmentRowSchema = z.object({
 export const decodeAssessmentExportRow = (raw: unknown): ExportRow<AdminExportAssessment> => {
   try {
     const row = rawAssessmentRowSchema.parse(raw)
-    const snapshot = decodeResultSnapshot(row.result_snapshot)
+    const snapshot = decodeStoredResultSnapshot(row.result_snapshot)
     const sequence = row.sequence ?? [...row.prospect.assessments!]
       .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id - right.id)
       .findIndex(assessment => assessment.id === row.id) + 1

@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createAssessmentHistoryHandler } from '../../../server/api/assessment/history.get'
 import { createOwnedResultHandler } from '../../../server/api/result/[publicId].get'
+import {
+  buildCareerNarrativeBrief,
+  buildDeterministicCareerNarrativeChoice,
+  renderCareerNarrative,
+} from '../../../server/modules/assessment/career-narrative'
 import { createAssessmentCompletionService } from '../../../server/modules/assessment/completion'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
-import type { ResultSnapshot } from '../../../shared/types/result'
+import type { ResultSnapshot, ResultSnapshotCore } from '../../../shared/types/result'
 
 vi.hoisted(() => {
   Object.assign(globalThis, { defineEventHandler: (handler: unknown) => handler })
@@ -24,7 +29,7 @@ const snapshotFixture = (
 ): ResultSnapshot => {
   const remaining = ['documentary', 'art_photo', 'commercial', 'video']
     .filter(track => track !== topTrack) as Array<'documentary' | 'art_photo' | 'commercial' | 'video'>
-  return decodeResultSnapshot({
+  const core: ResultSnapshotCore = {
     completedAt,
     selectedInterests: [
       { group: 'work', key: 'work.commercial_image', label: '제품·패션·광고 이미지 만들기' },
@@ -80,6 +85,15 @@ const snapshotFixture = (
         publicContacts: {},
       }],
     },
+  }
+  const brief = buildCareerNarrativeBrief(core)
+  return decodeResultSnapshot({
+    ...core,
+    careerNarrative: renderCareerNarrative(
+      brief,
+      buildDeterministicCareerNarrativeChoice(brief),
+      'deterministic',
+    ),
   })
 }
 
@@ -190,6 +204,40 @@ describe('owned result API', () => {
       requestId,
     })
     expect(JSON.stringify(metric)).not.toMatch(/label|reason|phone|email|selected|weight|response/u)
+  })
+
+  it('upgrades an owned legacy snapshot in memory without persisting the compatibility result', async () => {
+    const current = snapshotFixture()
+    const { careerNarrative: _removed, ...legacy } = current
+    const loadOwnedAssessment = vi.fn(async () => ownedRow(701, ownedPublicId, legacy))
+    const completeAssessment = vi.fn(async () => ({
+      assessmentId: 701,
+      publicId: ownedPublicId,
+      created: false,
+    }))
+    const service = createAssessmentCompletionService(serviceDependencies({
+      completeAssessment,
+      loadOwnedAssessment,
+    }))
+    const firstEvent: RequestEvent = {
+      publicId: ownedPublicId,
+      sessionToken: ownerToken,
+      headers: {},
+    }
+    const secondEvent: RequestEvent = {
+      publicId: ownedPublicId,
+      sessionToken: ownerToken,
+      headers: {},
+    }
+
+    const first = await resultHandler(service)(firstEvent)
+    const second = await resultHandler(service)(secondEvent)
+
+    expect(first.data.careerNarrative).toEqual(second.data.careerNarrative)
+    expect(first.data.careerNarrative.source).toBe('deterministic')
+    expect(first.data.careerNarrative.sentences).toHaveLength(4)
+    expect(completeAssessment).not.toHaveBeenCalled()
+    expect(loadOwnedAssessment).toHaveBeenCalledTimes(2)
   })
 
   it('makes a malformed, missing, and foreign UUID the same RESULT_NOT_FOUND 404', async () => {

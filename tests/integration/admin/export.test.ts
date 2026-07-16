@@ -298,6 +298,28 @@ describe('administrator export contracts', () => {
     })).toThrowError('ADMIN_EXPORT_STORE_INVALID')
   })
 
+  it('projects a legacy result snapshot through the frozen in-memory narrative upgrade', () => {
+    const current = makeResultSnapshot()
+    const { careerNarrative: _removed, ...legacy } = current
+    const raw = {
+      id: 82,
+      created_at: createdAt,
+      completed_at: createdAt,
+      result_snapshot: legacy,
+      prospect: {
+        id: 42,
+        nickname: '선명한프레임42',
+        assessments: [{ id: 82, created_at: createdAt }],
+      },
+    }
+
+    const first = decodeAssessmentExportRow(raw)
+    const second = decodeAssessmentExportRow(raw)
+
+    expect(first).toEqual(second)
+    expect(first.item.recommendedResources).toContain('기초사진실기')
+  })
+
   it('strictly projects counseling recommendation snapshots and keeps result absent', () => {
     const raw = {
       id: 91,
