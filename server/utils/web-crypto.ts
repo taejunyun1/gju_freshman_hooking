@@ -64,6 +64,15 @@ export const hmacSha256 = async (value: Uint8Array, keyBytes: Uint8Array): Promi
   return new Uint8Array(signature)
 }
 
+export const verifyHmacSha256 = async (
+  value: Uint8Array,
+  signature: Uint8Array,
+  keyBytes: Uint8Array,
+): Promise<boolean> => {
+  const key = await crypto.subtle.importKey('raw', toCryptoBytes(keyBytes), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'])
+  return crypto.subtle.verify('HMAC', key, toCryptoBytes(signature), toCryptoBytes(value))
+}
+
 export const encryptAesGcm = async (value: Uint8Array, keyBytes: Uint8Array): Promise<EncryptedValue> => {
   requireAes256Key(keyBytes)
   const iv = toCryptoBytes(randomBytes(12))

@@ -45,7 +45,7 @@ export const campaignCreateSchema = z.object({
   code: campaignCodeInputSchema,
   name: safeText(100),
   channel: z.enum(campaignChannels),
-  status: z.enum(campaignStatuses).default('draft'),
+  status: z.enum(['draft', 'active']).default('draft'),
   startsAt: timestampSchema.nullable().optional(),
   endsAt: timestampSchema.nullable().optional(),
   sentCount: z.number().int().min(0).max(2_147_483_647).default(0),
@@ -55,6 +55,51 @@ export const campaignCreateSchema = z.object({
     context.addIssue({ code: 'custom', path: ['endsAt'], message: '종료 시각은 시작 시각보다 뒤여야 합니다.' })
   }
 })
+
+const storedText = (maximum: number) => z.string().min(1).max(maximum)
+  .refine(value => value === value.trim(), 'stored text must already be trimmed')
+  .refine(hasNoC0OrC1Controls, 'stored text cannot contain control characters')
+
+export const campaignCodeSchema = z.string().min(3).max(60)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)
+
+export const adminCampaignStoredSchema = z.object({
+  id: z.number().int().positive().safe(),
+  code: campaignCodeSchema,
+  name: storedText(100),
+  channel: z.enum(campaignChannels),
+  status: z.enum(campaignStatuses),
+  startsAt: timestampSchema.nullable(),
+  endsAt: timestampSchema.nullable(),
+  sentCount: z.number().int().min(0).max(2_147_483_647),
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+}).strict().superRefine((campaign, context) => {
+  if (campaign.startsAt && campaign.endsAt
+    && Date.parse(campaign.endsAt) <= Date.parse(campaign.startsAt)) {
+    context.addIssue({ code: 'custom', path: ['endsAt'], message: 'stored campaign dates are reversed' })
+  }
+  if (Date.parse(campaign.updatedAt) < Date.parse(campaign.createdAt)) {
+    context.addIssue({ code: 'custom', path: ['updatedAt'], message: 'stored campaign version is invalid' })
+  }
+})
+
+export const adminCampaignMetricsSchema = z.object({
+  version: z.literal('s6-daily-metrics-v1'),
+  availability: z.literal('pending'),
+  visits: z.null(),
+  assessmentCompletions: z.null(),
+  counselingConversions: z.null(),
+}).strict()
+
+export const adminCampaignSchema = adminCampaignStoredSchema
+export const adminCampaignListItemSchema = adminCampaignStoredSchema.extend({
+  metrics: adminCampaignMetricsSchema,
+}).strict()
+
+export const campaignArchiveSchema = z.object({
+  expectedUpdatedAt: timestampSchema,
+}).strict()
 
 export const exportFilterSnapshotSchema = z.object({
   query: safeText(100)
@@ -118,5 +163,8 @@ export const exportJobUpdateSchema = z.object({
 })
 
 export type CampaignCreate = z.infer<typeof campaignCreateSchema>
+export type AdminCampaignStored = z.infer<typeof adminCampaignStoredSchema>
+export type AdminCampaign = z.infer<typeof adminCampaignListItemSchema>
+export type CampaignArchive = z.infer<typeof campaignArchiveSchema>
 export type ExportFilterSnapshot = z.infer<typeof exportFilterSnapshotSchema>
 export type ExportJobUpdate = z.infer<typeof exportJobUpdateSchema>

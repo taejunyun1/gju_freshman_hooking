@@ -76,7 +76,7 @@ const serviceDependencies = (
     : null),
   loadOwnedAssessment: vi.fn(async ({ prospectId, publicId }: { prospectId: number, publicId: string }) => (
     prospectId === 42 && publicId === assessmentPublicId
-      ? { assessmentId: 17, publicId: assessmentPublicId }
+      ? { assessmentId: 17, publicId: assessmentPublicId, campaignId: 17 }
       : null
   )),
   createRequest: vi.fn(async () => ({ requestId: 73, publicId: counselingPublicId, created: true })),
@@ -89,6 +89,7 @@ const requestContext = {
   anonymousId,
   requestId,
   sessionToken,
+  campaignId: 29 as never,
 }
 
 type FakeQueryResponse = {
@@ -312,6 +313,7 @@ describe('POST /api/counseling', () => {
     expect(dependencies.recordEvent).toHaveBeenCalledOnce()
     expect(dependencies.recordEvent).toHaveBeenCalledWith({
       anonymousId,
+      campaignId: 17,
       eventName: 'counseling_requested',
       path: '/api/counseling',
       prospectId: 42,
@@ -325,7 +327,7 @@ describe('POST /api/counseling', () => {
     const dependencies = serviceDependencies({
       loadOwnedAssessment: vi.fn(async ({ prospectId, publicId }) => (
         prospectId === 42 && publicId === differentAssessmentPublicId
-          ? { assessmentId: 18, publicId: differentAssessmentPublicId }
+          ? { assessmentId: 18, publicId: differentAssessmentPublicId, campaignId: 18 }
           : null
       )),
       createRequest: vi.fn(async () => ({
@@ -372,6 +374,7 @@ describe('POST /api/counseling', () => {
     const loadOwnedAssessment = vi.fn(async () => ({
       assessmentId: 17,
       publicId: assessmentPublicId,
+      campaignId: 17,
     }))
     const service = createCounselingService(serviceDependencies({ loadOwnedAssessment }))
 
@@ -403,6 +406,7 @@ describe('POST /api/counseling', () => {
       loadOwnedAssessment: vi.fn(async () => ({
         assessmentId: 17,
         publicId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        campaignId: 17,
       })),
     }))
     const wrongProspect = createCounselingService(serviceDependencies({
@@ -608,7 +612,7 @@ describe('Supabase counseling adapter boundaries', () => {
     const fake = createFakeSupabaseClient({
       queryResponses: {
         assessments: [{
-          data: { id: 17, public_id: assessmentPublicId },
+          data: { id: 17, public_id: assessmentPublicId, campaign_id: 17 },
           error: null,
         }],
       },
@@ -618,10 +622,10 @@ describe('Supabase counseling adapter boundaries', () => {
     await expect(dependencies.loadOwnedAssessment({
       prospectId: 42,
       publicId: assessmentPublicId,
-    })).resolves.toEqual({ assessmentId: 17, publicId: assessmentPublicId })
+    })).resolves.toEqual({ assessmentId: 17, publicId: assessmentPublicId, campaignId: 17 })
     expect(fake.calls).toEqual([{
       table: 'assessments',
-      select: 'id,public_id',
+      select: 'id,public_id,campaign_id',
       filters: [
         { column: 'public_id', value: assessmentPublicId },
         { column: 'prospect_id', value: 42 },
@@ -762,7 +766,7 @@ describe('Supabase counseling adapter boundaries', () => {
     const assessmentFake = createFakeSupabaseClient({
       queryResponses: {
         assessments: [{
-          data: { id: 17, public_id: assessmentPublicId, phone: '010-0000-0000' },
+          data: { id: 17, public_id: assessmentPublicId, campaign_id: 17, phone: '010-0000-0000' },
           error: null,
         }],
       },

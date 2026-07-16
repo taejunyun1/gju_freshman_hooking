@@ -304,11 +304,13 @@ describe('POST /api/events', () => {
 
   it('stops after the first denied rate bucket and before optional auth or insert', async () => {
     const order: string[] = []
+    const getCampaignId = vi.fn(async () => 17 as never)
     const { handler } = createHandler({
       consumeRateLimit: async () => {
         order.push('rate-ip')
         return false
       },
+      getCampaignId,
       readStudentSession: async () => {
         order.push('session')
         return null
@@ -320,6 +322,7 @@ describe('POST /api/events', () => {
     const response = await handler(event)
 
     expect(order).toEqual(['rate-ip'])
+    expect(getCampaignId).not.toHaveBeenCalled()
     expect(event.status).toBe(429)
     expect(response.error.code).toBe('RATE_LIMITED')
   })
@@ -327,12 +330,14 @@ describe('POST /api/events', () => {
   it('stops after a denied anonymous bucket and before optional auth or insert', async () => {
     const order: string[] = []
     let rateCalls = 0
+    const getCampaignId = vi.fn(async () => 17 as never)
     const { handler } = createHandler({
       consumeRateLimit: async () => {
         rateCalls += 1
         order.push(rateCalls === 1 ? 'rate-ip' : 'rate-anonymous')
         return rateCalls === 1
       },
+      getCampaignId,
       readStudentSession: async () => {
         order.push('session')
         return null
@@ -344,6 +349,7 @@ describe('POST /api/events', () => {
     const response = await handler(event)
 
     expect(order).toEqual(['rate-ip', 'rate-anonymous'])
+    expect(getCampaignId).not.toHaveBeenCalled()
     expect(event.status).toBe(429)
     expect(response.error.code).toBe('RATE_LIMITED')
   })

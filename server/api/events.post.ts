@@ -12,6 +12,7 @@ import { RequestBodyLimitError, readBoundedRequestBody } from '../utils/bounded-
 import { studentSessionCookie } from '../utils/student-request-security'
 import { getServerSupabaseClient } from '../utils/supabase'
 import { getTrustedClientIp } from '../utils/trusted-client-ip'
+import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../utils/campaign-attribution'
 
 const EVENT_ROUTE = '/api/events' as const
 const MAX_BODY_BYTES = 8_192
@@ -53,12 +54,39 @@ type StudentSession = {
 
 type OwnedAssessmentEventRecord = {
   assessmentId: number
+  campaignId: number | null
   resultSnapshot: unknown
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+)
+
+export const decodeOwnedAssessmentEventRow = (
+  raw: unknown,
+  expected: { prospectId: number, publicId: string },
+): OwnedAssessmentEventRecord => {
+  if (!isRecord(raw)
+    || Object.keys(raw).sort().join('|') !== 'campaign_id|id|prospect_id|public_id|result_snapshot'
+    || !Number.isSafeInteger(raw.id)
+    || (raw.id as number) <= 0
+    || raw.public_id !== expected.publicId
+    || raw.prospect_id !== expected.prospectId
+    || (raw.campaign_id !== null
+      && (!Number.isSafeInteger(raw.campaign_id) || (raw.campaign_id as number) <= 0))) {
+    throw new Error('EVENT_STORE_INVALID')
+  }
+  return {
+    assessmentId: raw.id as number,
+    campaignId: raw.campaign_id as number | null,
+    resultSnapshot: raw.result_snapshot,
+  }
 }
 
 type EventsHandlerDependencies = {
   consumeRateLimit: (input: { key: string, route: string, limit: number, window: string }) => Promise<boolean>
   getAnonymousId: (event: unknown) => string
+  getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContentType: (event: unknown) => string | undefined
   getIp: (event: unknown) => string
   getOrigin: (event: unknown) => string | undefined
@@ -165,6 +193,10 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       if (!Number.isSafeInteger(stored.assessmentId) || stored.assessmentId <= 0) {
         throw new Error('EVENT_STORE_INVALID')
       }
+      if (stored.campaignId !== null
+        && (!Number.isSafeInteger(stored.campaignId) || stored.campaignId <= 0)) {
+        throw new Error('EVENT_STORE_INVALID')
+      }
 
       const snapshot = decodeResultSnapshot(stored.resultSnapshot)
       const resourceExists = Object.values(snapshot.resources)
@@ -183,6 +215,7 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       }
       await dependencies.writeEvent({
         anonymousId,
+        campaignId: stored.campaignId,
         eventName: resourceEvent.eventName,
         path: EVENT_ROUTE,
         properties,
@@ -191,6 +224,10 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       })
       return { data: { accepted: true }, requestId }
     }
+
+    const verifiedCampaignId = dependencies.getCampaignId
+      ? await dependencies.getCampaignId(event)
+      : null
 
     if (sessionToken) {
       try {
@@ -212,6 +249,7 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       properties,
       prospectId,
       requestId,
+      ...(verifiedCampaignId === null ? {} : { verifiedCampaignId }),
     })
 
     return { data: { accepted: true }, requestId }
@@ -251,6 +289,7 @@ export const createServerEventsHandler = (
       return data === true
     },
     getAnonymousId: getAnonymousVisitorId,
+    getCampaignId: getServerVerifiedCampaignId,
     getContentType: requestEvent => getHeader(requestEvent as never, 'content-type'),
     getIp: getTrustedClientIp,
     getOrigin: requestEvent => getHeader(requestEvent as never, 'origin'),
@@ -262,23 +301,13 @@ export const createServerEventsHandler = (
     getSessionToken: requestEvent => getCookie(requestEvent as never, studentSessionCookie),
     loadOwnedAssessment: async ({ prospectId, publicId }) => {
       const { data, error } = await client.from('assessments')
-        .select('id,public_id,prospect_id,result_snapshot')
+        .select('id,public_id,prospect_id,campaign_id,result_snapshot')
         .eq('public_id', publicId)
         .eq('prospect_id', prospectId)
         .maybeSingle()
       if (error) throw new Error('EVENT_STORE_UNAVAILABLE')
       if (data === null) return null
-      if (
-        typeof data !== 'object'
-        || !Number.isSafeInteger(data.id)
-        || data.id <= 0
-        || data.public_id !== publicId
-        || data.prospect_id !== prospectId
-        || !('result_snapshot' in data)
-      ) {
-        throw new Error('EVENT_STORE_INVALID')
-      }
-      return { assessmentId: data.id, resultSnapshot: data.result_snapshot }
+      return decodeOwnedAssessmentEventRow(data, { prospectId, publicId })
     },
     readRawBody: readBoundedRequestBody,
     readStudentSession: sessionToken => (

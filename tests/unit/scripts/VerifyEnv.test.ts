@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const script = resolve('scripts/verify-env.mjs')
 const required = {
+  NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
   NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
   NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
   NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',
@@ -30,6 +31,14 @@ describe('Worker environment verifier', () => {
 
   it('accepts a complete runtime contract', () => {
     expect(runVerifier().status).toBe(0)
+  })
+
+  it('requires the dedicated campaign cookie key to encode exactly 32 bytes', () => {
+    const result = runVerifier({ NUXT_CAMPAIGN_COOKIE_KEY: 'short-shared-secret' })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('NUXT_CAMPAIGN_COOKIE_KEY')
+    expect(result.stderr).not.toContain('short-shared-secret')
   })
 
   it.each(['postgres://database.invalid/app', 'postgresql://database.invalid/app'])(

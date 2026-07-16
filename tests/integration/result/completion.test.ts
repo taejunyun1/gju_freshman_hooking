@@ -238,8 +238,8 @@ const context = {
   anonymousId,
   ip: '203.0.113.42',
   requestId,
+  resolveCampaignId: async () => 17,
   sessionToken,
-  campaignId: 17,
 }
 
 const createSubmit = (
@@ -262,14 +262,19 @@ describe('assessment completion service', () => {
     const revision = await createAssessmentCatalogRevision(catalog())
     const dependencies = serviceDependencies()
     const service = createAssessmentCompletionService(dependencies)
+    const resolveCampaignId = vi.fn(async () => 17)
 
-    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+    await expect(service.submitAssessment(envelope(revision), {
+      ...context,
+      resolveCampaignId,
+    })).resolves.toEqual({ publicId })
 
     expect(dependencies.consumeRateLimit).toHaveBeenCalledWith(expect.objectContaining({
       key: 'prospect:42',
       route: '/api/assessment/submit',
     }))
     expect(dependencies.completeAssessment).toHaveBeenCalledOnce()
+    expect(resolveCampaignId).toHaveBeenCalledOnce()
     const persisted = dependencies.completeAssessment.mock.calls[0]![0]
     expect(Object.keys(persisted).sort()).toEqual([
       'campaignId',
@@ -502,6 +507,7 @@ describe('assessment completion service', () => {
 
   it('authenticates before the prospect rate limit and stops before content when denied', async () => {
     const order: string[] = []
+    const resolveCampaignId = vi.fn(async () => 17)
     const dependencies = serviceDependencies({
       getStudentSession: async () => {
         order.push('session')
@@ -519,16 +525,18 @@ describe('assessment completion service', () => {
     const service = createAssessmentCompletionService(dependencies)
     const revision = await createAssessmentCatalogRevision(catalog())
 
-    await expect(service.submitAssessment(envelope(revision), context))
+    await expect(service.submitAssessment(envelope(revision), { ...context, resolveCampaignId }))
       .rejects.toMatchObject({ code: 'RATE_LIMITED' })
     expect(order).toEqual(['session', 'rate'])
+    expect(resolveCampaignId).not.toHaveBeenCalled()
 
     const anonymous = createAssessmentCompletionService(serviceDependencies({
       getStudentSession: async () => null,
       consumeRateLimit: vi.fn(async () => true),
     }))
-    await expect(anonymous.submitAssessment(envelope(revision), context))
+    await expect(anonymous.submitAssessment(envelope(revision), { ...context, resolveCampaignId }))
       .rejects.toMatchObject({ code: 'AUTH_FAILED' })
+    expect(resolveCampaignId).not.toHaveBeenCalled()
   })
 
   it('rejects unknown envelope keys and UUID variants, and fails stale before matching or RPC', async () => {
@@ -536,18 +544,21 @@ describe('assessment completion service', () => {
     const loadResources = vi.fn(async () => resourceCandidates())
     const loadFaculty = vi.fn(async () => facultyCandidates())
     const rpc = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const resolveCampaignId = vi.fn(async () => 17)
     const service = createAssessmentCompletionService(serviceDependencies({
       loadResourceCandidates: loadResources,
       loadFacultyCandidates: loadFaculty,
       completeAssessment: rpc,
     }))
 
-    await expect(service.submitAssessment({ ...envelope(revision), privateField: true }, context))
+    const invalidContext = { ...context, resolveCampaignId }
+    await expect(service.submitAssessment({ ...envelope(revision), privateField: true }, invalidContext))
       .rejects.toMatchObject({ code: 'ASSESSMENT_INVALID' })
-    await expect(service.submitAssessment({ ...envelope(revision), idempotencyKey: idempotencyKey.toUpperCase() }, context))
+    await expect(service.submitAssessment({ ...envelope(revision), idempotencyKey: idempotencyKey.toUpperCase() }, invalidContext))
       .rejects.toMatchObject({ code: 'ASSESSMENT_INVALID' })
-    await expect(service.submitAssessment(envelope(`sha256:${'0'.repeat(64)}`), context))
+    await expect(service.submitAssessment(envelope(`sha256:${'0'.repeat(64)}`), invalidContext))
       .rejects.toMatchObject({ code: 'ASSESSMENT_CATALOG_STALE' })
+    expect(resolveCampaignId).not.toHaveBeenCalled()
     expect(loadResources).not.toHaveBeenCalled()
     expect(loadFaculty).not.toHaveBeenCalled()
     expect(rpc).not.toHaveBeenCalled()

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { VerifiedCampaignId } from '../../utils/campaign-attribution'
 
 export const serverEventNames = [
   'registration_started',
@@ -12,27 +13,40 @@ export const serverEventNames = [
 
 export type ServerEventName = typeof serverEventNames[number]
 
-export type ServerEvent = {
+type ServerEventBase = {
   anonymousId: string
-  eventName: ServerEventName
-  path: '/api/student/register' | '/api/student/login' | '/api/assessment/submit' | '/api/counseling' | `/api/result/${string}`
-  campaignId?: number | null
   prospectId?: number
   properties?: Record<string, unknown>
   requestId: string
 }
+
+type IdentityServerEvent = ServerEventBase & {
+  eventName: 'registration_started' | 'registration_completed' | 'login_succeeded' | 'login_failed'
+  path: '/api/student/register' | '/api/student/login'
+  verifiedCampaignId?: VerifiedCampaignId | null
+}
+
+type AuthoritativeServerEvent = ServerEventBase & {
+  campaignId: number | null
+  eventName: 'assessment_completed' | 'result_viewed' | 'counseling_requested'
+  path: '/api/assessment/submit' | '/api/counseling' | `/api/result/${string}`
+}
+
+export type ServerEvent = IdentityServerEvent | AuthoritativeServerEvent
 
 type ExistingBrowserEvent = {
   anonymousId: string
   eventName: 'landing_viewed' | 'assessment_started' | 'assessment_step_completed'
   path: '/api/events'
   properties: Record<string, unknown>
+  verifiedCampaignId?: VerifiedCampaignId | null
   prospectId?: number
   requestId: string
 }
 
 type ResourceOpenedEvent = {
   anonymousId: string
+  campaignId: number | null
   eventName: 'resource_opened'
   path: '/api/events'
   properties: {
@@ -50,12 +64,20 @@ export type ProductEvent = ServerEvent | BrowserEvent
 export type EventWriter = (event: ProductEvent) => Promise<void>
 
 export const createEventWriter = (client: SupabaseClient): EventWriter => async (event) => {
-  const campaignEligible = event.eventName === 'assessment_completed' || event.eventName === 'result_viewed'
-  const campaignId = campaignEligible
-    && 'campaignId' in event
+  const campaignIsAuthoritative = event.eventName === 'assessment_completed'
+    || event.eventName === 'result_viewed'
+    || event.eventName === 'resource_opened'
+    || event.eventName === 'counseling_requested'
+  const campaignId = campaignIsAuthoritative
+    ? 'campaignId' in event
     && (event.campaignId === null || (Number.isSafeInteger(event.campaignId) && (event.campaignId ?? 0) > 0))
-    ? event.campaignId
-    : null
+      ? event.campaignId
+      : null
+    : 'verifiedCampaignId' in event
+      && (event.verifiedCampaignId === null
+        || (Number.isSafeInteger(event.verifiedCampaignId) && (event.verifiedCampaignId ?? 0) > 0))
+      ? event.verifiedCampaignId
+      : null
   const { error } = await client.from('events').insert({
     anonymous_id: event.anonymousId,
     campaign_id: campaignId,

@@ -225,4 +225,93 @@ describe('POST /api/student/login', () => {
     expect(events[1]).not.toHaveProperty('prospectId')
     expect(JSON.stringify({ success, failed })).not.toContain(anonymousId)
   })
+
+  it.each(['unknown', 'wrong', 'locked', 'completion-race'] as const)(
+    'does not resolve campaign attribution for a %s login failure',
+    async (failureKind) => {
+      const { createIdentityService } = await import('../../../server/modules/identity/service')
+      const backend = createMemoryBackend()
+      const events: Array<Record<string, unknown>> = []
+      backend.dependencies.writeEvent = async event => { events.push(event as unknown as Record<string, unknown>) }
+      if (failureKind === 'completion-race') backend.dependencies.completeLogin = async () => null
+      const identity = createIdentityService(backend.dependencies)
+      let password = 'WRONG99'
+      let phone = '01099999999'
+      if (failureKind !== 'unknown') {
+        const registration = await identity.registerStudent({
+          phone: '01012345678',
+          schoolName: '광주고등학교',
+          applicantStage: 'high3',
+          region: 'gwangju',
+        }, {
+          anonymousId,
+          ip: '203.0.113.4',
+          requestId: '88888888-8888-4888-8888-888888888881',
+        })
+        if (registration.kind !== 'created') throw new Error('TEST_REGISTRATION_FAILED')
+        phone = '01012345678'
+        if (failureKind !== 'wrong') password = registration.initialPassword
+        if (failureKind === 'locked') {
+          const credential = backend.readCredential()
+          if (!credential) throw new Error('TEST_CREDENTIAL_MISSING')
+          credential.lockedUntil = new Date('2026-07-14T10:15:00.000Z')
+        }
+      }
+      events.length = 0
+      const resolveCampaignId = vi.fn(async () => 17 as never)
+
+      await expect(identity.loginStudent({ phone, password }, {
+        anonymousId,
+        ip: '203.0.113.4',
+        requestId: '88888888-8888-4888-8888-888888888882',
+        resolveCampaignId,
+      })).resolves.toEqual({ kind: 'failed' })
+
+      expect(resolveCampaignId).not.toHaveBeenCalled()
+      expect(events).toEqual([expect.objectContaining({
+        eventName: 'login_failed',
+        path: '/api/student/login',
+      })])
+      expect(events[0]).not.toHaveProperty('verifiedCampaignId')
+    },
+  )
+
+  it('resolves campaign attribution exactly once after successful authentication and attributes login_succeeded', async () => {
+    const { createIdentityService } = await import('../../../server/modules/identity/service')
+    const backend = createMemoryBackend()
+    const events: Array<Record<string, unknown>> = []
+    backend.dependencies.writeEvent = async event => { events.push(event as unknown as Record<string, unknown>) }
+    const identity = createIdentityService(backend.dependencies)
+    const registration = await identity.registerStudent({
+      phone: '01012345678',
+      schoolName: '광주고등학교',
+      applicantStage: 'high3',
+      region: 'gwangju',
+    }, {
+      anonymousId,
+      ip: '203.0.113.4',
+      requestId: '99999999-9999-4999-8999-999999999991',
+    })
+    if (registration.kind !== 'created') throw new Error('TEST_REGISTRATION_FAILED')
+    events.length = 0
+    const resolveCampaignId = vi.fn(async () => 17 as never)
+
+    await expect(identity.loginStudent({
+      phone: '01012345678',
+      password: registration.initialPassword,
+    }, {
+      anonymousId,
+      ip: '203.0.113.4',
+      requestId: '99999999-9999-4999-8999-999999999992',
+      resolveCampaignId,
+    })).resolves.toMatchObject({ kind: 'authenticated' })
+
+    expect(resolveCampaignId).toHaveBeenCalledOnce()
+    expect(events).toEqual([expect.objectContaining({
+      eventName: 'login_succeeded',
+      path: '/api/student/login',
+      prospectId: 1,
+      verifiedCampaignId: 17,
+    })])
+  })
 })

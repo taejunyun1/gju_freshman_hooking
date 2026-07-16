@@ -60,8 +60,8 @@ export type AssessmentCompletionContext = {
   anonymousId: string
   ip: string
   requestId: string
+  resolveCampaignId?: () => Promise<number | null>
   sessionToken: string
-  campaignId: number | null
 }
 
 export type OwnedAssessmentContext = {
@@ -521,6 +521,9 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       const labelsByTag = selectedLabelsByTag(selected, scored.interestVector)
       const selectedInterests = resultSelectedInterests(selected)
       const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
+      const campaignId = context.resolveCampaignId
+        ? await Promise.resolve().then(context.resolveCampaignId).catch(() => null)
+        : null
 
       const candidates = await dependencies.loadResourceCandidates()
       assertResourceCandidates(candidates)
@@ -612,7 +615,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       const completed = await dependencies.completeAssessment({
         prospectId: session.prospectId,
         idempotencyKey: input.idempotencyKey,
-        campaignId: context.campaignId,
+        campaignId,
         trackScores: scored.trackScores,
         environmentScore,
         resultSnapshot,
@@ -623,7 +626,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       if (completed.created) {
         await recordSafely(dependencies.recordEvent, {
           anonymousId: context.anonymousId,
-          campaignId: context.campaignId,
+          campaignId,
           eventName: 'assessment_completed',
           path: SUBMIT_ROUTE,
           prospectId: session.prospectId,

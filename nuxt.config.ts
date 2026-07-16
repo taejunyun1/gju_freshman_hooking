@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     phoneHmacKey: '',
     phoneEncryptionKey: '',
     passwordPepper: '',
+    campaignCookieKey: '',
     public: {
       supabasePublishableKey: '',
       supabaseUrl: '',

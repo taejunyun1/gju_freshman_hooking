@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createEventsHandler } from '../../../server/api/events.post'
+import { createEventsHandler, decodeOwnedAssessmentEventRow } from '../../../server/api/events.post'
 import { createEventWriter } from '../../../server/modules/metrics/events'
 import { makeResultSnapshot, resultPublicId } from '../../fixtures/result'
 
@@ -103,6 +103,7 @@ describe('resource_opened browser event', () => {
     expect(loads).toEqual([{ prospectId: 42, publicId: resultPublicId }])
     expect(writes).toEqual([{
       anonymousId,
+      campaignId: 17,
       eventName: 'resource_opened',
       path: '/api/events',
       prospectId: 42,
@@ -118,6 +119,22 @@ describe('resource_opened browser event', () => {
     expect(JSON.stringify(writes[0])).not.toMatch(
       /22222222|connectionReason|selectedInterests|제품|윤태준|062-670-2338|tjyun/u,
     )
+  })
+
+  it('uses archived campaign A from the owned result even when current cookie B is active', async () => {
+    const getCampaignId = vi.fn(async () => 29 as never)
+    const { handler, writes } = createHandler({
+      getCampaignId,
+      loadOwnedAssessment: async () => ownedAssessment(),
+    })
+
+    await handler({ body: resourceBody(), sessionToken: 'owner-session' })
+
+    expect(getCampaignId).not.toHaveBeenCalled()
+    expect(writes).toEqual([
+      expect.objectContaining({ eventName: 'resource_opened', campaignId: 17 }),
+    ])
+    expect(writes[0]).not.toHaveProperty('verifiedCampaignId')
   })
 
   it.each([
@@ -230,6 +247,7 @@ describe('resource_opened browser event', () => {
 
     await writer({
       anonymousId,
+      campaignId: 17,
       eventName: 'resource_opened',
       path: '/api/events',
       prospectId: 42,
@@ -243,7 +261,7 @@ describe('resource_opened browser event', () => {
 
     expect(insert).toHaveBeenCalledWith({
       anonymous_id: anonymousId,
-      campaign_id: null,
+      campaign_id: 17,
       event_name: 'resource_opened',
       path: '/api/events',
       properties: {
@@ -262,5 +280,32 @@ describe('resource_opened browser event', () => {
       'resource_type',
     ])
     expect(JSON.stringify(inserted)).not.toMatch(/22222222|reason|label|contact|faculty/u)
+  })
+
+  it('strictly decodes the selected owned assessment row including its durable campaign', () => {
+    const raw = {
+      id: 701,
+      public_id: resultPublicId,
+      prospect_id: 42,
+      campaign_id: 17,
+      result_snapshot: makeResultSnapshot(),
+    }
+
+    expect(decodeOwnedAssessmentEventRow(raw, {
+      prospectId: 42,
+      publicId: resultPublicId,
+    })).toEqual({
+      assessmentId: 701,
+      campaignId: 17,
+      resultSnapshot: raw.result_snapshot,
+    })
+    expect(() => decodeOwnedAssessmentEventRow({ ...raw, private_note: 'reject' }, {
+      prospectId: 42,
+      publicId: resultPublicId,
+    })).toThrowError('EVENT_STORE_INVALID')
+    expect(() => decodeOwnedAssessmentEventRow({ ...raw, campaign_id: '17' }, {
+      prospectId: 42,
+      publicId: resultPublicId,
+    })).toThrowError('EVENT_STORE_INVALID')
   })
 })

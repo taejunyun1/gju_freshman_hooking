@@ -79,8 +79,10 @@ describe('identity rate limits', () => {
       ...backend.dependencies,
       consumeRateLimit: async () => false,
     })
+    const getCampaignId = vi.fn(async () => 17 as never)
     const login = createLoginHandler({
       identity,
+      getCampaignId,
       getContext: () => requestContext,
       readBody: async (event: { body: unknown }) => event.body,
       setCookie: () => undefined,
@@ -90,6 +92,7 @@ describe('identity rate limits', () => {
 
     expect(await login(event)).toEqual(genericFailure)
     expect(event.status).toBe(401)
+    expect(getCampaignId).not.toHaveBeenCalled()
   })
 
   it('returns generic AUTH_FAILED when the login phone bucket is exhausted', async () => {
@@ -105,8 +108,10 @@ describe('identity rate limits', () => {
         return buckets === 1
       },
     })
+    const getCampaignId = vi.fn(async () => 17 as never)
     const login = createLoginHandler({
       identity,
+      getCampaignId,
       getContext: () => requestContext,
       readBody: async (event: { body: unknown }) => event.body,
       setCookie: () => undefined,
@@ -117,5 +122,63 @@ describe('identity rate limits', () => {
     expect(await login(event)).toEqual(genericFailure)
     expect(event.status).toBe(401)
     expect(buckets).toBe(2)
+    expect(getCampaignId).not.toHaveBeenCalled()
+  })
+
+  it('does not resolve campaign attribution when the registration IP bucket is exhausted', async () => {
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    const { createIdentityService } = await import('../../../server/modules/identity/service')
+    const { createRegisterHandler } = await import('../../../server/api/student/register.post')
+    const backend = createMemoryBackend()
+    const identity = createIdentityService({
+      ...backend.dependencies,
+      consumeRateLimit: async () => false,
+    })
+    const getCampaignId = vi.fn(async () => 17 as never)
+    const register = createRegisterHandler({
+      identity,
+      getCampaignId,
+      getContext: () => requestContext,
+      readBody: async (event: { body: unknown }) => event.body,
+      setStatus: (event: { status?: number }, status: number) => { event.status = status },
+    })
+    const event: { body: unknown, status?: number } = {
+      body: {
+        phone: '01012345678',
+        schoolName: '광주고등학교',
+        applicantStage: 'high3',
+        region: 'gwangju',
+      },
+    }
+
+    expect(await register(event)).toMatchObject({ error: { code: 'RATE_LIMITED' }, requestId })
+    expect(event.status).toBe(429)
+    expect(getCampaignId).not.toHaveBeenCalled()
+  })
+
+  it('resolves campaign attribution once after the registration rate gate accepts', async () => {
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    const { createIdentityService } = await import('../../../server/modules/identity/service')
+    const { createRegisterHandler } = await import('../../../server/api/student/register.post')
+    const backend = createMemoryBackend()
+    const identity = createIdentityService(backend.dependencies)
+    const getCampaignId = vi.fn(async () => 17 as never)
+    const register = createRegisterHandler({
+      identity,
+      getCampaignId,
+      getContext: () => requestContext,
+      readBody: async (event: { body: unknown }) => event.body,
+      setStatus: () => undefined,
+    })
+
+    await expect(register({
+      body: {
+        phone: '01012345678',
+        schoolName: '광주고등학교',
+        applicantStage: 'high3',
+        region: 'gwangju',
+      },
+    })).resolves.toMatchObject({ data: { kind: 'created' }, requestId })
+    expect(getCampaignId).toHaveBeenCalledOnce()
   })
 })

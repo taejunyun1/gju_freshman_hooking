@@ -4,6 +4,7 @@ import { AppError } from '../../utils/app-error'
 import { decodeBase64urlSecret, randomBytes, type RandomBytes } from '../../utils/web-crypto'
 import { bytesFromPostgresBytea, postgresByteaFromBytes } from '../../utils/postgres-bytea'
 import { createEventWriter, type EventWriter } from '../metrics/events'
+import type { VerifiedCampaignId } from '../../utils/campaign-attribution'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { generateNickname } from './nickname'
 import { generateInitialPassword, hashPassword, verifyPassword } from './password'
@@ -19,6 +20,7 @@ export type IdentityRequestContext = {
   anonymousId: string
   ip: string
   requestId: string
+  resolveCampaignId?: () => Promise<VerifiedCampaignId | null>
 }
 
 type StoredProspect = {
@@ -220,6 +222,7 @@ const writeEventSafely = async (
   eventName: 'registration_started' | 'registration_completed' | 'login_succeeded' | 'login_failed',
   path: typeof REGISTER_ROUTE | typeof LOGIN_ROUTE,
   context: IdentityRequestContext,
+  campaignId: VerifiedCampaignId | null,
   prospectId?: number,
 ): Promise<void> => {
   try {
@@ -227,6 +230,7 @@ const writeEventSafely = async (
       anonymousId: context.anonymousId,
       eventName,
       path,
+      ...(campaignId === null ? {} : { verifiedCampaignId: campaignId }),
       ...(prospectId === undefined ? {} : { prospectId }),
       requestId: context.requestId,
     })
@@ -241,9 +245,12 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
   const random = dependencies.random ?? randomBytes
 
   const registerStudent = async (input: RegistrationInput, context: IdentityRequestContext): Promise<RegistrationResult> => {
-    await writeEventSafely(dependencies.writeEvent, 'registration_started', REGISTER_ROUTE, context)
     const allowed = await dependencies.consumeRateLimit({ key: context.ip, route: REGISTER_ROUTE, limit: 5, window: '1 hour' })
     if (!allowed) throw new AppError('RATE_LIMITED')
+    const campaignId = context.resolveCampaignId
+      ? await Promise.resolve().then(context.resolveCampaignId).catch(() => null)
+      : null
+    await writeEventSafely(dependencies.writeEvent, 'registration_started', REGISTER_ROUTE, context, campaignId)
 
     const protectedPhone = await protectPhone(input.phone, dependencies.hmacKey, dependencies.encryptionKey)
     if (await dependencies.findProspectByPhoneHmac(protectedPhone.hmac)) return { kind: 'existing' }
@@ -277,6 +284,7 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
       'registration_completed',
       REGISTER_ROUTE,
       context,
+      campaignId,
       prospectId,
     )
     return { kind: 'created', nickname, initialPassword }
@@ -284,7 +292,7 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
 
   const loginStudent = async (input: LoginInput, context: IdentityRequestContext): Promise<LoginResult> => {
     const fail = async (): Promise<LoginResult> => {
-      await writeEventSafely(dependencies.writeEvent, 'login_failed', LOGIN_ROUTE, context)
+      await writeEventSafely(dependencies.writeEvent, 'login_failed', LOGIN_ROUTE, context, null)
       return { kind: 'failed' }
     }
 
@@ -330,11 +338,16 @@ export const createIdentityService = (dependencies: IdentityDependencies) => {
     })
     if (!completed) return fail()
 
+    const campaignId = context.resolveCampaignId
+      ? await Promise.resolve().then(context.resolveCampaignId).catch(() => null)
+      : null
+
     await writeEventSafely(
       dependencies.writeEvent,
       'login_succeeded',
       LOGIN_ROUTE,
       context,
+      campaignId,
       credential.prospectId,
     )
     return { kind: 'authenticated', sessionToken: sessionToken.raw, expiresAt: completed.expiresAt.toISOString() }

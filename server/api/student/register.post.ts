@@ -4,9 +4,11 @@ import { AppError, toApiFailure } from '../../utils/app-error'
 import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
+import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../../utils/campaign-attribution'
 
 type RegisterHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerIdentityService>, 'registerStudent'>
+  getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContext: (event: unknown) => IdentityRequestContext
   readBody: (event: unknown) => Promise<unknown>
   setStatus: (event: unknown, status: number) => void
@@ -24,7 +26,7 @@ const defaultContext = (event: unknown): IdentityRequestContext => {
 export const createRegisterHandler = (dependencies: RegisterHandlerDependencies) => async (
   event: unknown,
 ): Promise<ApiSuccess<RegistrationResult> | ApiFailure> => {
-  const context = dependencies.getContext(event)
+  const baseContext = dependencies.getContext(event)
   try {
     let input: ReturnType<typeof registerSchema.parse>
     try {
@@ -34,11 +36,17 @@ export const createRegisterHandler = (dependencies: RegisterHandlerDependencies)
       throw new AppError('VALIDATION_FAILED')
     }
 
+    const context: IdentityRequestContext = {
+      ...baseContext,
+      ...(dependencies.getCampaignId
+        ? { resolveCampaignId: () => dependencies.getCampaignId!(event) }
+        : {}),
+    }
     const result = await dependencies.identity.registerStudent(input, context)
     return { data: result, requestId: context.requestId }
   }
   catch (error) {
-    const failure = toApiFailure(error, context.requestId)
+    const failure = toApiFailure(error, baseContext.requestId)
     dependencies.setStatus(event, error instanceof AppError ? error.statusCode : 500)
     return failure
   }
@@ -46,6 +54,7 @@ export const createRegisterHandler = (dependencies: RegisterHandlerDependencies)
 
 export default defineEventHandler((event) => createRegisterHandler({
   getContext: defaultContext,
+  getCampaignId: getServerVerifiedCampaignId,
   identity: getServerIdentityService(),
   readBody: (requestEvent) => readBody(requestEvent as never),
   setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),

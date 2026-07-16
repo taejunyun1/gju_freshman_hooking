@@ -50,6 +50,9 @@ const publicMessages: Record<AppErrorCode, string> = {
   FACULTY_TAXONOMY_INVALID: '학과의 네 전공 트랙 분류를 다시 확인해 주세요.',
   FACULTY_YOON_SCOPE_REQUIRED: '윤태준 교수의 예술사진·영상·AI·기술적 이미지 전문분야를 확인해 주세요.',
   FACULTY_CONTENT_NOT_READY: '미리보기에 필요한 활성 총괄교수 정보를 확인해 주세요.',
+  CAMPAIGN_INVALID: '캠페인 입력값을 다시 확인해 주세요.',
+  CAMPAIGN_NOT_FOUND: '요청한 캠페인을 찾을 수 없습니다.',
+  CAMPAIGN_CONFLICT: '캠페인 정보가 이미 변경되었습니다. 최신 내용을 확인해 주세요.',
 }
 
 const statusCodes: Record<AppErrorCode, number> = {
@@ -97,6 +100,9 @@ const statusCodes: Record<AppErrorCode, number> = {
   FACULTY_TAXONOMY_INVALID: 422,
   FACULTY_YOON_SCOPE_REQUIRED: 422,
   FACULTY_CONTENT_NOT_READY: 422,
+  CAMPAIGN_INVALID: 422,
+  CAMPAIGN_NOT_FOUND: 404,
+  CAMPAIGN_CONFLICT: 409,
 }
 
 export class AppError extends Error {

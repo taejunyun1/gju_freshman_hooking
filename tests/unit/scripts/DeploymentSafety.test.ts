@@ -78,6 +78,7 @@ describe('deployment and E2E safety contracts', () => {
         encoding: 'utf8',
         env: {
           ...process.env,
+          NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
           NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
           NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
           NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',

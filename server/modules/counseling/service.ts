@@ -39,6 +39,7 @@ const studentSessionSchema = z.object({
 
 const ownedAssessmentSchema = z.object({
   assessmentId: safeIdSchema,
+  campaignId: safeIdSchema.nullable(),
   publicId: canonicalUuidSchema,
 }).strict()
 
@@ -131,6 +132,7 @@ const storedRequestSchema = z.object({
 })
 
 const rawOwnedAssessmentSchema = z.object({
+  campaign_id: safeIdSchema.nullable(),
   id: safeIdSchema,
   public_id: canonicalUuidSchema,
 }).strict()
@@ -307,6 +309,7 @@ export const createCounselingService = (dependencies: CounselingServiceDependenc
       if (created.created) {
         await recordSafely(dependencies.recordEvent, {
           anonymousId: context.anonymousId,
+          campaignId: assessment.campaignId,
           eventName: 'counseling_requested',
           path: COUNSELING_ROUTE,
           prospectId: session.prospectId,
@@ -389,7 +392,7 @@ export const createSupabaseCounselingDependencies = (
     ).getStudentSession(token),
     loadOwnedAssessment: async ({ prospectId, publicId }) => {
       const { data, error } = await client.from('assessments')
-        .select('id,public_id')
+        .select('id,public_id,campaign_id')
         .eq('public_id', publicId)
         .eq('prospect_id', prospectId)
         .eq('status', 'completed')
@@ -397,7 +400,7 @@ export const createSupabaseCounselingDependencies = (
       if (error) throw new Error('COUNSELING_STORE_UNAVAILABLE')
       if (data === null) return null
       const row = parseStoreValue(rawOwnedAssessmentSchema, data, 'COUNSELING_STORE_INVALID')
-      return { assessmentId: row.id, publicId: row.public_id }
+      return { assessmentId: row.id, campaignId: row.campaign_id, publicId: row.public_id }
     },
     createRequest: async input => {
       const { data, error } = await client.rpc('create_counseling_request', {

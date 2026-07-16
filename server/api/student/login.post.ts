@@ -5,6 +5,7 @@ import { getServerIdentityService, type IdentityRequestContext } from '../../mod
 import { studentSessionCookie } from '../../utils/student-request-security'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
+import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../../utils/campaign-attribution'
 
 export { studentSessionCookie } from '../../utils/student-request-security'
 
@@ -18,6 +19,7 @@ const sessionCookieOptions = {
 
 type LoginHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerIdentityService>, 'loginStudent'>
+  getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContext: (event: unknown) => IdentityRequestContext
   readBody: (event: unknown) => Promise<unknown>
   setCookie: (event: unknown, name: string, value: string, options: typeof sessionCookieOptions) => void
@@ -36,7 +38,7 @@ const defaultContext = (event: unknown): IdentityRequestContext => {
 export const createLoginHandler = (dependencies: LoginHandlerDependencies) => async (
   event: unknown,
 ): Promise<ApiSuccess<Omit<Extract<LoginResult, { kind: 'authenticated' }>, 'sessionToken'>> | ApiFailure> => {
-  const context = dependencies.getContext(event)
+  const baseContext = dependencies.getContext(event)
   try {
     let input: ReturnType<typeof loginSchema.parse>
     try {
@@ -46,6 +48,12 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
       throw new AppError('AUTH_FAILED')
     }
 
+    const context: IdentityRequestContext = {
+      ...baseContext,
+      ...(dependencies.getCampaignId
+        ? { resolveCampaignId: () => dependencies.getCampaignId!(event) }
+        : {}),
+    }
     const result = await dependencies.identity.loginStudent(input, context)
     if (result.kind === 'failed') throw new AppError('AUTH_FAILED')
 
@@ -53,7 +61,7 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
     return { data: { kind: result.kind, expiresAt: result.expiresAt }, requestId: context.requestId }
   }
   catch (error) {
-    const failure = toApiFailure(error instanceof AppError && error.code === 'AUTH_FAILED' ? error : error, context.requestId)
+    const failure = toApiFailure(error instanceof AppError && error.code === 'AUTH_FAILED' ? error : error, baseContext.requestId)
     dependencies.setStatus(event, error instanceof AppError ? error.statusCode : 500)
     return failure
   }
@@ -61,6 +69,7 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
 
 export default defineEventHandler((event) => createLoginHandler({
   getContext: defaultContext,
+  getCampaignId: getServerVerifiedCampaignId,
   identity: getServerIdentityService(),
   readBody: (requestEvent) => readBody(requestEvent as never),
   setCookie: (requestEvent, name, value, options) => setCookie(requestEvent as never, name, value, options),
