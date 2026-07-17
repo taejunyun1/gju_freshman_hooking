@@ -15,8 +15,8 @@ export const admissionCycleSchema = z.object({
   status: z.enum(['current', 'archived']),
   rosterVersion: z.number().int().nonnegative(),
   passwordKeyVersion: z.number().int().positive(),
-  createdAt: z.string().datetime(),
-  archivedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+  archivedAt: z.string().datetime({ offset: true }).nullable(),
 }).strict()
 
 export type AdmissionCycle = z.infer<typeof admissionCycleSchema>

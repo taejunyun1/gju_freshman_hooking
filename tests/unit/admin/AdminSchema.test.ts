@@ -5,8 +5,21 @@ import {
   exportFilterSnapshotSchema,
   exportJobUpdateSchema,
 } from '../../../shared/schemas/admin'
+import { admissionCycleSchema } from '../../../shared/schemas/admission-roster'
 
 describe('administrator operation schemas', () => {
+  it('accepts PostgreSQL timestamptz offsets for admission cycles', () => {
+    expect(admissionCycleSchema.safeParse({
+      id: '00000000-0000-4000-8000-000000000001',
+      year: 2027,
+      status: 'current',
+      rosterVersion: 0,
+      passwordKeyVersion: 1,
+      createdAt: '2026-07-17T11:30:46.643159+00:00',
+      archivedAt: null,
+    }).success).toBe(true)
+  })
+
   it('normalizes bounded campaign codes and rejects unknown fields', () => {
     expect(campaignCreateSchema.parse({
       code: ' OPEN DAY 2026 ',
