@@ -360,7 +360,8 @@ const getSupabaseApiKeys = () => {
 }
 
 const randomSecret = () => randomBytes(32).toString('base64url')
-const randomPassword = () => `PN!${randomBytes(30).toString('base64url')}9a`
+const CURRENT_PASSWORD_PEPPER_VERSION = '1'
+const randomPassword = () => `P${randomBytes(3).toString('hex')}a9!`
 const isCanonicalSecret = value => {
   if (typeof value !== 'string') return false
   try {
@@ -374,7 +375,8 @@ const isCanonicalSecret = value => {
 
 const isStrongTemporaryPassword = value => (
   typeof value === 'string'
-  && value.length >= 32
+  && value.length >= 8
+  && value.length <= 12
   && /[a-z]/u.test(value)
   && /[A-Z]/u.test(value)
   && /\d/u.test(value)
@@ -432,12 +434,13 @@ const validateState = (input, expectedCommit) => {
 
   assertExactObjectKeys(
     input.appSecrets,
-    ['phoneHmac', 'phoneEncryption', 'passwordPepper', 'campaignCookie'],
+    ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper', 'passwordPepperVersion', 'campaignCookie'],
     '배포 state appSecrets',
   )
-  for (const key of ['phoneHmac', 'phoneEncryption', 'passwordPepper', 'campaignCookie']) {
+  for (const key of ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper', 'campaignCookie']) {
     assert(isCanonicalSecret(input.appSecrets[key]), `배포 state의 ${key} secret 형식이 잘못되었습니다.`)
   }
+  assert(input.appSecrets.passwordPepperVersion === CURRENT_PASSWORD_PEPPER_VERSION, '배포 state의 passwordPepperVersion이 현재 버전과 다릅니다.')
 
   assertExactObjectKeys(input.admin, ['email', 'password', 'configured'], '배포 state admin')
   assert(input.admin.email === ADMIN_EMAIL, '배포 state의 관리자 이메일이 다릅니다.')
@@ -643,9 +646,11 @@ const createState = (gitState, supabaseKeys) => ({
   dbPushed: false,
   supabaseKeys,
   appSecrets: {
+    nameHmac: randomSecret(),
     phoneHmac: randomSecret(),
     phoneEncryption: randomSecret(),
     passwordPepper: randomSecret(),
+    passwordPepperVersion: CURRENT_PASSWORD_PEPPER_VERSION,
     campaignCookie: randomSecret(),
   },
   admin: {
@@ -792,9 +797,11 @@ const runtimeSecrets = state => ({
   NUXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
   NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: state.supabaseKeys.publishable,
   NUXT_SUPABASE_SECRET_KEY: state.supabaseKeys.secret,
+  NUXT_NAME_HMAC_KEY: state.appSecrets.nameHmac,
   NUXT_PHONE_HMAC_KEY: state.appSecrets.phoneHmac,
   NUXT_PHONE_ENCRYPTION_KEY: state.appSecrets.phoneEncryption,
   NUXT_PASSWORD_PEPPER: state.appSecrets.passwordPepper,
+  NUXT_PASSWORD_PEPPER_VERSION: state.appSecrets.passwordPepperVersion,
   NUXT_CAMPAIGN_COOKIE_KEY: state.appSecrets.campaignCookie,
   GIT_COMMIT_SHA: state.commit,
 })
@@ -856,6 +863,7 @@ const artifactTreesContainPrivateSecret = (state, roots = [
 ]) => {
   const markerBuffers = [
     state.supabaseKeys.secret,
+    state.appSecrets.nameHmac,
     state.appSecrets.phoneHmac,
     state.appSecrets.phoneEncryption,
     state.appSecrets.passwordPepper,
@@ -1156,9 +1164,11 @@ const makeSelfCheckState = () => ({
     secret: 'sb_secret_self_check',
   },
   appSecrets: {
+    nameHmac: randomSecret(),
     phoneHmac: randomSecret(),
     phoneEncryption: randomSecret(),
     passwordPepper: randomSecret(),
+    passwordPepperVersion: CURRENT_PASSWORD_PEPPER_VERSION,
     campaignCookie: randomSecret(),
   },
   admin: {
@@ -1255,7 +1265,13 @@ const runSelfCheck = () => {
 
   const state = makeSelfCheckState()
   validateState(state, APPROVED_BASE_COMMIT)
-  for (const value of Object.values(state.appSecrets)) {
+  for (const value of [
+    state.appSecrets.nameHmac,
+    state.appSecrets.phoneHmac,
+    state.appSecrets.phoneEncryption,
+    state.appSecrets.passwordPepper,
+    state.appSecrets.campaignCookie,
+  ]) {
     assert(isCanonicalSecret(value), '32-byte base64url secret self-check 실패')
   }
   assert(isStrongTemporaryPassword(state.admin.password), '임시 관리자 비밀번호 self-check 실패')
@@ -1739,7 +1755,11 @@ const runSelfCheck = () => {
   const handoffJson = JSON.stringify(handoff)
   for (const forbiddenValue of [
     completedState.supabaseKeys.secret,
-    ...Object.values(completedState.appSecrets),
+    completedState.appSecrets.nameHmac,
+    completedState.appSecrets.phoneHmac,
+    completedState.appSecrets.phoneEncryption,
+    completedState.appSecrets.passwordPepper,
+    completedState.appSecrets.campaignCookie,
   ]) {
     assert(!handoffJson.includes(forbiddenValue), '최종 result에 service/app secret이 포함되었습니다.')
   }

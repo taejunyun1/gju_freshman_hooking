@@ -521,8 +521,8 @@ onBeforeUnmount(() => {
     >
       <div v-if="reauthenticationOpen" class="reauthentication-dialog__panel">
         <p>SECURITY / RECENT AUTH</p>
-        <h2 id="reauthentication-title">2단계 인증이 필요합니다</h2>
-        <span>민감정보를 확인하려면 관리자 로그인을 다시 완료하세요.</span>
+        <h2 id="reauthentication-title">비밀번호 재로그인이 필요합니다</h2>
+        <span>민감정보를 확인하려면 이메일과 비밀번호로 다시 로그인하세요.</span>
         <div class="reauthentication-dialog__actions">
           <AppButton
             data-action="cancel-reauthentication"
@@ -534,7 +534,7 @@ onBeforeUnmount(() => {
             data-action="reauthenticate"
             variant="primary"
             @click="reauthenticate"
-          >다시 인증</AppButton>
+          >비밀번호로 다시 로그인</AppButton>
         </div>
       </div>
     </dialog>

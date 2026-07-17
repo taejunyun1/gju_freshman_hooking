@@ -5,10 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAdminSessionStore } from '../../../app/stores/admin-session'
 
 const adminAuthMocks = vi.hoisted(() => ({
-  beginAdminAuthentication: vi.fn(),
-  cancelAdminEnrollment: vi.fn(),
   getAdminSupabaseClient: vi.fn(() => ({ auth: { signOut: vi.fn() } })),
-  verifyAdminTotp: vi.fn(),
+  signInAdminWithPassword: vi.fn(),
 }))
 
 vi.mock('../../../app/utils/admin-supabase', () => adminAuthMocks)
@@ -26,6 +24,8 @@ describe('administrator shell', () => {
     vi.stubGlobal('definePageMeta', vi.fn())
     vi.stubGlobal('navigateTo', vi.fn())
     vi.stubGlobal('useRoute', () => ({ query: {} }))
+    vi.stubGlobal('$fetch', vi.fn())
+    vi.setSystemTime(new Date('2026-07-14T10:00:00.000Z'))
   })
 
   it('renders page content through the canonical Nuxt layout outlet', () => {
@@ -37,7 +37,6 @@ describe('administrator shell', () => {
   it('assigns the admin layout and middleware as protected-page metadata without manual wrappers', () => {
     for (const pagePath of [
       'app/pages/admin/index.vue',
-      'app/pages/admin/recovery.vue',
       'app/pages/admin/counseling.vue',
       'app/pages/admin/students/index.vue',
       'app/pages/admin/students/[id].vue',
@@ -72,14 +71,63 @@ describe('administrator shell', () => {
     expect(detailPage).not.toContain('void loadDetail()')
   })
 
-  it('offers password plus explicit TOTP sign-in without public signup', async () => {
+  it('offers one email and password form without MFA or public signup', async () => {
     const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
     const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
 
+    expect(wrapper.findAll('form')).toHaveLength(1)
     expect(wrapper.find('input[type="email"]').attributes('autocomplete')).toBe('email')
     expect(wrapper.find('input[type="password"]').attributes('autocomplete')).toBe('current-password')
-    expect(wrapper.text()).toContain('2단계 인증')
-    expect(wrapper.text()).not.toMatch(/회원가입|계정 만들기/u)
+    expect(wrapper.text()).toContain('관리자 로그인')
+    expect(wrapper.text()).not.toMatch(/2단계|6자리|AAL2|TOTP|QR|인증 앱|회원가입|계정 만들기/u)
+    expect(wrapper.find('input[autocomplete="one-time-code"]').exists()).toBe(false)
+    expect(wrapper.find('img').exists()).toBe(false)
+  })
+
+  it('verifies the password token with the server and stores only the capped access session', async () => {
+    vi.stubGlobal('useRoute', () => ({ query: { redirect: '/admin/counseling' } }))
+    adminAuthMocks.signInAdminWithPassword.mockResolvedValueOnce({
+      accessToken: 'short-lived-aal1-token',
+      expiresIn: 24 * 60 * 60,
+      refreshToken: 'must-never-enter-the-page',
+      userId: 'admin-1',
+    })
+    vi.mocked($fetch).mockResolvedValueOnce({
+      data: {
+        aal: 'aal1',
+        authenticatedAt: '2026-07-14T10:00:00.000Z',
+        role: 'admin',
+        userId: 'admin-1',
+      },
+      requestId: 'request-1',
+    })
+    const client = { auth: {} }
+    adminAuthMocks.getAdminSupabaseClient.mockReturnValue(client as never)
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    await wrapper.get('input[type="email"]').setValue('admin@example.test')
+    await wrapper.get('input[type="password"]').setValue('password-from-form')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(adminAuthMocks.signInAdminWithPassword).toHaveBeenCalledWith(
+      client,
+      'admin@example.test',
+      'password-from-form',
+    )
+    expect($fetch).toHaveBeenCalledWith('/api/admin/session', {
+      headers: { Authorization: 'Bearer short-lived-aal1-token' },
+    })
+    expect(JSON.parse(sessionStorage.getItem('photo_next_admin_session_v1') ?? 'null')).toEqual({
+      accessToken: 'short-lived-aal1-token',
+      authenticatedAt: '2026-07-14T10:00:00.000Z',
+      expiresAt: '2026-07-14T18:00:00.000Z',
+      userId: 'admin-1',
+    })
+    expect(sessionStorage.getItem('photo_next_admin_session_v1')).not.toContain('must-never-enter-the-page')
+    expect(wrapper.get('input[type="password"]').element).toHaveProperty('value', '')
+    expect(navigateTo).toHaveBeenCalledWith('/admin/counseling', { replace: true })
   })
 
   it('restores a valid browser session before redirecting away from the login route', async () => {
@@ -95,66 +143,6 @@ describe('administrator shell', () => {
     await flushPromises()
 
     expect(navigateTo).toHaveBeenCalledWith('/admin', { replace: true })
-  })
-
-  it('renders the full Supabase TOTP QR data URL without wrapping or re-encoding it', async () => {
-    const qrCode = 'data:image/svg+xml;utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M0%200h1v1H0z%22%2F%3E%3C%2Fsvg%3E'
-    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
-      enrollment: { qrCode, secret: 'auth-generated-secret' },
-      factorId: 'new-factor',
-    })
-    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
-    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
-
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(wrapper.get('img').attributes('src')).toBe(qrCode)
-  })
-
-  it('removes the current unverified factor before signing out on restart', async () => {
-    const signOut = vi.fn(async () => ({ error: null }))
-    const client = { auth: { signOut } }
-    adminAuthMocks.getAdminSupabaseClient.mockReturnValue(client as never)
-    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
-      enrollment: { qrCode: 'data:image/svg+xml;utf-8,%3Csvg%2F%3E', secret: 'enrollment-secret' },
-      factorId: 'new-factor',
-    })
-    adminAuthMocks.cancelAdminEnrollment.mockResolvedValueOnce(undefined)
-    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
-    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
-
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    await wrapper.get('.admin-login__actions button.app-button--secondary').trigger('click')
-    await flushPromises()
-
-    expect(adminAuthMocks.cancelAdminEnrollment).toHaveBeenCalledWith(client, 'new-factor')
-    expect(adminAuthMocks.cancelAdminEnrollment.mock.invocationCallOrder[0]).toBeLessThan(signOut.mock.invocationCallOrder[0]!)
-    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('enrollment-secret')
-  })
-
-  it('keeps the enrollment retryable and does not sign out when restart cleanup fails', async () => {
-    const signOut = vi.fn()
-    adminAuthMocks.getAdminSupabaseClient.mockReturnValue({ auth: { signOut } } as never)
-    adminAuthMocks.beginAdminAuthentication.mockResolvedValueOnce({
-      enrollment: { qrCode: 'data:image/svg+xml;utf-8,%3Csvg%2F%3E', secret: 'enrollment-secret' },
-      factorId: 'new-factor',
-    })
-    adminAuthMocks.cancelAdminEnrollment.mockRejectedValueOnce(new Error('provider-secret-detail'))
-    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
-    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
-
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    await wrapper.get('.admin-login__actions button.app-button--secondary').trigger('click')
-    await flushPromises()
-
-    expect(signOut).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('등록을 취소하지 못했습니다')
-    expect(wrapper.text()).not.toContain('provider-secret-detail')
-    expect(wrapper.find('#admin-totp').exists()).toBe(true)
   })
 
   it('uses AppState for the empty dashboard instead of invented metrics', async () => {
@@ -178,7 +166,7 @@ describe('administrator shell', () => {
       slots: { default: '<main>operator content</main>' },
     })
 
-    expect(wrapper.get('nav').text()).toContain('복구 대기열')
+    expect(wrapper.get('nav').text()).not.toContain('복구 대기열')
     expect(wrapper.get('nav').text()).toContain('상담 운영')
     expect(wrapper.get('nav').text()).toContain('학생 찾기')
     expect(wrapper.get('nav').text()).toContain('데이터 내보내기')

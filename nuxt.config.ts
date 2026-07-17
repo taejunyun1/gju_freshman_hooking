@@ -5,8 +5,12 @@ export default defineNuxtConfig({
   runtimeConfig: {
     supabaseSecretKey: '',
     phoneHmacKey: '',
+    nameHmacKey: '',
     phoneEncryptionKey: '',
     passwordPepper: '',
+    passwordPepperVersion: '',
+    previousPasswordPepper: '',
+    previousPasswordPepperVersion: '',
     campaignCookieKey: '',
     public: {
       supabasePublishableKey: '',

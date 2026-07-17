@@ -11,6 +11,25 @@ const importMaxRequestBodyBytes = 512 * 1024
 const imageMaxRequestBodyBytes = 8 * 1024 * 1024 + 64 * 1024
 const transitionMaxRequestBodyBytes = 1024
 
+const forwardedBody = async (path: string, bytes: number) => {
+  const received: Array<{ bytes: number, overflow: string | null }> = []
+  const worker = createBodyGuardWorker({
+    async fetch(request: Request) {
+      received.push({
+        bytes: (await request.arrayBuffer()).byteLength,
+        overflow: request.headers.get('x-photo-next-body-overflow'),
+      })
+      return new Response('ok')
+    },
+  })
+  await worker.fetch(new Request(`https://photo-next.example${path}`, {
+    body: new Uint8Array(bytes),
+    duplex: 'half',
+    method: 'POST',
+  } as RequestInit), {}, {})
+  return received[0]
+}
+
 const streamRequest = (
   chunks: Uint8Array[],
   onCancel: () => void,
@@ -39,6 +58,13 @@ const streamRequest = (
 }
 
 describe('bounded request bodies', () => {
+  it.each(['/api/admin/students/roster/preview', '/api/admin/students/roster/apply'])(
+    'accepts exactly 512 KiB and rejects 512 KiB plus one on %s', async (path) => {
+      expect(await forwardedBody(path, importMaxRequestBodyBytes)).toEqual({ bytes: importMaxRequestBodyBytes, overflow: null })
+      expect(await forwardedBody(path, importMaxRequestBodyBytes + 1)).toEqual({ bytes: 2, overflow: '1' })
+    },
+  )
+
   it('rejects a known oversized Node/Nitro body without reading it', async () => {
     const read = vi.fn()
     const event = {

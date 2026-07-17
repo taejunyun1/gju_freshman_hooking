@@ -82,10 +82,7 @@ describe('trusted client IP', () => {
 
   it('wires every identity rate-limit route through the trusted reader without forwarded trust', () => {
     const routeFiles = [
-      'server/api/student/register.post.ts',
       'server/api/student/login.post.ts',
-      'server/api/student/password/recovery/request.post.ts',
-      'server/api/student/password/recovery/complete.post.ts',
     ]
 
     for (const routeFile of routeFiles) {

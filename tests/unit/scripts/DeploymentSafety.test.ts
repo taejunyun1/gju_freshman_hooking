@@ -9,21 +9,27 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runPreviewDeploy } from '../../../scripts/deploy-preview.mjs'
 import { isMinorRolloutApprovalId } from '../../../server/utils/openai-career-approval'
 
 describe('deployment and E2E safety contracts', () => {
+  const exactSecret = (fill: number) => Buffer.alloc(32, fill).toString('base64url')
+  const rosterSecrets = {
+    NUXT_CAMPAIGN_COOKIE_KEY: exactSecret(1),
+    NUXT_PHONE_HMAC_KEY: exactSecret(2),
+    NUXT_NAME_HMAC_KEY: exactSecret(3),
+    NUXT_PHONE_ENCRYPTION_KEY: exactSecret(4),
+    NUXT_PASSWORD_PEPPER: exactSecret(5),
+    NUXT_PASSWORD_PEPPER_VERSION: '2',
+  }
   const baseEnvironment = () => ({
     HOME: process.env.HOME ?? '',
     PATH: process.env.PATH ?? '',
-    NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
-    NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
-    NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
+    ...rosterSecrets,
     NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',
     NUXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
-    NUXT_PASSWORD_PEPPER: 'safe-password-pepper',
     NUXT_SUPABASE_SECRET_KEY: 'safe-secret-key',
   })
 
@@ -254,6 +260,134 @@ describe('deployment and E2E safety contracts', () => {
     )
   })
 
+  it('tracks a release-only runner that preserves existing Worker secrets and fails closed', () => {
+    const runnerPath = 'scripts/deploy-photo-next-release.mjs'
+    expect(existsSync(runnerPath)).toBe(true)
+
+    const runner = readFileSync(runnerPath, 'utf8')
+    for (const requiredSecret of [
+      'NUXT_PUBLIC_SUPABASE_URL',
+      'NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+      'NUXT_SUPABASE_SECRET_KEY',
+      'NUXT_PHONE_HMAC_KEY',
+      'NUXT_PHONE_ENCRYPTION_KEY',
+      'NUXT_PASSWORD_PEPPER',
+      'NUXT_CAMPAIGN_COOKIE_KEY',
+    ]) {
+      expect(runner).toContain(`'${requiredSecret}'`)
+    }
+    expect(runner).toContain("'secret', 'list', '--format', 'json'")
+    expect(runner).toContain("'deploy', '--keep-vars', '--secrets-file'")
+    expect(runner).toContain("{ GIT_COMMIT_SHA: commit }")
+    expect(runner).toContain("openSync(temporaryPath, 'wx', PRIVATE_MODE)")
+    expect(runner).toContain("'hash-object', RUNNER_RELATIVE_PATH")
+    expect(runner).toContain('HEAD:${RUNNER_RELATIVE_PATH}')
+    expect(runner).toContain("'ls-files', '-v', '-z'")
+    expect(runner).toContain('DEPLOYMENT_LOCK_PATH')
+    expect(runner).toContain('.output/public')
+    expect(runner).toContain('.output/server')
+    expect(runner).toContain('ADMIN_PASSWORD_ONLY_MARKER')
+    expect(runner).not.toMatch(/['"](?:db\s+push|secret\s+(?:put|bulk|delete))['"]/u)
+    expect(runner).not.toMatch(/auth\.admin|randomBytes/u)
+  })
+
+  it.each(['--plan', '--check', '--self-check'])(
+    'keeps release runner %s offline and reports zero remote writes',
+    (mode) => {
+      const result = spawnSync(process.execPath, [
+        'scripts/deploy-photo-next-release.mjs',
+        mode,
+      ], {
+        encoding: 'utf8',
+        env: {
+          HOME: process.env.HOME ?? '',
+          PATH: process.env.PATH ?? '',
+        },
+      })
+
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+      expect(result.stdout).toContain('network calls: 0, remote writes: 0')
+    },
+  )
+
+  it.each(['--plan', '--check', '--self-check'])(
+    'executes release runner %s under a real no-remote preload guard',
+    (mode) => {
+      const preload = resolve(process.cwd(), 'tests/fixtures/no-remote-side-effects.cjs')
+      expect(existsSync(preload)).toBe(true)
+      const result = spawnSync(process.execPath, [
+        '--require',
+        preload,
+        'scripts/deploy-photo-next-release.mjs',
+        mode,
+      ], {
+        encoding: 'utf8',
+        env: {
+          HOME: process.env.HOME ?? '',
+          PATH: process.env.PATH ?? '',
+        },
+      })
+
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+      expect(result.stdout).toContain('network calls: 0, remote writes: 0')
+    },
+  )
+
+  it('self-checks exact secret parsing, deploy argv, private build env, and temp cleanup', () => {
+    const result = spawnSync(process.execPath, [
+      'scripts/deploy-photo-next-release.mjs',
+      '--self-check',
+    ], {
+      encoding: 'utf8',
+      env: {
+        HOME: process.env.HOME ?? '',
+        PATH: process.env.PATH ?? '',
+        CLOUDFLARE_API_TOKEN: 'must-not-reach-build',
+        CLOUDFLARE_API_KEY: 'must-not-reach-build',
+        SUPABASE_ACCESS_TOKEN: 'must-not-reach-build',
+        DATABASE_URL: 'must-not-reach-build',
+        GENERIC_SECRET: 'must-not-reach-build',
+        LC_SECRET: 'must-not-reach-build',
+        LC_DATABASE_URL: 'must-not-reach-build',
+        LC_OPENAI_API_KEY: 'must-not-reach-build',
+      },
+    })
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(result.stdout).toContain('Release runner self-check passed')
+    expect(result.stdout).toContain('secret parser: passed')
+    expect(result.stdout).toContain('deploy argv: passed')
+    expect(result.stdout).toContain('private-free build env: passed')
+    expect(result.stdout).toContain('final build subprocess env: passed')
+    expect(result.stdout).toContain('finite locale allowlist: passed')
+    expect(result.stdout).toContain('temporary secret cleanup: passed')
+    expect(result.stdout).toContain('descriptor identity: passed')
+    expect(result.stdout).toContain('git fail-closed behavior: passed')
+    expect(result.stdout).toContain('provider pre/post behavior: passed')
+    expect(result.stdout).toContain('deploy post-provider control flow: passed')
+    expect(result.stdout).toContain('artifact rejection behavior: passed')
+    expect(result.stdout).toContain('staging gate behavior: passed')
+    expect(result.stdout).toContain('health mismatch behavior: passed')
+    expect(result.stdout).toContain('offline adapter trap: passed')
+  })
+
+  it('self-checks wrapper commit provenance without staging or network writes', () => {
+    const result = spawnSync('zsh', [
+      '.superpowers/sdd/finish-photo-next-release.sh',
+      '--self-check',
+    ], {
+      encoding: 'utf8',
+      env: {
+        HOME: process.env.HOME ?? '',
+        PATH: process.env.PATH ?? '',
+      },
+    })
+
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(result.stdout).toContain('Temporary local-ahead normal entry self-check passed')
+    expect(result.stdout).toContain('workspace writes: 0, remote writes: 0, network calls: 0')
+  })
+
   it('documents the exact provider-off release, minor policy, data boundary, and interactive secret workflow', () => {
     const runbook = readFileSync('docs/operations/openai-career-narrative.md', 'utf8')
 
@@ -310,7 +444,7 @@ describe('deployment and E2E safety contracts', () => {
     expect(example).not.toMatch(/^NUXT_PUBLIC_OPENAI/mu)
   })
 
-  it('enables local authenticator MFA without enabling phone MFA', () => {
+  it('disables local authenticator and phone MFA', () => {
     const config = readFileSync('supabase/config.toml', 'utf8')
     const section = (name: string): string => {
       const start = config.indexOf(`[${name}]\n`)
@@ -320,8 +454,8 @@ describe('deployment and E2E safety contracts', () => {
       return config.slice(contentStart, end < 0 ? config.length : end).trim()
     }
 
-    expect(section('auth.mfa.totp')).toMatch(/(?:^|\n)enroll_enabled = true(?:\n|$)/u)
-    expect(section('auth.mfa.totp')).toMatch(/(?:^|\n)verify_enabled = true(?:\n|$)/u)
+    expect(section('auth.mfa.totp')).toMatch(/(?:^|\n)enroll_enabled = false(?:\n|$)/u)
+    expect(section('auth.mfa.totp')).toMatch(/(?:^|\n)verify_enabled = false(?:\n|$)/u)
     expect(section('auth.mfa.phone')).toMatch(/(?:^|\n)enroll_enabled = false(?:\n|$)/u)
     expect(section('auth.mfa.phone')).toMatch(/(?:^|\n)verify_enabled = false(?:\n|$)/u)
   })
@@ -353,33 +487,27 @@ describe('deployment and E2E safety contracts', () => {
     expect(playwrightConfig).toMatch(/env:\s*localRuntimeEnvironment\(\)/u)
   })
 
-  it('keeps registration rate-limit isolation inside E2E support instead of the application API', () => {
+  it('keeps public registration removed from the application API and E2E support', () => {
     const studentSupport = readFileSync('tests/e2e/support/student.ts', 'utf8')
-    const localRateLimitSupport = readFileSync('tests/e2e/support/local-registration-rate-limit.ts', 'utf8')
-    const registerApi = readFileSync('server/api/student/register.post.ts', 'utf8')
 
-    expect(studentSupport).toContain('clearLocalRegistrationRateLimitBuckets')
-    expect(localRateLimitSupport).toContain("'/api/student/register'")
-    expect(localRateLimitSupport).toContain("where route = :'route'")
-    expect(registerApi).not.toMatch(/e2e|playwright|x-test|bypass/iu)
+    expect(existsSync('server/api/student/register.post.ts')).toBe(false)
+    expect(existsSync('tests/e2e/support/local-registration-rate-limit.ts')).toBe(false)
+    expect(studentSupport).not.toContain('/api/student/register')
+    expect(studentSupport).not.toContain('clearLocalRegistrationRateLimitBuckets')
   })
 
   it('arms counseling prospect cleanup before creating dependent fixtures', () => {
     const counselingE2e = readFileSync('tests/e2e/counseling.spec.ts', 'utf8')
     const studentSupport = readFileSync('tests/e2e/support/student.ts', 'utf8')
-    const responseRead = 'const registerResponse = await registerResponsePromise'
     const callbackInvocation = 'await onRegistered?.({ nickname })'
-    const credentialsCheck = "await expect(page).toHaveURL('/credentials')"
-    const loginNavigation = "await page.getByRole('link', { name: '로그인하러 가기' }).click()"
+    const loginNavigation = "await page.goto('/login')"
     const counselingCallback = 'async ({ nickname: registeredNickname }) => {'
     const prospectAssignment = 'fixture.prospectId = await findProspectId(client, registeredNickname)'
     const facultyCreation = 'const faculty = await createFaculty(suffix)'
     const resultCreation = 'createOwnedResult(client, fixture.prospectId, faculty)'
 
-    expect(studentSupport).toContain(responseRead)
     expect(studentSupport).toContain(callbackInvocation)
-    expect(studentSupport.indexOf(responseRead)).toBeLessThan(studentSupport.indexOf(callbackInvocation))
-    expect(studentSupport.indexOf(callbackInvocation)).toBeLessThan(studentSupport.indexOf(credentialsCheck))
+    expect(studentSupport).toContain(loginNavigation)
     expect(studentSupport.indexOf(callbackInvocation)).toBeLessThan(studentSupport.indexOf(loginNavigation))
     expect(counselingE2e).toContain(counselingCallback)
     expect(counselingE2e).toContain(prospectAssignment)
@@ -400,12 +528,9 @@ describe('deployment and E2E safety contracts', () => {
         encoding: 'utf8',
         env: {
           ...process.env,
-          NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
-          NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
-          NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
+          ...rosterSecrets,
           NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',
           NUXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
-          NUXT_PASSWORD_PEPPER: 'safe-password-pepper',
           NUXT_SUPABASE_SECRET_KEY: 'safe-secret-key',
           PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
           WRANGLER_MARKER: marker,

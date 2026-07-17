@@ -200,7 +200,6 @@ describe('student browser mutation security', () => {
 
   it.each([
     '/api/student/logout/',
-    '/api/student/password/change///',
     '/api/student//logout',
     '/api/student/assessment//validate/',
     '/api//assessment/submit/',

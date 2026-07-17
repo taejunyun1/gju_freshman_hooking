@@ -13,9 +13,9 @@ import {
 import { applicantStageSchema, regionSchema } from '../../../shared/schemas/identity'
 import { trackKeys, trackLabels } from '../../../shared/types/domain'
 import { AppError, CounselingConflictError } from '../../utils/app-error'
+import { bytesFromPostgresBytea } from '../../utils/postgres-bytea'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { base64urlEncode, decodeBase64urlSecret } from '../../utils/web-crypto'
-import { bytesFromPostgresBytea } from '../identity/password-recovery'
 import { normalizeKoreanPhone, revealPhone } from '../identity/phone'
 
 const safeIdSchema = z.number().int().positive().safe()

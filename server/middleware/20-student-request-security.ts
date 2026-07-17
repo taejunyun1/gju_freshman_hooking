@@ -17,7 +17,6 @@ const csrfProtectedPaths = new Set([
   '/api/career-narrative/report',
   '/api/student/logout',
   '/api/student/assessment/validate',
-  '/api/student/password/change',
 ])
 
 const forbidden = (): never => {

@@ -1,21 +1,17 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess } from '../../../shared/types/api'
 import AppButton from '../../components/common/AppButton.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
 import {
-  beginAdminAuthentication,
-  cancelAdminEnrollment,
   getAdminSupabaseClient,
-  verifyAdminTotp,
-  type AdminAuthenticationStep,
+  signInAdminWithPassword,
 } from '../../utils/admin-supabase'
 
 definePageMeta({ layout: false, middleware: 'admin' })
 
-type LoginStep = 'credentials' | 'totp'
 type AdminSessionResponse = {
-  aal: 'aal2'
+  aal: 'aal1' | 'aal2'
   authenticatedAt: string
   role: 'admin'
   userId: string
@@ -23,13 +19,10 @@ type AdminSessionResponse = {
 
 const route = useRoute()
 const adminSession = useAdminSessionStore()
-const step = ref<LoginStep>('credentials')
 const hydrated = ref(false)
 const submitting = ref(false)
 const errorMessage = ref('')
 const credentials = reactive({ email: '', password: '' })
-const totpCode = ref('')
-const authentication = ref<AdminAuthenticationStep | null>(null)
 
 const safeRedirect = (): string => {
   const redirect = route.query.redirect
@@ -41,21 +34,29 @@ const safeRedirect = (): string => {
   return '/admin'
 }
 
-const clearEnrollment = (): void => {
-  authentication.value = null
-  totpCode.value = ''
-}
-
-const submitCredentials = async (): Promise<void> => {
+const submitLogin = async (): Promise<void> => {
   submitting.value = true
   errorMessage.value = ''
   try {
-    authentication.value = await beginAdminAuthentication(
+    const signedIn = await signInAdminWithPassword(
       getAdminSupabaseClient(),
       credentials.email,
       credentials.password,
     )
-    step.value = 'totp'
+    const confirmed = await $fetch<ApiSuccess<AdminSessionResponse>>('/api/admin/session', {
+      headers: { Authorization: `Bearer ${signedIn.accessToken}` },
+    })
+    const authenticatedAt = new Date(confirmed.data.authenticatedAt)
+    if (Number.isNaN(authenticatedAt.getTime())) throw new Error('ADMIN_SESSION_INVALID')
+    const tokenExpiry = Date.now() + signedIn.expiresIn * 1000
+    const absoluteExpiry = authenticatedAt.getTime() + 8 * 60 * 60 * 1000
+    adminSession.setVerifiedSession({
+      accessToken: signedIn.accessToken,
+      authenticatedAt: authenticatedAt.toISOString(),
+      expiresAt: new Date(Math.min(tokenExpiry, absoluteExpiry)).toISOString(),
+      userId: confirmed.data.userId,
+    })
+    await navigateTo(safeRedirect(), { replace: true })
   }
   catch {
     errorMessage.value = '관리자 로그인 정보를 확인하세요.'
@@ -66,83 +67,12 @@ const submitCredentials = async (): Promise<void> => {
   }
 }
 
-const submitTotp = async (): Promise<void> => {
-  if (!authentication.value) return
-  submitting.value = true
-  errorMessage.value = ''
-  try {
-    const verified = await verifyAdminTotp(
-      getAdminSupabaseClient(),
-      authentication.value.factorId,
-      totpCode.value,
-    )
-    const confirmed = await $fetch<ApiSuccess<AdminSessionResponse>>('/api/admin/session', {
-      headers: { Authorization: `Bearer ${verified.accessToken}` },
-    })
-    const authenticatedAt = new Date(confirmed.data.authenticatedAt)
-    if (Number.isNaN(authenticatedAt.getTime())) throw new Error('ADMIN_SESSION_INVALID')
-    const tokenExpiry = Date.now() + verified.expiresIn * 1000
-    const absoluteExpiry = authenticatedAt.getTime() + 8 * 60 * 60 * 1000
-    adminSession.setVerifiedSession({
-      accessToken: verified.accessToken,
-      authenticatedAt: authenticatedAt.toISOString(),
-      expiresAt: new Date(Math.min(tokenExpiry, absoluteExpiry)).toISOString(),
-      userId: confirmed.data.userId,
-    })
-    clearEnrollment()
-    await navigateTo(safeRedirect(), { replace: true })
-  }
-  catch {
-    errorMessage.value = '2단계 인증 코드를 확인하거나 다시 로그인하세요.'
-  }
-  finally {
-    submitting.value = false
-  }
-}
-
-const restart = async (): Promise<void> => {
-  if (submitting.value) return
-  submitting.value = true
-  errorMessage.value = ''
-  const currentAuthentication = authentication.value
-  const client = getAdminSupabaseClient()
-
-  try {
-    if (currentAuthentication?.enrollment) {
-      await cancelAdminEnrollment(client, currentAuthentication.factorId)
-    }
-  }
-  catch {
-    errorMessage.value = '2단계 인증 등록을 취소하지 못했습니다. 다시 시도하세요.'
-    submitting.value = false
-    return
-  }
-
-  try {
-    const { error } = await client.auth.signOut({ scope: 'local' })
-    if (error) throw new Error('ADMIN_AUTH_FAILED')
-    clearEnrollment()
-    step.value = 'credentials'
-  }
-  catch {
-    if (currentAuthentication?.enrollment) {
-      clearEnrollment()
-      step.value = 'credentials'
-    }
-    errorMessage.value = '로그인을 초기화하지 못했습니다. 다시 시도하세요.'
-  }
-  finally {
-    submitting.value = false
-  }
-}
-
 onMounted(async () => {
   hydrated.value = true
   adminSession.restoreFromSessionStorage()
   if (adminSession.hasVerifiedSession()) await navigateTo(safeRedirect(), { replace: true })
 })
 
-onBeforeUnmount(clearEnrollment)
 </script>
 
 <template>
@@ -157,14 +87,13 @@ onBeforeUnmount(clearEnrollment)
       </header>
 
       <div class="admin-login__body">
-        <p class="admin-login__eyebrow">ADMIN / AAL2 REQUIRED</p>
+        <p class="admin-login__eyebrow">ADMIN / PASSWORD ACCESS</p>
         <h1 id="admin-login-title">관리자 접근</h1>
-        <p class="admin-login__intro">비밀번호 확인 후 등록된 인증 앱으로 2단계 인증을 완료하세요.</p>
+        <p class="admin-login__intro">승인된 관리자 이메일과 비밀번호로 운영 화면에 로그인하세요.</p>
 
         <form
-          v-if="step === 'credentials'"
           class="admin-login__form"
-          @submit.prevent="submitCredentials"
+          @submit.prevent="submitLogin"
         >
           <label for="admin-email">
             이메일
@@ -191,67 +120,10 @@ onBeforeUnmount(clearEnrollment)
           <AppButton
             variant="primary"
             :loading="!hydrated || submitting"
-            @click="submitCredentials"
+            @click="submitLogin"
           >
-            비밀번호 확인
+            관리자 로그인
           </AppButton>
-        </form>
-
-        <form
-          v-else
-          class="admin-login__form"
-          @submit.prevent="submitTotp"
-        >
-          <div
-            v-if="authentication?.enrollment"
-            class="admin-login__enrollment"
-          >
-            <p>인증 앱에 새 계정을 등록한 뒤 표시된 6자리 코드를 입력하세요.</p>
-            <img
-              :src="authentication.enrollment.qrCode"
-              alt="PHOTO:NEXT 관리자 TOTP 등록 QR 코드"
-            >
-            <label for="admin-totp-secret">
-              수동 등록키
-              <input
-                id="admin-totp-secret"
-                :value="authentication.enrollment.secret"
-                type="password"
-                autocomplete="off"
-                readonly
-              >
-            </label>
-          </div>
-          <label for="admin-totp">
-            2단계 인증 코드
-            <input
-              id="admin-totp"
-              v-model="totpCode"
-              type="text"
-              name="totp"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              required
-            >
-          </label>
-          <div class="admin-login__actions">
-            <AppButton
-              variant="primary"
-              :loading="!hydrated || submitting"
-              @click="submitTotp"
-            >
-              2단계 인증 완료
-            </AppButton>
-            <AppButton
-              variant="secondary"
-              :loading="!hydrated || submitting"
-              @click="restart"
-            >
-              다시 로그인
-            </AppButton>
-          </div>
         </form>
 
         <p
@@ -356,28 +228,6 @@ onBeforeUnmount(clearEnrollment)
   padding: 0.75rem;
 }
 
-.admin-login__enrollment {
-  display: grid;
-  gap: 1rem;
-  border-left: 3px solid var(--color-resource);
-  background: color-mix(in srgb, var(--color-resource) 7%, var(--color-surface));
-  padding: 1rem;
-}
-
-.admin-login__enrollment p { margin: 0; line-height: 1.6; }
-
-.admin-login__enrollment img {
-  width: min(14rem, 100%);
-  aspect-ratio: 1;
-  justify-self: center;
-}
-
-.admin-login__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
 .admin-login__error {
   margin: 1rem 0 0;
   border-left: 2px solid var(--color-error);
@@ -393,7 +243,6 @@ onBeforeUnmount(clearEnrollment)
 }
 
 @media (max-width: 36rem) {
-  .admin-login__actions :deep(button),
   .admin-login__form > :deep(button) {
     width: 100%;
   }

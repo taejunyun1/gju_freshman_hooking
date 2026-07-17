@@ -1,11 +1,11 @@
 import type { ApiFailure, ApiSuccess, StudentSession } from '../../../shared/types/api'
 import { AppError, toApiFailure } from '../../utils/app-error'
-import { getServerIdentityService } from '../../modules/identity/service'
+import { getServerRosterSessionService } from '../../modules/identity/student-session'
 import { studentSessionCookie } from './login.post'
 import { deriveStudentCsrfToken } from '../../utils/student-request-security'
 
 type SessionHandlerDependencies = {
-  identity: Pick<ReturnType<typeof getServerIdentityService>, 'getStudentSession'>
+  identity: Pick<ReturnType<typeof getServerRosterSessionService>, 'getStudentSession'>
   getCookie: (event: unknown) => string | undefined
   getRequestId: (event: unknown) => string
   setStatus: (event: unknown, status: number) => void
@@ -34,6 +34,6 @@ export default defineEventHandler((event) => createSessionHandler({
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
   },
-  identity: getServerIdentityService(),
+  identity: getServerRosterSessionService(),
   setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),
 })(event))

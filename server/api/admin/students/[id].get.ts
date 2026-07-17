@@ -1,9 +1,10 @@
 import type { ApiFailure, ApiSuccess } from '../../../../shared/types/api'
-import { type AdminContext, getServerRequireAdmin } from '../../../modules/identity/admin-auth'
+import type { AdminContext } from '../../../modules/identity/admin-auth'
 import {
   getServerAdminStudentsService,
   parseAdminStudentId,
 } from '../../../modules/admin/students'
+import { getAdminContext } from '../../../utils/admin-context'
 import { AppError, toApiFailure } from '../../../utils/app-error'
 
 type AdminStudentsService = ReturnType<typeof getServerAdminStudentsService>
@@ -13,7 +14,7 @@ type DetailHandlerDependencies = {
   students: Pick<AdminStudentsService, 'detail'>
   getParam: (event: unknown, name: string) => string | undefined
   getRequestId: (event: unknown) => string
-  requireAdmin: (event: unknown) => Promise<AdminContext>
+  requireAdmin: (event: unknown) => AdminContext | Promise<AdminContext>
   setHeader: (event: unknown, name: string, value: string) => void
   setStatus: (event: unknown, status: number) => void
 }
@@ -43,7 +44,7 @@ export default defineEventHandler(event => createAdminStudentDetailHandler({
     const context = (requestEvent as { context?: { requestId?: unknown } }).context
     return typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
   },
-  requireAdmin: getServerRequireAdmin(),
+  requireAdmin: getAdminContext,
   setHeader: (requestEvent, name, value) => setResponseHeader(requestEvent as never, name, value),
   setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),
 })(event))

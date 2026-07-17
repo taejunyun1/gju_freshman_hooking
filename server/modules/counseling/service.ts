@@ -12,7 +12,7 @@ import {
 } from '../../../shared/schemas/counseling'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
-import { createSupabaseStudentSessionReader } from '../identity/service'
+import { createRosterSessionServiceFromSupabase } from '../identity/student-session'
 import { createEventWriter, type EventWriter } from '../metrics/events'
 
 export type { StudentCounselingStatus } from '../../../shared/schemas/counseling'
@@ -383,9 +383,9 @@ const mapRawRequest = (rawValue: unknown) => {
 
 export const createSupabaseCounselingDependencies = (
   client: SupabaseClient,
-  createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
+  createSessionReader: typeof createRosterSessionServiceFromSupabase = createRosterSessionServiceFromSupabase,
 ): CounselingServiceDependencies => {
-  let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  let sessionReader: ReturnType<typeof createRosterSessionServiceFromSupabase> | undefined
   return {
     getStudentSession: token => (
       sessionReader ??= createSessionReader(client)

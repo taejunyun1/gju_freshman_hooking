@@ -4,7 +4,7 @@ import { selectionLimits } from '../../shared/schemas/assessment'
 import type { ApiFailure, ApiSuccess } from '../../shared/types/api'
 import { resourceTypes } from '../../shared/types/domain'
 import { decodeStoredResultSnapshot } from '../modules/assessment/stored-result'
-import { createSupabaseStudentSessionReader } from '../modules/identity/service'
+import { createRosterSessionServiceFromSupabase } from '../modules/identity/student-session'
 import { createEventWriter, type EventWriter } from '../modules/metrics/events'
 import { getAnonymousVisitorId } from '../utils/anonymous-visitor'
 import { AppError, toApiFailure } from '../utils/app-error'
@@ -274,9 +274,9 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
 
 export const createServerEventsHandler = (
   client: SupabaseClient = getServerSupabaseClient(),
-  createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
+  createSessionReader: typeof createRosterSessionServiceFromSupabase = createRosterSessionServiceFromSupabase,
 ) => {
-  let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  let sessionReader: ReturnType<typeof createRosterSessionServiceFromSupabase> | undefined
   return createEventsHandler({
     consumeRateLimit: async ({ key, route, limit, window }) => {
       const { data, error } = await client.rpc('consume_rate_limit', {

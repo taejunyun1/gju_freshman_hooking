@@ -88,6 +88,13 @@ describe('administrator students page', () => {
     sessionStorage.clear()
   })
 
+  it('exposes the individual applicant registration control', async () => {
+    vi.stubGlobal('$fetch', vi.fn(async () => envelope({ items: [], nextCursor: null })))
+    const wrapper = await mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-action="add-student"]').text()).toContain('학생 개별 등록')
+  })
+
   it('uses the shareable URL as the only list query source and forwards only supported API fields', async () => {
     route.query = {
       query: '선명',
@@ -163,7 +170,7 @@ describe('administrator students page', () => {
       limit: '20',
     })
 
-    const nextTarget = JSON.parse(wrapper.get('a[data-to]').attributes('data-to'))
+    const nextTarget = JSON.parse(wrapper.get('[data-action="next-page"]').attributes('data-to'))
     expect(nextTarget).toEqual({
       path: '/admin/students',
       query: {
@@ -192,5 +199,42 @@ describe('administrator students page', () => {
     await flushPromises()
     expect(replace).toHaveBeenCalledWith({ path: '/admin/students', query: { limit: '20' } })
     expect(wrapper.get('[data-state="empty"]').text()).toContain('조건에 맞는 학생이 없습니다')
+  })
+
+  it('posts an individual applicant with the current cycle and clears the one-time credential when its dialog closes', async () => {
+    const fetch = vi.fn(async (url: string, options?: { method?: string }) => {
+      if (url === '/api/admin/admission-cycles') return { data: [{ id: '11111111-1111-4111-8111-111111111111', year: 2027, status: 'current', rosterVersion: 2, passwordKeyVersion: 1, createdAt: '2026-07-17T00:00:00.000Z', archivedAt: null }], requestId: 'cycle-trace' }
+      return url === '/api/admin/students' && options?.method !== 'POST'
+        ? envelope({ items: [student], nextCursor: null })
+        : { data: { id: 77, credential: { name: '홍 길동', phone: '01012345678', password: '5678AB' } }, requestId: 'add-trace' }
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[data-action="add-student"]').trigger('click')
+    await wrapper.get('input[name="name"]').setValue('홍 길동')
+    await wrapper.get('input[name="phone"]').setValue('010-1234-5678')
+    await wrapper.get('input[name="highSchool"]').setValue('광주고')
+    await wrapper.get('select[name="grade"]').setValue('high3')
+    expect(wrapper.find('input[name="cycleId"]').exists()).toBe(false)
+    await wrapper.get('form[aria-label="학생 개별 등록"]').trigger('submit')
+    await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith('/api/admin/students', expect.objectContaining({
+      method: 'POST',
+      headers: { Authorization: 'Bearer short-lived-access-token' },
+      body: {
+        cycleId: '11111111-1111-4111-8111-111111111111',
+        name: '홍 길동',
+        phone: '010-1234-5678',
+        highSchool: '광주고',
+        grade: 'high3',
+      },
+    }))
+    expect(wrapper.text()).toContain('5678AB')
+    await wrapper.get('button[data-action="close-password-dialog"]').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('5678AB')
   })
 })

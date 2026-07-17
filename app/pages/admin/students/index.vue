@@ -9,9 +9,13 @@ import {
 } from '../../../../shared/schemas/admin-students'
 import type { ApiSuccess } from '../../../../shared/types/api'
 import DataTable from '../../../components/admin/DataTable.vue'
+import RosterStudentForm from '../../../components/admin/RosterStudentForm.vue'
+import PasswordReissueDialog from '../../../components/admin/PasswordReissueDialog.vue'
 import StudentFilters from '../../../components/admin/StudentFilters.vue'
 import AppButton from '../../../components/common/AppButton.vue'
 import AppState from '../../../components/common/AppState.vue'
+import type { RosterCredential } from '../../../../shared/schemas/admission-roster'
+import { admissionCycleSchema } from '../../../../shared/schemas/admission-roster'
 import { useAdminSessionStore } from '../../../stores/admin-session'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
@@ -23,6 +27,9 @@ const items = ref<AdminStudentListItem[]>([])
 const nextCursor = ref<string | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
+const formOpen = ref(false)
+const oneTimeCredential = ref<RosterCredential | null>(null)
+const currentCycleId = ref<string | null>(null)
 let active = true
 let requestVersion = 0
 let stopRouteWatch: (() => void) | undefined
@@ -120,6 +127,40 @@ const resetFilters = async (): Promise<void> => {
   await router.replace({ path: '/admin/students', query: { limit: pageLimit() } })
 }
 
+const openStudentForm = async (): Promise<void> => {
+  if (formOpen.value) { formOpen.value = false; return }
+  errorMessage.value = ''
+  try {
+    const response = await $fetch<ApiSuccess<unknown>>('/api/admin/admission-cycles', { headers: adminSession.authorizationHeaders() })
+    currentCycleId.value = admissionCycleSchema.array().parse(response.data).find(cycle => cycle.status === 'current')?.id ?? null
+    if (!currentCycleId.value) throw new Error('CURRENT_CYCLE_UNAVAILABLE')
+    formOpen.value = true
+  }
+  catch {
+    errorMessage.value = '현재 입시 사이클을 확인하지 못했습니다. 연간 명단 관리를 먼저 확인하세요.'
+  }
+}
+
+const closeCredentialDialog = (): void => { oneTimeCredential.value = null }
+
+const addStudent = async (value: { name: string, phone: string, highSchool: string, grade: string }): Promise<void> => {
+  errorMessage.value = ''
+  if (!currentCycleId.value) { errorMessage.value = '현재 입시 사이클을 먼저 확인하세요.'; return }
+  try {
+    const response = await $fetch<ApiSuccess<{ id: number, credential: RosterCredential }>>('/api/admin/students', {
+      method: 'POST',
+      headers: adminSession.authorizationHeaders(),
+      body: { ...value, cycleId: currentCycleId.value },
+    })
+    oneTimeCredential.value = response.data.credential
+    formOpen.value = false
+    await loadStudents()
+  }
+  catch {
+    errorMessage.value = '학생을 저장하지 못했습니다. 입력값과 현재 사이클을 확인하세요.'
+  }
+}
+
 onMounted(() => {
   stopRouteWatch = watch(() => route.fullPath, loadStudents, { immediate: true })
 })
@@ -138,8 +179,11 @@ onBeforeUnmount(() => {
         <h1 id="student-operations-title">학생 찾기</h1>
         <p>학생의 참여 기록과 상담 흐름을 확인하고, 필요한 다음 연락을 준비합니다.</p>
       </div>
-      <AppButton variant="secondary" :loading="loading" @click="loadStudents">새로고침</AppButton>
+      <div class="student-operations__actions"><button data-action="add-student" type="button" @click="openStudentForm">학생 개별 등록</button><NuxtLink to="/admin/students/roster">연간 명단 관리</NuxtLink><AppButton variant="secondary" :loading="loading" @click="loadStudents">새로고침</AppButton></div>
     </header>
+
+    <RosterStudentForm v-if="formOpen" @submit="addStudent" @cancel="formOpen = false" />
+    <PasswordReissueDialog v-if="oneTimeCredential" :credential="oneTimeCredential" @close="closeCredentialDialog" />
 
     <StudentFilters :model-value="filterModel" @apply="applyFilters" @reset="resetFilters" />
 
@@ -158,7 +202,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <DataTable :items="items" :list-url="safeListUrl" />
       <nav v-if="nextTarget" class="student-operations__pagination" aria-label="학생 목록 페이지">
-        <NuxtLink :to="nextTarget">다음 학생 보기</NuxtLink>
+        <NuxtLink data-action="next-page" :to="nextTarget">다음 학생 보기</NuxtLink>
       </nav>
     </template>
   </section>
@@ -181,6 +225,9 @@ onBeforeUnmount(() => {
 .student-operations__header > div {
   max-width: 50rem;
 }
+.student-operations__actions { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+.student-operations__actions a { min-height:var(--touch-target); display:inline-flex; align-items:center; border:1px solid var(--color-resource); padding:.625rem 1rem; color:var(--color-resource); font-family:var(--font-display); font-weight:700; text-decoration:none; }
+.student-operations__actions button { min-height:var(--touch-target); border:1px solid var(--color-sequence); background:var(--color-surface); color:var(--color-ink); padding:.625rem 1rem; font-family:var(--font-display); font-weight:700; }
 
 .student-operations__eyebrow {
   margin: 0 0 0.625rem;

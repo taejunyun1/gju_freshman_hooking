@@ -17,6 +17,7 @@ import {
   hmacSha256,
   utf8,
 } from '../../utils/web-crypto'
+import { revealApplicantName } from '../identity/applicant-name'
 import { normalizeKoreanPhone, revealPhone } from '../identity/phone'
 
 const safeIdSchema = z.number().int().positive().safe()
@@ -148,12 +149,16 @@ export const parseAdminStudentId = (input: string | undefined): number => {
 const rawStudentRowSchema = z.object({
   id: safeIdSchema,
   nickname: storedText(100),
+  admission_cycle_id: z.string().uuid().optional(),
+  is_test: z.boolean().optional(),
+  name_ciphertext: z.string().min(1).max(260).optional(),
+  name_iv: z.string().min(1).max(64).optional(),
   phone_ciphertext: z.string().min(1).max(260),
   phone_iv: z.string().min(1).max(64),
   school_name: storedText(40),
   applicant_stage: applicantStageSchema,
   region: regionSchema,
-  status: z.enum(['active', 'deleted']),
+  status: z.enum(['active', 'inactive', 'deleted']),
   last_active_at: timestampSchema,
   created_at: timestampSchema,
 }).strict()
@@ -161,12 +166,16 @@ const rawStudentRowSchema = z.object({
 const storedStudentSchema = z.object({
   studentId: safeIdSchema,
   nickname: storedText(100),
+  cycleId: z.string().uuid().optional(),
+  isTest: z.boolean().optional(),
+  nameCiphertext: z.instanceof(Uint8Array).refine(value => value.byteLength >= 16 && value.byteLength <= 128).optional(),
+  nameIv: z.instanceof(Uint8Array).refine(value => value.byteLength === 12).optional(),
   phoneCiphertext: z.instanceof(Uint8Array).refine(value => value.byteLength >= 16 && value.byteLength <= 128),
   phoneIv: z.instanceof(Uint8Array).refine(value => value.byteLength === 12),
   schoolName: storedText(40),
   applicantStage: applicantStageSchema,
   region: regionSchema,
-  status: z.enum(['active', 'deleted']),
+  status: z.enum(['active', 'inactive', 'deleted']),
   lastActiveAt: timestampSchema,
   createdAt: timestampSchema,
 }).strict()
@@ -179,6 +188,12 @@ export const decodeAdminStudentRow = (input: unknown): StoredAdminStudent => {
     return storedStudentSchema.parse({
       studentId: row.id,
       nickname: row.nickname,
+      ...(row.admission_cycle_id === undefined ? {} : { cycleId: row.admission_cycle_id }),
+      ...(row.is_test === undefined ? {} : { isTest: row.is_test }),
+      ...(row.name_ciphertext === undefined || row.name_iv === undefined ? {} : {
+        nameCiphertext: bytesFromPostgresBytea(row.name_ciphertext),
+        nameIv: bytesFromPostgresBytea(row.name_iv),
+      }),
       phoneCiphertext: bytesFromPostgresBytea(row.phone_ciphertext),
       phoneIv: bytesFromPostgresBytea(row.phone_iv),
       schoolName: row.school_name,
@@ -236,6 +251,7 @@ type StoreListInput = Omit<AdminStudentsListInput, 'limit'> & {
 }
 
 export type AdminStudentsServiceDependencies = {
+  decryptName?: (value: { ciphertext: Uint8Array, iv: Uint8Array }) => Promise<string>
   decryptPhone: (value: { ciphertext: Uint8Array, iv: Uint8Array }) => Promise<string>
   hashPhone: (phone: string) => Promise<Uint8Array>
   listStudents: (input: StoreListInput) => Promise<StoredAdminStudent[]>
@@ -260,7 +276,9 @@ const toPublicStudent = async (
   student: StoredAdminStudent,
 ) => ({
   id: student.studentId,
-  nickname: student.nickname,
+  nickname: student.nameCiphertext && student.nameIv && dependencies.decryptName
+    ? await dependencies.decryptName({ ciphertext: student.nameCiphertext, iv: student.nameIv })
+    : student.nickname,
   phone: maskPhone(await dependencies.decryptPhone({
     ciphertext: student.phoneCiphertext,
     iv: student.phoneIv,
@@ -269,17 +287,19 @@ const toPublicStudent = async (
   applicantStage: student.applicantStage,
   region: student.region,
   status: student.status,
+  ...(student.cycleId === undefined ? {} : { cycleId: student.cycleId }),
+  ...(student.isTest === undefined ? {} : { isTest: student.isTest }),
   lastActiveAt: student.lastActiveAt,
   createdAt: student.createdAt,
 })
 
-const loadActiveStudent = async (
+const loadManageableStudent = async (
   dependencies: AdminStudentsServiceDependencies,
   studentId: number,
 ): Promise<StoredAdminStudent> => {
   const rawStudent = await dependencies.loadStudent({ studentId })
   const parsed = storedStudentSchema.safeParse(rawStudent)
-  if (!parsed.success || parsed.data.status !== 'active' || parsed.data.studentId !== studentId) {
+  if (!parsed.success || parsed.data.status === 'deleted' || parsed.data.studentId !== studentId) {
     if (rawStudent === null || parsed.success) throw new AppError('STUDENT_NOT_FOUND')
     throw new Error('ADMIN_STUDENT_STORE_INVALID')
   }
@@ -311,7 +331,7 @@ export const createAdminStudentsService = (dependencies: AdminStudentsServiceDep
     if (!Array.isArray(stored) || stored.length > limit + 1) throw new Error('ADMIN_STUDENT_STORE_INVALID')
     const page = stored.slice(0, limit).map((student) => {
       const parsed = storedStudentSchema.safeParse(student)
-      if (!parsed.success || parsed.data.status !== 'active') throw new Error('ADMIN_STUDENT_STORE_INVALID')
+      if (!parsed.success || parsed.data.status === 'deleted') throw new Error('ADMIN_STUDENT_STORE_INVALID')
       return parsed.data
     })
     const items = await Promise.all(page.map(student => toPublicStudent(dependencies, student)))
@@ -324,7 +344,7 @@ export const createAdminStudentsService = (dependencies: AdminStudentsServiceDep
     }
   },
   detail: async (studentId: number) => {
-    const student = await loadActiveStudent(dependencies, studentId)
+    const student = await loadManageableStudent(dependencies, studentId)
     const [publicStudent, recentResults, counseling] = await Promise.all([
       toPublicStudent(dependencies, student),
       dependencies.listRecentResults({ studentId, limit: 3 }),
@@ -352,7 +372,7 @@ export const createAdminStudentsService = (dependencies: AdminStudentsServiceDep
     }
   },
   revealPhone: async (studentId: number, context: { adminUserId: string, traceId: string }) => {
-    const student = await loadActiveStudent(dependencies, studentId)
+    const student = await loadManageableStudent(dependencies, studentId)
     const phone = normalizeKoreanPhone(await dependencies.decryptPhone({
       ciphertext: student.phoneCiphertext,
       iv: student.phoneIv,
@@ -370,6 +390,10 @@ export const createAdminStudentsService = (dependencies: AdminStudentsServiceDep
 const studentSelection = `
   id,
   nickname,
+  admission_cycle_id,
+  is_test,
+  name_ciphertext,
+  name_iv,
   phone_ciphertext,
   phone_iv,
   school_name,
@@ -428,7 +452,7 @@ const throwStoreError = (error: { code?: string } | null): never => {
 
 export const createSupabaseAdminStudentsDependencies = (
   client: SupabaseClient,
-  cryptoDependencies: Pick<AdminStudentsServiceDependencies, 'decryptPhone' | 'hashPhone'>,
+  cryptoDependencies: Pick<AdminStudentsServiceDependencies, 'decryptName' | 'decryptPhone' | 'hashPhone'>,
 ): AdminStudentsServiceDependencies => ({
   ...cryptoDependencies,
   listStudents: async (input) => {
@@ -474,7 +498,6 @@ export const createSupabaseAdminStudentsDependencies = (
     const { data, error } = await client.from('prospects')
       .select(studentSelection)
       .eq('id', studentId)
-      .eq('status', 'active')
       .maybeSingle()
     if (error) throwStoreError(error)
     return data === null ? null : decodeAdminStudentRow(data)
@@ -555,6 +578,7 @@ export const getServerAdminStudentsService = () => {
   return createAdminStudentsService(createSupabaseAdminStudentsDependencies(
     getServerSupabaseClient(),
     {
+      decryptName: value => revealApplicantName(value, encryptionKey),
       decryptPhone: value => revealPhone(value, encryptionKey),
       hashPhone: phone => hmacSha256(utf8(normalizeKoreanPhone(phone)), hmacKey),
     },

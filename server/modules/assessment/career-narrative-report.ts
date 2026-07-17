@@ -9,7 +9,7 @@ import {
 } from '../../../shared/schemas/career-narrative-report'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
-import { createSupabaseStudentSessionReader } from '../identity/service'
+import { createRosterSessionServiceFromSupabase } from '../identity/student-session'
 
 const REPORT_ROUTE = '/api/career-narrative/report' as const
 
@@ -143,9 +143,9 @@ export const createCareerNarrativeReportService = (
 
 export const createSupabaseCareerNarrativeReportDependencies = (
   client: SupabaseClient,
-  createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
+  createSessionReader: typeof createRosterSessionServiceFromSupabase = createRosterSessionServiceFromSupabase,
 ): CareerNarrativeReportDependencies => {
-  let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  let sessionReader: ReturnType<typeof createRosterSessionServiceFromSupabase> | undefined
 
   return {
     consumeRateLimit: async ({ key, route, limit, window }) => {

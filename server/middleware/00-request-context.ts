@@ -29,16 +29,14 @@ export default defineEventHandler((event) => {
 
   const pathname = getRequestURL(event).pathname
   const isAdminDocument = pathname === '/admin' || pathname.startsWith('/admin/')
-  const isAdminLogin = pathname === '/admin/login'
   const isPrivateApi = pathname === '/api/student'
     || pathname.startsWith('/api/student/')
     || pathname === '/api/admin'
     || pathname.startsWith('/api/admin/')
-  const imageSources = isAdminLogin ? "img-src 'self' data:; " : ''
   const connectSources = isAdminDocument
     ? `connect-src 'self' ${validatedSupabaseOrigin(useRuntimeConfig(event).public.supabaseUrl)}; `
     : ''
-  const contentSecurityPolicy = `default-src 'self'; script-src 'self' 'nonce-${cspNonce}'; script-src-attr 'none'; style-src 'self' 'nonce-${cspNonce}'; style-src-attr 'none'; ${imageSources}${connectSources}base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'`
+  const contentSecurityPolicy = `default-src 'self'; script-src 'self' 'nonce-${cspNonce}'; script-src-attr 'none'; style-src 'self' 'nonce-${cspNonce}'; style-src-attr 'none'; ${connectSources}base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'`
 
   setResponseHeader(event, 'content-security-policy', contentSecurityPolicy)
   setResponseHeader(event, 'x-content-type-options', 'nosniff')

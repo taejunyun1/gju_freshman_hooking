@@ -12,6 +12,8 @@ const requestBodyLimitOverrides = new Map([
   ['/api/events', MAX_REQUEST_BODY_BYTES],
   ['/api/student/assessment/validate', MAX_REQUEST_BODY_BYTES],
   ['/api/admin/resources/equipment/import/validate', RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES],
+  ['/api/admin/students/roster/preview', RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES],
+  ['/api/admin/students/roster/apply', RESOURCE_IMPORT_MAX_REQUEST_BODY_BYTES],
 ])
 
 const resourceImagePathPattern = /^\/api\/admin\/resources\/[1-9][0-9]{0,15}\/image$/u

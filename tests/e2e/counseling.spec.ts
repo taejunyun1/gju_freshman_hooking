@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
@@ -87,38 +87,6 @@ const runLocalSql = (sql: string, variables: Record<string, string> = {}): strin
     ],
     { encoding: 'utf8', input: sql },
   ).trim()
-}
-
-const base32Bytes = (secret: string): Uint8Array => {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-  let bits = 0
-  let buffer = 0
-  const bytes: number[] = []
-  for (const character of secret.replaceAll('=', '').toUpperCase()) {
-    const digit = alphabet.indexOf(character)
-    if (digit < 0) throw new Error('TOTP_SECRET_INVALID')
-    buffer = (buffer << 5) | digit
-    bits += 5
-    if (bits >= 8) {
-      bits -= 8
-      bytes.push((buffer >> bits) & 0xff)
-      buffer &= (1 << bits) - 1
-    }
-  }
-  if (bytes.length < 10) throw new Error('TOTP_SECRET_INVALID')
-  return Uint8Array.from(bytes)
-}
-
-const totpCode = (secret: string, now = Date.now()): string => {
-  const counter = Buffer.alloc(8)
-  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)))
-  const digest = createHmac('sha1', base32Bytes(secret)).update(counter).digest()
-  const offset = digest.at(-1)! & 0x0f
-  const binary = ((digest[offset]! & 0x7f) << 24)
-    | ((digest[offset + 1]! & 0xff) << 16)
-    | ((digest[offset + 2]! & 0xff) << 8)
-    | (digest[offset + 3]! & 0xff)
-  return (binary % 1_000_000).toString().padStart(6, '0')
 }
 
 const facultySnapshot = (
@@ -270,32 +238,24 @@ const createAdmin = async (
   }
 }
 
-const loginAal2Admin = async (
+const loginAdminWithPassword = async (
   page: Page,
   credentials: { email: string, password: string },
 ): Promise<void> => {
   await page.goto('/admin/login?redirect=/admin/counseling')
-  const passwordButton = page.getByRole('button', { name: '비밀번호 확인' })
+  const passwordButton = page.getByRole('button', { name: '관리자 로그인' })
   await expect(passwordButton).toBeEnabled()
   await page.getByLabel('이메일').fill(credentials.email)
   await page.getByLabel('비밀번호').fill(credentials.password)
   const passwordResponsePromise = page.waitForResponse(response => (
     response.url().includes('/auth/v1/token') && response.request().method() === 'POST'
   ))
-  await passwordButton.click()
-  const passwordResponse = await passwordResponsePromise
-  expect(passwordResponse.status()).toBe(200)
-  const secretInput = page.getByLabel('수동 등록키')
-  await expect(secretInput).toBeVisible()
-  const secret = await secretInput.inputValue()
-
-  const millisecondsIntoWindow = Date.now() % 30_000
-  if (millisecondsIntoWindow > 28_000) await page.waitForTimeout(2_100)
-  await page.getByLabel('2단계 인증 코드').fill(totpCode(secret))
   const sessionResponsePromise = page.waitForResponse(response => (
     new URL(response.url()).pathname === '/api/admin/session'
   ))
-  await page.getByRole('button', { name: '2단계 인증 완료' }).click()
+  await passwordButton.click()
+  const passwordResponse = await passwordResponsePromise
+  expect(passwordResponse.status()).toBe(200)
   expect((await sessionResponsePromise).ok()).toBe(true)
   await expect(page).toHaveURL('/admin/counseling')
 }
@@ -363,7 +323,7 @@ test('student request becomes a completed assigned counseling case', async ({ br
     const adminContext = await browser.newContext()
     const admin = await adminContext.newPage()
     try {
-      await loginAal2Admin(admin, adminCredentials)
+      await loginAdminWithPassword(admin, adminCredentials)
       const card = admin.locator('article.counseling-record').filter({
         has: admin.getByRole('heading', { name: nickname, exact: true }),
       })

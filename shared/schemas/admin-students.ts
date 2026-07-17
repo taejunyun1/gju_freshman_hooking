@@ -20,7 +20,10 @@ export const adminStudentListItemSchema = z.object({
   schoolName: safeStoredText(40),
   applicantStage: applicantStageSchema,
   region: regionSchema,
-  status: z.literal('active'),
+  status: z.enum(['active', 'inactive']),
+  cycleId: z.string().uuid().optional(),
+  isTest: z.boolean().optional(),
+  passwordGeneration: safeIdSchema.optional(),
   lastActiveAt: timestampSchema,
   createdAt: timestampSchema,
 }).strict()

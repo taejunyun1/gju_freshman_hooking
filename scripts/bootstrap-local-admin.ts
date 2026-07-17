@@ -34,7 +34,7 @@ export const bootstrapLocalAdmin = async (
   await adapter.signIn(input.email, input.password)
   await adapter.upsertAdmin(userId)
 
-  write('Local administrator ready. Enroll TOTP on first browser login at /admin/login.')
+  write('Local administrator ready. Sign in at /admin/login.')
 }
 
 const requiredEnvironmentValue = (name: string): string => {

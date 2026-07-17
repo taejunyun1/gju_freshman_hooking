@@ -14,8 +14,10 @@ const requiredNames = [
   'NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'NUXT_SUPABASE_SECRET_KEY',
   'NUXT_PHONE_HMAC_KEY',
+  'NUXT_NAME_HMAC_KEY',
   'NUXT_PHONE_ENCRYPTION_KEY',
   'NUXT_PASSWORD_PEPPER',
+  'NUXT_PASSWORD_PEPPER_VERSION',
   'NUXT_CAMPAIGN_COOKIE_KEY',
 ]
 
@@ -42,13 +44,71 @@ const isCanonicalExactBase64urlSecret = (encoded, byteLength) => {
   }
 }
 
-if (process.env.NUXT_CAMPAIGN_COOKIE_KEY) {
-  const encoded = process.env.NUXT_CAMPAIGN_COOKIE_KEY
-  const canonical = (() => {
-    return isCanonicalExactBase64urlSecret(encoded, 32)
-  })()
-  if (!canonical) {
-    issues.push({ name: 'NUXT_CAMPAIGN_COOKIE_KEY', reason: 'must encode exactly 32 bytes as unpadded base64url' })
+const exactSecretNames = [
+  'NUXT_PHONE_HMAC_KEY',
+  'NUXT_NAME_HMAC_KEY',
+  'NUXT_PHONE_ENCRYPTION_KEY',
+  'NUXT_PASSWORD_PEPPER',
+  'NUXT_CAMPAIGN_COOKIE_KEY',
+]
+
+const decodedSecrets = new Map()
+for (const name of exactSecretNames) {
+  const encoded = process.env[name]?.trim()
+  if (encoded) {
+    if (!isCanonicalExactBase64urlSecret(encoded, 32)) {
+      issues.push({ name, reason: 'must encode exactly 32 bytes as unpadded base64url' })
+    }
+    else if (name !== 'NUXT_CAMPAIGN_COOKIE_KEY') {
+      decodedSecrets.set(name, Buffer.from(encoded, 'base64url'))
+    }
+  }
+}
+
+const positiveVersion = (value) => /^[1-9]\d*$/u.test(value) && Number.isSafeInteger(Number(value))
+const currentPasswordVersion = process.env.NUXT_PASSWORD_PEPPER_VERSION?.trim() ?? ''
+if (currentPasswordVersion && !positiveVersion(currentPasswordVersion)) {
+  issues.push({ name: 'NUXT_PASSWORD_PEPPER_VERSION', reason: 'must be a positive integer' })
+}
+
+const previousPasswordPepper = process.env.NUXT_PREVIOUS_PASSWORD_PEPPER?.trim() ?? ''
+const previousPasswordVersion = process.env.NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION?.trim() ?? ''
+if ((previousPasswordPepper === '') !== (previousPasswordVersion === '')) {
+  issues.push({
+    name: 'NUXT_PREVIOUS_PASSWORD_PEPPER/NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION',
+    reason: 'must be configured together',
+  })
+}
+else if (previousPasswordPepper !== '') {
+  if (!isCanonicalExactBase64urlSecret(previousPasswordPepper, 32)) {
+    issues.push({
+      name: 'NUXT_PREVIOUS_PASSWORD_PEPPER',
+      reason: 'must encode exactly 32 bytes as unpadded base64url',
+    })
+  }
+  else {
+    decodedSecrets.set('NUXT_PREVIOUS_PASSWORD_PEPPER', Buffer.from(previousPasswordPepper, 'base64url'))
+  }
+  if (!positiveVersion(previousPasswordVersion)) {
+    issues.push({ name: 'NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION', reason: 'must be a positive integer' })
+  }
+  else if (previousPasswordVersion === currentPasswordVersion) {
+    issues.push({
+      name: 'NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION',
+      reason: 'must differ from NUXT_PASSWORD_PEPPER_VERSION',
+    })
+  }
+}
+
+const seenSecretBytes = new Map()
+for (const [name, bytes] of decodedSecrets) {
+  const fingerprint = bytes.toString('hex')
+  const priorName = seenSecretBytes.get(fingerprint)
+  if (priorName !== undefined) {
+    issues.push({ name, reason: `must use distinct key material from ${priorName}` })
+  }
+  else {
+    seenSecretBytes.set(fingerprint, name)
   }
 }
 

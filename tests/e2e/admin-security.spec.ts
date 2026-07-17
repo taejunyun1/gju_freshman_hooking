@@ -53,11 +53,11 @@ test('request nonce protects hydrated scripts and styles', async ({ page }) => {
   expect(secondNonce).not.toBe(firstNonce)
 })
 
-test('administrator login CSP permits a Supabase-style TOTP data image to load', async ({ page }) => {
+test('administrator login CSP blocks data images after TOTP removal', async ({ page }) => {
   const response = await page.goto('/admin/login')
   const csp = response?.headers()['content-security-policy']
 
-  expect(csp).toContain("img-src 'self' data:")
+  expect(csp).not.toContain('data:')
   await expect(page.getByRole('heading', { name: '관리자 접근' })).toBeVisible()
   await expect(page.locator('.admin-shell')).toHaveCount(0)
 
@@ -74,7 +74,7 @@ test('administrator login CSP permits a Supabase-style TOTP data image to load',
     return { loaded, naturalHeight: element.naturalHeight, naturalWidth: element.naturalWidth }
   })
 
-  expect(image).toEqual({ loaded: true, naturalHeight: 2, naturalWidth: 2 })
+  expect(image).toEqual({ loaded: false, naturalHeight: 0, naturalWidth: 0 })
 })
 
 test('administrator login reaches local Supabase Auth for invalid credentials', async ({ page }) => {
@@ -87,12 +87,12 @@ test('administrator login reaches local Supabase Auth for invalid credentials', 
     .toContain("connect-src 'self' http://127.0.0.1:54321")
   await page.getByLabel('이메일').fill('missing-admin@example.test')
   await page.getByLabel('비밀번호').fill('definitely-invalid-password')
-  await expect(page.getByRole('button', { name: '비밀번호 확인' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '관리자 로그인' })).toBeEnabled()
 
   const authResponsePromise = page.waitForResponse(response => (
     response.url().includes('/auth/v1/token') && response.request().method() === 'POST'
   ))
-  await page.getByRole('button', { name: '비밀번호 확인' }).click()
+  await page.getByRole('button', { name: '관리자 로그인' }).click()
   const authResponse = await authResponsePromise
 
   expect(authResponse.status()).toBeGreaterThanOrEqual(400)

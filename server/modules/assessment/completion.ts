@@ -29,7 +29,7 @@ import {
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { sha256, utf8 } from '../../utils/web-crypto'
-import { createSupabaseStudentSessionReader } from '../identity/service'
+import { createRosterSessionServiceFromSupabase } from '../identity/student-session'
 import { createEventWriter, type EventWriter } from '../metrics/events'
 import {
   type FacultyRecommendationCandidate,
@@ -1034,9 +1034,9 @@ const storedAssessmentFromRow = (input: unknown): StoredOwnedAssessment => {
 
 export const createSupabaseAssessmentCompletionDependencies = (
   client: SupabaseClient,
-  createSessionReader: typeof createSupabaseStudentSessionReader = createSupabaseStudentSessionReader,
+  createSessionReader: typeof createRosterSessionServiceFromSupabase = createRosterSessionServiceFromSupabase,
 ): AssessmentCompletionDependencies => {
-  let sessionReader: ReturnType<typeof createSupabaseStudentSessionReader> | undefined
+  let sessionReader: ReturnType<typeof createRosterSessionServiceFromSupabase> | undefined
   const loadCompletedAssessmentByIdempotency = async ({
     prospectId,
     idempotencyKey,

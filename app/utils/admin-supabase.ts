@@ -6,15 +6,7 @@ type ClientFactory = (
   options: { auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false } },
 ) => SupabaseClient
 
-export type AdminAuthenticationStep = {
-  enrollment: null | {
-    qrCode: string
-    secret: string
-  }
-  factorId: string
-}
-
-export type VerifiedAdminToken = {
+export type AdminPasswordToken = {
   accessToken: string
   expiresIn: number
   userId: string
@@ -35,81 +27,36 @@ export const createAdminSupabaseClient = (
   })
 }
 
-export const cancelAdminEnrollment = async (
+export const signInAdminWithPassword = async (
   client: SupabaseClient,
-  factorId: string,
-): Promise<void> => {
+  email: string,
+  password: string,
+): Promise<AdminPasswordToken> => {
+  const { data, error } = await client.auth.signInWithPassword({ email, password })
+  const session = data.session
+  if (
+    error
+    || !session
+    || typeof session.access_token !== 'string'
+    || typeof session.expires_in !== 'number'
+    || typeof session.user?.id !== 'string'
+  ) throw new Error('ADMIN_AUTH_FAILED')
+
+  const signedIn = {
+    accessToken: session.access_token,
+    expiresIn: session.expires_in,
+    userId: session.user.id,
+  }
+
   try {
-    const { data, error } = await client.auth.mfa.unenroll({ factorId })
-    if (error || data?.id !== factorId) throw new Error('ADMIN_AUTH_FAILED')
+    const { error: signOutError } = await client.auth.signOut({ scope: 'local' })
+    if (signOutError) throw signOutError
   }
   catch {
     throw new Error('ADMIN_AUTH_FAILED')
   }
-}
 
-export const beginAdminAuthentication = async (
-  client: SupabaseClient,
-  email: string,
-  password: string,
-): Promise<AdminAuthenticationStep> => {
-  const { error: signInError } = await client.auth.signInWithPassword({ email, password })
-  if (signInError) throw new Error('ADMIN_AUTH_FAILED')
-
-  const { data: factors, error: factorError } = await client.auth.mfa.listFactors()
-  if (factorError || !factors) throw new Error('ADMIN_AUTH_FAILED')
-
-  const staleTotpFactors = factors.all.filter(factor => (
-    factor.factor_type === 'totp' && factor.status === 'unverified'
-  ))
-  for (const factor of staleTotpFactors) {
-    await cancelAdminEnrollment(client, factor.id)
-  }
-
-  const verifiedTotp = factors.totp[0]
-  if (verifiedTotp) return { enrollment: null, factorId: verifiedTotp.id }
-
-  const { data: enrollment, error: enrollmentError } = await client.auth.mfa.enroll({
-    factorType: 'totp',
-    friendlyName: 'PHOTO:NEXT administrator',
-  })
-  if (enrollmentError || !enrollment || enrollment.type !== 'totp') throw new Error('ADMIN_AUTH_FAILED')
-  return {
-    enrollment: {
-      qrCode: enrollment.totp.qr_code,
-      secret: enrollment.totp.secret,
-    },
-    factorId: enrollment.id,
-  }
-}
-
-export const verifyAdminTotp = async (
-  client: SupabaseClient,
-  factorId: string,
-  code: string,
-): Promise<VerifiedAdminToken> => {
-  if (!/^\d{6}$/u.test(code)) throw new Error('ADMIN_MFA_CODE_INVALID')
-  const { data: challenge, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-  if (challengeError || !challenge) throw new Error('ADMIN_AUTH_FAILED')
-
-  const { data: verified, error: verifyError } = await client.auth.mfa.verify({
-    challengeId: challenge.id,
-    code,
-    factorId,
-  })
-  if (
-    verifyError
-    || !verified
-    || typeof verified.access_token !== 'string'
-    || typeof verified.expires_in !== 'number'
-    || typeof verified.user?.id !== 'string'
-  ) throw new Error('ADMIN_AUTH_FAILED')
-
-  return {
-    accessToken: verified.access_token,
-    expiresIn: verified.expires_in,
-    userId: verified.user.id,
-  }
+  return signedIn
 }
 
 let adminSupabaseClient: SupabaseClient | undefined

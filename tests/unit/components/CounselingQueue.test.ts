@@ -410,8 +410,11 @@ describe('administrator counseling queue', () => {
     const dialog = wrapper.get('dialog[role="dialog"]')
     expect(dialog.attributes()).toHaveProperty('open')
     expect(dialog.attributes('aria-modal')).toBe('true')
-    expect(dialog.text()).toContain('2단계 인증')
+    expect(dialog.text()).toContain('비밀번호 재로그인이 필요합니다')
+    expect(dialog.text()).toContain('이메일과 비밀번호로 다시 로그인하세요')
+    expect(dialog.text()).not.toContain('2단계 인증')
     expect(dialog.find('button[data-action="cancel-reauthentication"]').exists()).toBe(true)
+    expect(dialog.get('button[data-action="reauthenticate"]').text()).toBe('비밀번호로 다시 로그인')
     await dialog.get('button[data-action="reauthenticate"]').trigger('click')
 
     expect(useAdminSessionStore().session).toBeNull()

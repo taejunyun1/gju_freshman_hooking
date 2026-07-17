@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/types/domain'
 import { AppError } from '../../utils/app-error'
 import { getServerSupabaseClient } from '../../utils/supabase'
-import { createSupabaseStudentSessionReader } from '../identity/service'
+import { createRosterSessionServiceFromSupabase } from '../identity/student-session'
 import { AssessmentScoringError, scoreAssessment } from './scoring'
 import { createAssessmentCatalogRevision } from './catalog-revision'
 import type { ScoredAssessment } from './types'
@@ -156,11 +156,11 @@ export const createAssessmentService = (dependencies: AssessmentServiceDependenc
   return { getOptions, validateAssessment }
 }
 
-type StudentSessionReaderFactory = typeof createSupabaseStudentSessionReader
+type StudentSessionReaderFactory = typeof createRosterSessionServiceFromSupabase
 
 export const createSupabaseAssessmentDependencies = (
   client: SupabaseClient,
-  createSessionReader: StudentSessionReaderFactory = createSupabaseStudentSessionReader,
+  createSessionReader: StudentSessionReaderFactory = createRosterSessionServiceFromSupabase,
 ): AssessmentServiceDependencies => {
   let sessionReader: ReturnType<StudentSessionReaderFactory> | undefined
   return {

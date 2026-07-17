@@ -1,7 +1,8 @@
 import { loginSchema } from '../../../shared/schemas/identity'
 import type { ApiFailure, ApiSuccess, LoginResult } from '../../../shared/types/api'
 import { AppError, toApiFailure } from '../../utils/app-error'
-import { getServerIdentityService, type IdentityRequestContext } from '../../modules/identity/service'
+import type { RosterIdentityRequestContext } from '../../modules/identity/roster-auth'
+import { getServerRosterAuthService } from '../../modules/identity/roster-auth'
 import { studentSessionCookie } from '../../utils/student-request-security'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
@@ -18,15 +19,15 @@ const sessionCookieOptions = {
 }
 
 type LoginHandlerDependencies = {
-  identity: Pick<ReturnType<typeof getServerIdentityService>, 'loginStudent'>
+  identity: Pick<ReturnType<typeof getServerRosterAuthService>, 'loginStudent'>
   getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
-  getContext: (event: unknown) => IdentityRequestContext
+  getContext: (event: unknown) => RosterIdentityRequestContext
   readBody: (event: unknown) => Promise<unknown>
   setCookie: (event: unknown, name: string, value: string, options: typeof sessionCookieOptions) => void
   setStatus: (event: unknown, status: number) => void
 }
 
-const defaultContext = (event: unknown): IdentityRequestContext => {
+const defaultContext = (event: unknown): RosterIdentityRequestContext => {
   const requestEvent = event as { context?: { requestId?: unknown } }
   return {
     anonymousId: getAnonymousVisitorId(event),
@@ -48,7 +49,7 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
       throw new AppError('AUTH_FAILED')
     }
 
-    const context: IdentityRequestContext = {
+    const context: RosterIdentityRequestContext = {
       ...baseContext,
       ...(dependencies.getCampaignId
         ? { resolveCampaignId: () => dependencies.getCampaignId!(event) }
@@ -70,7 +71,7 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
 export default defineEventHandler((event) => createLoginHandler({
   getContext: defaultContext,
   getCampaignId: getServerVerifiedCampaignId,
-  identity: getServerIdentityService(),
+  identity: getServerRosterAuthService(),
   readBody: (requestEvent) => readBody(requestEvent as never),
   setCookie: (requestEvent, name, value, options) => setCookie(requestEvent as never, name, value, options),
   setStatus: (requestEvent, status) => setResponseStatus(requestEvent as never, status),

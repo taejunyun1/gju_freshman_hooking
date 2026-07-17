@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
       <p>PRIVATE CONTACT / 60 SEC</p>
       <h2 id="phone-dialog-title">{{ nickname }} 연락처 확인</h2>
     </div>
-    <p id="phone-dialog-description">최근 2단계 인증을 확인한 뒤 전화번호를 60초간만 표시합니다.</p>
+    <p id="phone-dialog-description">최근 비밀번호 로그인을 확인한 뒤 전화번호를 60초간만 표시합니다.</p>
     <dl>
       <div>
         <dt>기본 표시</dt>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { adminStudentDetailSchema, type AdminStudentDetail } from '../../../../shared/schemas/admin-students'
 import { trackLabels } from '../../../../shared/types/domain'
 import type { ApiSuccess } from '../../../../shared/types/api'
 import PhoneRevealDialog from '../../../components/admin/PhoneRevealDialog.vue'
+import PasswordReissueDialog from '../../../components/admin/PasswordReissueDialog.vue'
+import type { RosterCredential } from '../../../../shared/schemas/admission-roster'
 import AppButton from '../../../components/common/AppButton.vue'
 import AppState from '../../../components/common/AppState.vue'
 import { useAdminSessionStore } from '../../../stores/admin-session'
@@ -17,6 +19,15 @@ const detail = ref<AdminStudentDetail | null>(null)
 const loading = ref(true)
 const errorMessage = ref('')
 const phoneDialogOpen = ref(false)
+const profileEditorOpen = ref(false)
+const phoneEditorOpen = ref(false)
+const statusConfirmationOpen = ref(false)
+const actionMessage = ref('')
+const actionError = ref('')
+const oneTimeCredential = ref<RosterCredential | null>(null)
+const profileForm = reactive({ name: '', highSchool: '', grade: 'high3' })
+const phoneForm = reactive({ phone: '' })
+const statusConfirmation = ref('')
 let active = true
 let requestVersion = 0
 let stopStudentWatch: (() => void) | undefined
@@ -107,12 +118,81 @@ const formatDate = (value: string): string => new Intl.DateTimeFormat('ko-KR', {
   hour12: false,
 }).format(new Date(value))
 
+const pendingStatus = computed(() => detail.value?.student.status === 'active' ? 'inactive' as const : 'active' as const)
+const confirmationPhrase = computed(() => `${studentId.value} ${pendingStatus.value === 'inactive' ? '비활성화' : '활성화'}`)
+const requestOptions = () => ({ headers: adminSession.authorizationHeaders() })
+
+const openProfileEditor = (): void => {
+  if (!detail.value) return
+  profileForm.name = detail.value.student.nickname
+  profileForm.highSchool = detail.value.student.schoolName
+  profileForm.grade = detail.value.student.applicantStage
+  actionError.value = ''
+  profileEditorOpen.value = true
+}
+
+const saveProfile = async (): Promise<void> => {
+  if (!detail.value) return
+  actionError.value = ''; actionMessage.value = ''
+  try {
+    await $fetch(`/api/admin/students/${detail.value.student.id}`, { method: 'PATCH', ...requestOptions(), body: { ...profileForm } })
+    detail.value = { ...detail.value, student: { ...detail.value.student, nickname: profileForm.name, schoolName: profileForm.highSchool, applicantStage: profileForm.grade as AdminStudentDetail['student']['applicantStage'] } }
+    profileEditorOpen.value = false
+    actionMessage.value = '학생 기본 정보를 저장했습니다.'
+  }
+  catch { actionError.value = '학생 기본 정보를 저장하지 못했습니다. 입력값을 확인하세요.' }
+}
+
+const changePhone = async (): Promise<void> => {
+  if (!detail.value) return
+  actionError.value = ''; actionMessage.value = ''
+  try {
+    const response = await $fetch<ApiSuccess<{ passwordGeneration: number, credential: RosterCredential }>>(`/api/admin/students/${detail.value.student.id}/phone`, {
+      method: 'POST', ...requestOptions(), body: { phone: phoneForm.phone },
+    })
+    oneTimeCredential.value = response.data.credential
+    phoneEditorOpen.value = false
+  }
+  catch { actionError.value = '전화번호를 변경하지 못했습니다. 최신 학생 정보를 다시 확인하세요.' }
+}
+
+const changeStatus = async (): Promise<void> => {
+  if (!detail.value || statusConfirmation.value !== confirmationPhrase.value) return
+  actionError.value = ''; actionMessage.value = ''
+  try {
+    await $fetch(`/api/admin/students/${detail.value.student.id}/status`, { method: 'POST', ...requestOptions(), body: { status: pendingStatus.value, confirmation: statusConfirmation.value } })
+    detail.value = { ...detail.value, student: { ...detail.value.student, status: pendingStatus.value } }
+    statusConfirmationOpen.value = false
+    statusConfirmation.value = ''
+    actionMessage.value = pendingStatus.value === 'inactive' ? '학생 계정을 비활성화했습니다.' : '학생 계정을 활성화했습니다.'
+  }
+  catch { actionError.value = '학생 상태를 변경하지 못했습니다. 확인 문구와 세션을 다시 확인하세요.' }
+}
+
+const reissuePassword = async (): Promise<void> => {
+  if (!detail.value) return
+  actionError.value = ''; actionMessage.value = ''
+  try {
+    const response = await $fetch<ApiSuccess<{ passwordGeneration: number, credential: RosterCredential }>>(`/api/admin/students/${detail.value.student.id}/password/reissue`, {
+      method: 'POST', ...requestOptions(), body: {},
+    })
+    oneTimeCredential.value = response.data.credential
+  }
+  catch { actionError.value = '임시 비밀번호를 발급하지 못했습니다. 최근 관리자 로그인을 확인하세요.' }
+}
+
+const closeCredentialDialog = (): void => { oneTimeCredential.value = null }
+
 const loadDetail = async (): Promise<void> => {
   const thisRequest = ++requestVersion
   const requestedStudentId = studentId.value
   loading.value = true
   errorMessage.value = ''
   phoneDialogOpen.value = false
+  profileEditorOpen.value = false
+  phoneEditorOpen.value = false
+  statusConfirmationOpen.value = false
+  oneTimeCredential.value = null
   detail.value = null
   if (requestedStudentId === 0) {
     errorMessage.value = '학생 정보를 확인할 수 없습니다. 목록에서 다시 선택하세요.'
@@ -144,6 +224,7 @@ onBeforeUnmount(() => {
   requestVersion += 1
   stopStudentWatch?.()
   phoneDialogOpen.value = false
+  oneTimeCredential.value = null
 })
 </script>
 
@@ -170,6 +251,44 @@ onBeforeUnmount(() => {
           <AppButton data-action="open-phone" variant="secondary" @click="phoneDialogOpen = true">전화번호 확인</AppButton>
         </div>
       </header>
+
+      <dl class="student-detail__identity" data-testid="roster-identity">
+        <div><dt>이름</dt><dd>{{ detail.student.nickname }}</dd></div>
+        <div><dt>연락처</dt><dd>{{ detail.student.phone }}</dd></div>
+        <div><dt>학교</dt><dd>{{ detail.student.schoolName }}</dd></div>
+        <div><dt>학년</dt><dd>{{ stageLabels[detail.student.applicantStage] }}</dd></div>
+        <div><dt>사이클</dt><dd>{{ detail.student.cycleId ? '현재 사이클' : '현재 연도' }}</dd></div>
+        <div><dt>상태</dt><dd>{{ detail.student.status === 'active' ? '활성' : '비활성' }}</dd></div>
+        <div v-if="detail.student.isTest"><dt>구분</dt><dd>테스트 계정</dd></div>
+      </dl>
+
+      <section class="student-detail__operations" aria-label="학생 계정 관리">
+        <header><p>ROSTER / ACCOUNT CONTROL</p><h2>학생 계정 관리</h2></header>
+        <div class="student-detail__operation-actions">
+          <button data-action="open-profile-edit" type="button" @click="openProfileEditor">기본 정보 수정</button>
+          <button data-action="open-phone-change" type="button" @click="phoneEditorOpen = !phoneEditorOpen">전화번호 변경</button>
+          <button data-action="open-status-toggle" type="button" @click="statusConfirmationOpen = !statusConfirmationOpen">{{ pendingStatus === 'inactive' ? '비활성화' : '활성화' }}</button>
+          <button data-action="reissue-password" type="button" @click="reissuePassword">임시 비밀번호 재발급</button>
+        </div>
+        <p v-if="actionMessage" class="student-detail__action-message" role="status">{{ actionMessage }}</p>
+        <p v-if="actionError" class="student-detail__action-error" role="alert">{{ actionError }}</p>
+        <form v-if="profileEditorOpen" class="student-detail__operation-form" aria-label="학생 기본 정보 수정" @submit.prevent="saveProfile">
+          <label>이름<input v-model="profileForm.name" name="name" autocomplete="name" required></label>
+          <label>출신고교<input v-model="profileForm.highSchool" name="highSchool" autocomplete="organization" required></label>
+          <label>학년<select v-model="profileForm.grade" name="grade"><option value="high1">고1</option><option value="high2">고2</option><option value="high3">고3</option><option value="graduate">고교 졸업</option><option value="ged">검정고시</option><option value="other">기타</option></select></label>
+          <div><button type="submit">저장</button><button type="button" @click="profileEditorOpen = false">취소</button></div>
+        </form>
+        <form v-if="phoneEditorOpen" class="student-detail__operation-form" aria-label="학생 전화번호 변경" @submit.prevent="changePhone">
+          <label>새 휴대전화<input v-model="phoneForm.phone" name="phone" autocomplete="tel" required></label>
+          <p>전화번호를 변경하면 새 임시 비밀번호가 한 번만 표시됩니다.</p>
+          <div><button type="submit">변경하고 발급</button><button type="button" @click="phoneEditorOpen = false">취소</button></div>
+        </form>
+        <form v-if="statusConfirmationOpen" class="student-detail__operation-form" aria-label="학생 상태 변경 확인" @submit.prevent="changeStatus">
+          <p><strong>{{ confirmationPhrase }}</strong>를 입력하면 {{ pendingStatus === 'inactive' ? '비활성화와 세션 해제' : '활성화' }}를 진행합니다.</p>
+          <label>확인 문구<input v-model="statusConfirmation" name="statusConfirmation" :placeholder="confirmationPhrase" required></label>
+          <div><button type="submit" :disabled="statusConfirmation !== confirmationPhrase">상태 변경</button><button type="button" @click="statusConfirmationOpen = false">취소</button></div>
+        </form>
+      </section>
 
       <dl class="student-detail__facts">
         <div>
@@ -248,6 +367,7 @@ onBeforeUnmount(() => {
         :login-redirect="loginRedirect"
         @close="phoneDialogOpen = false"
       />
+      <PasswordReissueDialog v-if="oneTimeCredential" :credential="oneTimeCredential" @close="closeCredentialDialog" />
     </template>
   </section>
 </template>
@@ -329,6 +449,35 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
 }
 
+.student-detail__identity {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--color-resource);
+  background: var(--color-resource);
+}
+
+.student-detail__identity > div {
+  display: grid;
+  gap: 0.35rem;
+  background: var(--color-canvas);
+  padding: 0.75rem;
+}
+
+.student-detail__identity dt {
+  color: var(--color-sequence);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.07em;
+}
+
+.student-detail__identity dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
 .student-detail__facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -347,6 +496,48 @@ onBeforeUnmount(() => {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
 }
+
+.student-detail__operations {
+  display: grid;
+  gap: 0.75rem;
+  border-block: 1px solid var(--color-resource);
+  padding-block: 1rem;
+}
+
+.student-detail__operations header p,
+.student-detail__operations h2 {
+  margin: 0;
+}
+
+.student-detail__operations header p {
+  color: var(--color-sequence);
+  font-family: var(--font-mono);
+  font-size: 0.675rem;
+  letter-spacing: 0.08em;
+}
+
+.student-detail__operations h2 { font-family: var(--font-display); font-size: 1.35rem; }
+.student-detail__operation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.student-detail__operation-actions button,
+.student-detail__operation-form button {
+  min-height: var(--touch-target);
+  border: 1px solid var(--color-resource);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  padding: 0.55rem 0.8rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.student-detail__operation-actions button:last-child { border-color: var(--color-sequence); }
+.student-detail__operation-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; border: 1px solid var(--color-resource); background: var(--color-surface); padding: 0.875rem; }
+.student-detail__operation-form label { display: grid; gap: 0.3rem; font-family: var(--font-mono); font-size: 0.7rem; }
+.student-detail__operation-form input,
+.student-detail__operation-form select { min-height: var(--touch-target); border: 1px solid var(--color-resource); background: var(--color-canvas); padding: 0.5rem; color: var(--color-ink); font: inherit; }
+.student-detail__operation-form > p,
+.student-detail__operation-form > div { grid-column: 1 / -1; margin: 0; }
+.student-detail__operation-form > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.student-detail__action-message { margin: 0; color: var(--color-sequence); font-family: var(--font-mono); font-size: 0.8rem; }
+.student-detail__action-error { margin: 0; color: #a8251a; font-family: var(--font-mono); font-size: 0.8rem; }
 
 .student-detail__section {
   display: grid;
@@ -467,7 +658,9 @@ tbody tr:last-child td {
   }
 
   .student-detail__facts,
-  .student-detail__counseling dl {
+  .student-detail__counseling dl,
+  .student-detail__identity,
+  .student-detail__operation-form {
     grid-template-columns: 1fr;
   }
 

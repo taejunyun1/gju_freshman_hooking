@@ -6,7 +6,6 @@ import { createAdminCampaignsListHandler } from '../../../server/api/admin/campa
 import { createCampaignResolutionHandler } from '../../../server/api/campaign/[code].get'
 import { createSubmitAssessmentHandler } from '../../../server/api/assessment/submit.post'
 import { createEventsHandler } from '../../../server/api/events.post'
-import { createRegisterHandler } from '../../../server/api/student/register.post'
 import { createEventWriter } from '../../../server/modules/metrics/events'
 import {
   createAdminCampaignsService,
@@ -326,41 +325,7 @@ describe('signed campaign attribution', () => {
 describe('verified campaign wiring', () => {
   const verifiedCampaignId = 7 as never
 
-  it('passes verified attribution into registration without accepting a client campaign field', async () => {
-    const getCampaignId = vi.fn(async () => verifiedCampaignId)
-    const registerStudent = vi.fn(async () => ({ kind: 'existing' as const }))
-    const handler = createRegisterHandler({
-      identity: { registerStudent },
-      getCampaignId,
-      getContext: () => ({ anonymousId, ip: '203.0.113.7', requestId }),
-      readBody: async () => ({
-        phone: '01012345678', schoolName: '광주고등학교', applicantStage: 'high3', region: 'gwangju',
-      }),
-      setStatus: () => undefined,
-    })
-    await handler({})
-    const context = registerStudent.mock.calls[0]![1]
-    expect(getCampaignId).not.toHaveBeenCalled()
-    await expect(context.resolveCampaignId()).resolves.toBe(7)
-    expect(getCampaignId).toHaveBeenCalledOnce()
-  })
-
-  it('does not resolve campaign attribution for rejected identity or assessment bodies', async () => {
-    const registerCampaign = vi.fn(async () => verifiedCampaignId)
-    const registerStudent = vi.fn(async () => ({ kind: 'existing' as const }))
-    const registerEvent: { status?: number } = {}
-    const register = createRegisterHandler({
-      identity: { registerStudent },
-      getCampaignId: registerCampaign,
-      getContext: () => ({ anonymousId, ip: '203.0.113.7', requestId }),
-      readBody: async () => ({ phone: 'invalid', campaignId: 99 }),
-      setStatus: (_event, status) => { registerEvent.status = status },
-    })
-    await register(registerEvent)
-    expect(registerEvent.status).toBe(400)
-    expect(registerCampaign).not.toHaveBeenCalled()
-    expect(registerStudent).not.toHaveBeenCalled()
-
+  it('does not resolve campaign attribution for rejected assessment bodies', async () => {
     const assessmentCampaign = vi.fn(async () => verifiedCampaignId)
     const submitAssessment = vi.fn(async () => ({ publicId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }))
     const assessmentEvent: { status?: number } = {}

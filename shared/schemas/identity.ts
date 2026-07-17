@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { normalizeKoreanPhone } from '../../server/modules/identity/phone'
+import { normalizeKoreanPhone } from '../utils/applicant-normalization'
 
 export const phoneSchema = z.string().transform(normalizeKoreanPhone)
 
@@ -25,7 +25,9 @@ export const registerSchema = z.object({
   region: regionSchema,
 })
 
+export const rosterPasswordSchema = z.string().regex(/^\d{4}[A-Z]{2}$/u)
+
 export const loginSchema = z.object({
   phone: phoneSchema,
-  password: z.string().min(7).max(128),
+  password: rosterPasswordSchema,
 })

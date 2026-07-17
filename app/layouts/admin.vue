@@ -39,12 +39,12 @@ const logout = async (): Promise<void> => {
       <nav aria-label="관리자 메뉴">
         <NuxtLink to="/admin">운영 홈</NuxtLink>
         <NuxtLink to="/admin/students">학생 찾기</NuxtLink>
+        <NuxtLink to="/admin/students/roster">연간 명단 관리</NuxtLink>
         <NuxtLink to="/admin/counseling">상담 운영</NuxtLink>
         <NuxtLink to="/admin/resources">학과 자원</NuxtLink>
         <NuxtLink to="/admin/faculty">교수진 운영</NuxtLink>
         <NuxtLink to="/admin/campaigns">캠페인 운영</NuxtLink>
         <NuxtLink to="/admin/export">데이터 내보내기</NuxtLink>
-        <NuxtLink to="/admin/recovery">복구 대기열</NuxtLink>
         <NuxtLink to="/admin/narrative-reports">AI 문장 신고</NuxtLink>
       </nav>
 

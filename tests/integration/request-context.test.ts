@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type TestEvent = {
@@ -64,7 +65,7 @@ describe('request context security headers', () => {
     }
   })
 
-  it('allows Supabase TOTP data images only on the administrator login response', async () => {
+  it('does not allow data images on the administrator login response', async () => {
     const { default: requestContext } = await import('../../server/middleware/00-request-context')
     const loginEvent: TestEvent = {
       context: {},
@@ -80,7 +81,7 @@ describe('request context security headers', () => {
     requestContext(loginEvent as never)
     requestContext(publicEvent as never)
 
-    expect(loginEvent.responseHeaders.get('content-security-policy')).toContain("img-src 'self' data:")
+    expect(loginEvent.responseHeaders.get('content-security-policy')).not.toContain('data:')
     expect(publicEvent.responseHeaders.get('content-security-policy')).not.toContain('data:')
   })
 
@@ -160,5 +161,74 @@ describe('request context security headers', () => {
     expect(validateEvent.responseHeaders.get('cache-control')).toBe('private, no-store')
     expect(adminEvent.responseHeaders.get('cache-control')).toBe('private, no-store')
     expect(healthEvent.responseHeaders.has('cache-control')).toBe(false)
+  })
+})
+
+describe('administrator request context', () => {
+  it('reuses the middleware administrator without a second auth lookup', async () => {
+    const { getAdminContext } = await import('../../server/utils/admin-context')
+    const admin = {
+      userId: crypto.randomUUID(),
+      role: 'admin',
+      aal: 'aal1',
+      authenticatedAt: new Date('2026-07-17T01:00:00.000Z'),
+    } as const
+
+    expect(getAdminContext({ context: { admin } })).toBe(admin)
+  })
+
+  it('rejects missing or malformed middleware administrator context', async () => {
+    const { getAdminContext } = await import('../../server/utils/admin-context')
+
+    for (const event of [
+      {},
+      { context: {} },
+      { context: { admin: { role: 'admin' } } },
+      {
+        context: {
+          admin: {
+            aal: 'aal3',
+            authenticatedAt: new Date('2026-07-17T01:00:00.000Z'),
+            role: 'admin',
+            userId: 'admin-1',
+          },
+        },
+      },
+    ]) {
+      expect(() => getAdminContext(event)).toThrowError(expect.objectContaining({ code: 'ADMIN_REQUIRED' }))
+    }
+  })
+
+  it('enforces recent authentication from the cached middleware context', async () => {
+    const { requireRecentAdminContext } = await import('../../server/utils/admin-context')
+    const admin = {
+      userId: 'admin-1',
+      role: 'admin',
+      aal: 'aal1',
+      authenticatedAt: new Date('2026-07-17T01:00:00.000Z'),
+    } as const
+    const event = { context: { admin } }
+
+    expect(requireRecentAdminContext(event, 15, new Date('2026-07-17T01:15:00.000Z'))).toBe(admin)
+    expect(() => requireRecentAdminContext(event, 15, new Date('2026-07-17T01:15:00.001Z')))
+      .toThrowError(expect.objectContaining({ code: 'REAUTH_REQUIRED' }))
+    expect(() => requireRecentAdminContext(event, 15, new Date('2026-07-17T00:59:59.999Z')))
+      .toThrowError(expect.objectContaining({ code: 'REAUTH_REQUIRED' }))
+  })
+
+  it('wires student administrator handlers to middleware context helpers', () => {
+    const ordinaryHandlers = [
+      'server/api/admin/students/index.get.ts',
+      'server/api/admin/students/[id].get.ts',
+    ]
+    for (const path of ordinaryHandlers) {
+      const source = readFileSync(path, 'utf8')
+      expect(source).toContain('getAdminContext')
+      expect(source).not.toContain('getServerRequireAdmin')
+    }
+
+    const revealHandler = readFileSync('server/api/admin/students/[id]/reveal-phone.post.ts', 'utf8')
+    expect(revealHandler).toContain('requireRecentAdminContext')
+    expect(revealHandler).not.toContain('getServerRequireAdmin')
   })
 })

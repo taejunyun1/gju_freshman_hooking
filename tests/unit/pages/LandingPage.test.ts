@@ -31,7 +31,7 @@ describe('landing page', () => {
     const wrapper = mount(LandingPage, {
       global: { stubs: { NuxtLink: NuxtLinkStub } },
     })
-    const startLinks = wrapper.findAll('a[href="/start"]')
+    const startLinks = wrapper.findAll('a[href="/login"]')
 
     expect(startLinks).toHaveLength(1)
     expect(startLinks[0].text()).toBe('나의 연결 경로 찾기')
@@ -75,6 +75,6 @@ describe('landing page', () => {
 
     await flushPromises()
 
-    expect(wrapper.get('a[href="/start"]').text()).toBe('나의 연결 경로 찾기')
+    expect(wrapper.get('a[href="/login"]').text()).toBe('나의 연결 경로 찾기')
   })
 })

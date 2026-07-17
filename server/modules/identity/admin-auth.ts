@@ -7,7 +7,7 @@ const ADMIN_AUTH_MAX_AGE_MILLISECONDS = 8 * 60 * 60 * 1000
 export type AdminContext = {
   userId: string
   role: 'admin'
-  aal: 'aal2'
+  aal: 'aal1' | 'aal2'
   authenticatedAt: Date
 }
 
@@ -79,7 +79,7 @@ export const createRequireAdmin = (dependencies: AdminAuthDependencies) => async
 
   const verified = await dependencies.verifyAccessToken(accessToken)
   if (!verified) throw new AppError('ADMIN_REQUIRED')
-  if (verified.aal !== 'aal2') throw new AppError('MFA_REQUIRED')
+  if (verified.aal !== 'aal1' && verified.aal !== 'aal2') throw new AppError('ADMIN_REQUIRED')
 
   const now = (dependencies.now ?? (() => new Date()))()
   const age = now.getTime() - verified.authenticatedAt.getTime()
@@ -92,7 +92,7 @@ export const createRequireAdmin = (dependencies: AdminAuthDependencies) => async
   const admin = await dependencies.findActiveAdmin(verified.userId)
   if (!admin || admin.role !== 'admin') throw new AppError('ADMIN_REQUIRED')
 
-  return { userId: verified.userId, role: 'admin', aal: 'aal2', authenticatedAt: verified.authenticatedAt }
+  return { userId: verified.userId, role: 'admin', aal: verified.aal, authenticatedAt: verified.authenticatedAt }
 }
 
 const accessTokenFromHeader = (event: unknown): string | null => {

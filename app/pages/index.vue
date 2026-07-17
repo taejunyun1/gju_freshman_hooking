@@ -31,7 +31,7 @@ onMounted(() => {
         </p>
         <NuxtLink
           class="landing__cta"
-          to="/start"
+          to="/login"
         >
           나의 연결 경로 찾기
         </NuxtLink>

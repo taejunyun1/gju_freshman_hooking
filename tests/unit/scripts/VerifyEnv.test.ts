@@ -3,13 +3,16 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const script = resolve('scripts/verify-env.mjs')
+const secret32 = (fill: number) => Buffer.alloc(32, fill).toString('base64url')
 const required = {
-  NUXT_CAMPAIGN_COOKIE_KEY: 'A'.repeat(43),
-  NUXT_PHONE_ENCRYPTION_KEY: 'safe-encryption-key',
-  NUXT_PHONE_HMAC_KEY: 'safe-hmac-key',
+  NUXT_CAMPAIGN_COOKIE_KEY: secret32(1),
+  NUXT_NAME_HMAC_KEY: secret32(3),
+  NUXT_PASSWORD_PEPPER_VERSION: '2',
+  NUXT_PHONE_ENCRYPTION_KEY: secret32(4),
+  NUXT_PHONE_HMAC_KEY: secret32(2),
   NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'safe-publishable-key',
   NUXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
-  NUXT_PASSWORD_PEPPER: 'safe-password-pepper',
+  NUXT_PASSWORD_PEPPER: secret32(5),
   NUXT_SUPABASE_SECRET_KEY: 'safe-secret-key',
 }
 
@@ -39,6 +42,77 @@ describe('Worker environment verifier', () => {
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain('NUXT_CAMPAIGN_COOKIE_KEY')
     expect(result.stderr).not.toContain('short-shared-secret')
+  })
+
+  it.each([
+    'NUXT_PHONE_HMAC_KEY',
+    'NUXT_NAME_HMAC_KEY',
+    'NUXT_PHONE_ENCRYPTION_KEY',
+    'NUXT_PASSWORD_PEPPER',
+  ])('requires %s to encode exactly 32 bytes', (name) => {
+    const sentinel = `sentinel-${name}`
+    const result = runVerifier({ [name]: sentinel })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain(name)
+    expect(`${result.stdout}${result.stderr}`).not.toContain(sentinel)
+  })
+
+  it('requires a positive current password pepper version', () => {
+    for (const version of ['0', '-1', '1.5', '01', '']) {
+      const result = runVerifier({ NUXT_PASSWORD_PEPPER_VERSION: version })
+
+      expect(result.status).not.toBe(0)
+      expect(result.stderr).toContain('NUXT_PASSWORD_PEPPER_VERSION')
+    }
+  })
+
+  it.each([
+    ['NUXT_NAME_HMAC_KEY', required.NUXT_PHONE_HMAC_KEY],
+    ['NUXT_PHONE_ENCRYPTION_KEY', required.NUXT_PASSWORD_PEPPER],
+  ])('rejects duplicate key material assigned to %s', (name, duplicate) => {
+    const result = runVerifier({ [name]: duplicate })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain(name)
+    expect(result.stderr).toContain('must use distinct key material')
+    expect(`${result.stdout}${result.stderr}`).not.toContain(duplicate)
+  })
+
+  it('keeps the campaign cookie key outside the roster-key distinctness set', () => {
+    const result = runVerifier({ NUXT_CAMPAIGN_COOKIE_KEY: required.NUXT_PHONE_HMAC_KEY })
+
+    expect(result.status).toBe(0)
+  })
+
+  it('requires the previous password pepper and version together with a different version', () => {
+    const previousSecret = secret32(6)
+    const pepperOnly = runVerifier({ NUXT_PREVIOUS_PASSWORD_PEPPER: previousSecret })
+    const versionOnly = runVerifier({ NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION: '1' })
+    const sameVersion = runVerifier({
+      NUXT_PREVIOUS_PASSWORD_PEPPER: previousSecret,
+      NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION: '2',
+    })
+    const validPrevious = runVerifier({
+      NUXT_PREVIOUS_PASSWORD_PEPPER: previousSecret,
+      NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION: '1',
+    })
+
+    expect(pepperOnly.status).not.toBe(0)
+    expect(versionOnly.status).not.toBe(0)
+    expect(sameVersion.status).not.toBe(0)
+    expect(validPrevious.status).toBe(0)
+  })
+
+  it('rejects an optional previous pepper that duplicates any current key material', () => {
+    const result = runVerifier({
+      NUXT_PREVIOUS_PASSWORD_PEPPER: required.NUXT_NAME_HMAC_KEY,
+      NUXT_PREVIOUS_PASSWORD_PEPPER_VERSION: '1',
+    })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('NUXT_PREVIOUS_PASSWORD_PEPPER')
+    expect(result.stderr).toContain('must use distinct key material')
   })
 
   it.each(['postgres://database.invalid/app', 'postgresql://database.invalid/app'])(

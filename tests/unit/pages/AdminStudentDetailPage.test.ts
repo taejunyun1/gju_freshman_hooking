@@ -15,6 +15,8 @@ const detail: AdminStudentDetail = {
     applicantStage: 'high3',
     region: 'gwangju',
     status: 'active',
+    cycleId: '11111111-1111-4111-8111-111111111111',
+    isTest: true,
     lastActiveAt: '2026-07-15T01:00:00.000Z',
     createdAt: '2026-07-01T01:00:00.000Z',
   },
@@ -105,6 +107,58 @@ describe('administrator student detail page', () => {
     sessionStorage.clear()
   })
 
+  it('shows the roster identity strip before student history', async () => {
+    vi.stubGlobal('$fetch', vi.fn(async () => ({ data: detail, requestId: 'detail-trace' })))
+    const wrapper = await mountPage()
+    await flushPromises()
+    const strip = wrapper.get('[data-testid="roster-identity"]')
+    expect(strip.text()).toContain('선명한프레임42')
+    expect(strip.text()).toContain('010-****-5678')
+    expect(strip.text()).toContain('광주고등학교')
+    expect(strip.text()).toContain('고3')
+    expect(strip.text()).toContain('현재 사이클')
+    expect(strip.text()).toContain('활성')
+    expect(strip.text()).toContain('테스트 계정')
+  })
+
+  it('saves profile edits, requests a clear status confirmation, and shows a reissued password only in its dialog', async () => {
+    const fetch = vi.fn(async (url: string, options?: { method?: string }) => {
+      if (url.endsWith('/password/reissue')) return { data: { passwordGeneration: 2, credential: { name: '선명한프레임42', phone: '01012345678', password: 'AB5678' } }, requestId: 'reissue-trace' }
+      if (url.endsWith('/status')) return { data: { kind: 'success' }, requestId: 'status-trace' }
+      if (url === '/api/admin/students/42' && options?.method === 'PATCH') return { data: { kind: 'success' }, requestId: 'profile-trace' }
+      return { data: detail, requestId: 'detail-trace' }
+    })
+    vi.stubGlobal('$fetch', fetch)
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    await wrapper.get('button[data-action="open-profile-edit"]').trigger('click')
+    await wrapper.get('input[name="name"]').setValue('새 이름')
+    await wrapper.get('form[aria-label="학생 기본 정보 수정"]').trigger('submit')
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/students/42', expect.objectContaining({
+      method: 'PATCH', headers: { Authorization: 'Bearer short-lived-access-token' },
+      body: { name: '새 이름', highSchool: '광주고등학교', grade: 'high3' },
+    }))
+
+    await wrapper.get('button[data-action="open-status-toggle"]').trigger('click')
+    expect(wrapper.text()).toContain('42 비활성화')
+    await wrapper.get('input[name="statusConfirmation"]').setValue('42 비활성화')
+    await wrapper.get('form[aria-label="학생 상태 변경 확인"]').trigger('submit')
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/students/42/status', expect.objectContaining({
+      method: 'POST', body: { status: 'inactive', confirmation: '42 비활성화' },
+    }))
+
+    await wrapper.get('button[data-action="reissue-password"]').trigger('click')
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/students/42/password/reissue', expect.objectContaining({ method: 'POST', body: {} }))
+    expect(wrapper.get('[role="dialog"]').text()).toContain('AB5678')
+    await wrapper.get('button[data-action="close-password-dialog"]').trigger('click')
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('AB5678')
+  })
+
   it('loads exact student detail, keeps the masked phone, and preserves the safe list URL', async () => {
     const fetch = vi.fn(async () => ({ data: detail, requestId: 'trace-id' }))
     vi.stubGlobal('$fetch', fetch)
@@ -169,6 +223,8 @@ describe('administrator student detail page', () => {
     await opener.trigger('click')
     await flushPromises()
     const dialog = wrapper.get('[role="dialog"]')
+    expect(dialog.text()).toContain('최근 비밀번호 로그인을 확인한 뒤')
+    expect(dialog.text()).not.toContain('2단계 인증')
     expect(dialog.text()).toContain('010-****-5678')
     expect(dialog.text()).not.toContain('01012345678')
 
@@ -212,7 +268,7 @@ describe('administrator student detail page', () => {
     expect(document.activeElement).toBe(opener.element)
   })
 
-  it.each(['REAUTH_REQUIRED', 'ADMIN_REQUIRED'])(
+  it.each(['MFA_REQUIRED', 'REAUTH_REQUIRED', 'ADMIN_REQUIRED'])(
     'routes %s failures to login with a safe local redirect and clears the stale session',
     async (errorCode) => {
     route.query = { returnTo: '//evil.example/steal' }

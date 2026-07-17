@@ -1,6 +1,4 @@
 import { expect, type Page } from '@playwright/test'
-import type { ApiSuccess, RegistrationResult } from '../../../shared/types/api'
-import { clearLocalRegistrationRateLimitBuckets } from './local-registration-rate-limit'
 export { uniqueAssessmentPhone } from './phone'
 
 type RegisteredStudent = {
@@ -9,51 +7,21 @@ type RegisteredStudent = {
 
 type OnRegistered = (student: RegisteredStudent) => Promise<void>
 
-const createdRegistration = (value: unknown): RegisteredStudent | null => {
-  const payload = value as Partial<ApiSuccess<RegistrationResult>> | null
-  if (
-    !payload
-    || typeof payload !== 'object'
-    || !payload.data
-    || payload.data.kind !== 'created'
-    || typeof payload.data.nickname !== 'string'
-    || payload.data.nickname.length === 0
-  ) return null
-  return { nickname: payload.data.nickname }
-}
+const fallbackPasswordForPhone = (phone: string): string => `${phone.replace(/\D/gu, '').slice(-4)}AA`
 
 export const registerAndLoginStudent = async (
   page: Page,
   phone: string,
   onRegistered?: OnRegistered,
 ): Promise<RegisteredStudent> => {
-  await page.goto('/start')
-  await page.getByLabel('휴대전화 번호').fill(phone)
-  await page.getByLabel('학교명').fill('광주고등학교')
-  await page.getByLabel('현재 상태').selectOption('high3')
-  await page.getByLabel('지역').selectOption('gwangju')
+  const rosterPhone = process.env.PHOTO_NEXT_E2E_STUDENT_PHONE ?? phone
+  const rosterPassword = process.env.PHOTO_NEXT_E2E_STUDENT_PASSWORD ?? fallbackPasswordForPhone(rosterPhone)
+  const nickname = process.env.PHOTO_NEXT_E2E_STUDENT_NAME ?? '지원자'
 
-  clearLocalRegistrationRateLimitBuckets()
-  const registerResponsePromise = page.waitForResponse((response) => {
-    return new URL(response.url()).pathname === '/api/student/register'
-  })
-  await page.getByRole('button', { name: '내 연결 경로 시작하기' }).click()
-  const registerResponse = await registerResponsePromise
-  expect(registerResponse.ok()).toBe(true)
-  const registration = createdRegistration(await registerResponse.json())
-  expect(registration).not.toBeNull()
-  const { nickname } = registration!
   await onRegistered?.({ nickname })
-
-  await expect(page).toHaveURL('/credentials')
-  const displayedNickname = await page.getByTestId('nickname').textContent()
-  const initialPassword = await page.getByTestId('initial-password').textContent()
-  expect(displayedNickname).toBe(nickname)
-  expect(initialPassword).toBeTruthy()
-
-  await page.getByRole('link', { name: '로그인하러 가기' }).click()
-  await page.getByLabel('휴대전화 번호').fill(phone)
-  await page.getByLabel('임시 비밀번호').fill(initialPassword!)
+  await page.goto('/login')
+  await page.getByLabel('휴대전화 번호').fill(rosterPhone)
+  await page.getByLabel('임시 비밀번호').fill(rosterPassword)
 
   const loginResponsePromise = page.waitForResponse((response) => {
     return new URL(response.url()).pathname === '/api/student/login'
@@ -62,6 +30,5 @@ export const registerAndLoginStudent = async (
   expect((await loginResponsePromise).ok()).toBe(true)
 
   await expect(page).toHaveURL('/assessment')
-  await expect(page.getByText(`${nickname}님`, { exact: true })).toBeVisible()
   return { nickname }
 }
