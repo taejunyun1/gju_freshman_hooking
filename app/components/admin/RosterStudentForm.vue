@@ -28,5 +28,6 @@ const form = reactive({ name: '', phone: '', highSchool: '', grade: 'high3' })
 .roster-student-form input,.roster-student-form select{min-height:var(--touch-target);border:1px solid color-mix(in srgb,var(--color-primary-strong) 25%,transparent);border-radius:var(--radius-control);background:var(--color-surface);padding:.5rem;font:inherit}
 .roster-student-form__actions{grid-column:1/-1;display:flex;gap:.5rem;justify-content:flex-end}
 .roster-student-form button{min-height:var(--touch-target);border:1px solid var(--color-primary);border-radius:var(--radius-control);background:var(--color-surface);padding:.55rem .8rem;font-family:var(--font-display);font-weight:700}
+.roster-student-form :is(input,select,button):focus-visible{outline: 3px solid var(--color-primary);outline-offset: 2px}
 @media(max-width:36rem){.roster-student-form{grid-template-columns:1fr}}
 </style>

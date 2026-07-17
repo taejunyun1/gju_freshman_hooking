@@ -24,4 +24,5 @@ const emit = defineEmits<{ close: [] }>()
 .password-dialog h2{margin:0 0 .5rem;font-family:var(--font-display)}
 .password-dialog dl{display:grid;gap:.4rem}.password-dialog div{display:flex;justify-content:space-between;gap:1rem}.password-dialog dt{font-family:var(--font-mono);font-size:.7rem}.password-dialog strong{font-size:1.4rem;letter-spacing:.08em}
 .password-dialog button{min-height:var(--touch-target);border:1px solid var(--color-primary);border-radius:var(--radius-control);background:var(--color-surface);color:var(--color-primary-strong);padding:.5rem .8rem;font-family:var(--font-display);font-weight:700}
+.password-dialog button:focus-visible{outline: 3px solid var(--color-primary);outline-offset: 2px}
 </style>

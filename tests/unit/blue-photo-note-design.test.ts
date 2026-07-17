@@ -74,6 +74,20 @@ describe('Blue Photo Note visual contract', () => {
     expect(read('app/components/admin/RosterImportPanel.vue')).toContain('border-radius: var(--radius-panel)')
   })
 
+  it('keeps directly styled administrator controls visibly focused', () => {
+    for (const path of [
+      'app/components/admin/RosterImportPanel.vue',
+      'app/components/admin/RosterStudentForm.vue',
+      'app/components/admin/PasswordReissueDialog.vue',
+      'app/components/admin/RosterPreviewTable.vue',
+    ]) {
+      const source = read(path)
+      expect(source).toContain(':focus-visible')
+      expect(source).toContain('outline: 3px solid var(--color-primary)')
+      expect(source).toContain('outline-offset: 2px')
+    }
+  })
+
   it('uses direct approved palette tokens across the student entry journey', () => {
     const studentStyles = [
       'app/pages/index.vue',

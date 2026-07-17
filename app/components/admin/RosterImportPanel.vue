@@ -36,6 +36,8 @@ const select = (event: Event) => { const file = (event.target as HTMLInputElemen
 .import-panel__confirm { grid-column:1/-1; align-items:center; border-top:1px solid color-mix(in srgb,var(--color-primary) 20%,transparent); padding-top:1rem; }
 .import-panel__confirm label { font-size:.8rem; }
 .import-panel__confirm input { min-height:var(--touch-target); border:1px solid color-mix(in srgb,var(--color-primary-strong) 25%,transparent); border-radius:var(--radius-control); padding:.4rem; background:var(--color-canvas); }
+.import-panel input[type='file']:focus-visible + button,
+.import-panel :is(button, input:not([type='file'])):focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 @media(max-width:34rem) { .import-panel { grid-template-columns:1fr; } .import-panel__actions { align-items:start; flex-direction:column; } }
 </style>
