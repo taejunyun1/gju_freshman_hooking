@@ -393,7 +393,7 @@ onMounted(loadSession)
 .assessment-page button {
   min-height: var(--touch-target);
   border: 1px solid color-mix(in srgb, var(--color-ink) 38%, transparent);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 0.625rem 1rem;

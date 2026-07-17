@@ -75,7 +75,7 @@ const counselingTarget = computed(() => canonicalUuidPattern.test(props.assessme
   gap: 0.75rem;
   margin-top: 1.25rem;
   border: 1px solid var(--color-signal);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-signal);
   color: var(--color-surface);
   padding: 0.625rem 1rem;

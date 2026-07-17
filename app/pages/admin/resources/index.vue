@@ -282,7 +282,7 @@ onBeforeUnmount(() => {
 .resources-list__eyebrow { margin: 0 0 0.625rem; color: var(--color-resource); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; }
 .resources-list h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); letter-spacing: -0.05em; }
 .resources-list__header p:last-child { margin: 0.75rem 0 0; color: color-mix(in srgb, var(--color-ink) 68%, transparent); }
-.resources-list :is(input, select, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
+.resources-list :is(input, select, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
 .resources-list button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
 .resources-list :is(input, select, button, a):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }
 .resources-list__filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; border-top: 0.25rem solid var(--color-resource); background: var(--color-surface); padding: 1rem; }

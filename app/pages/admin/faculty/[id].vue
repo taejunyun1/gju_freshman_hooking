@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
 .faculty-detail dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .faculty-detail__state { display: grid; justify-items: start; gap: 0.75rem; }
 .faculty-detail :is(button, a):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }
-.faculty-detail button { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; font-family: var(--font-display); font-weight: 700; }
+.faculty-detail button { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; font-family: var(--font-display); font-weight: 700; }
 .faculty-detail__conflict { display: grid; justify-items: start; gap: 0.75rem; border: 1px solid var(--color-signal); border-left-width: 0.25rem; background: color-mix(in srgb, var(--color-signal) 8%, var(--color-surface)); padding: 1rem; }
 .faculty-detail__conflict :is(h2, p, dl) { margin: 0; }
 .faculty-detail__conflict dl { display: grid; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.75rem; }

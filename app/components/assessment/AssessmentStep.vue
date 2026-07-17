@@ -199,7 +199,7 @@ const updateCareerOther = (event: Event): void => {
   min-height: var(--touch-target);
   margin-top: 0.625rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 38%, transparent);
-  border-radius: 0;
+  border-radius: var(--radius-control);
   background: var(--color-canvas);
   color: var(--color-ink);
   padding: 0.625rem 0.75rem;

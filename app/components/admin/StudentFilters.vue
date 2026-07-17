@@ -172,7 +172,7 @@ onBeforeUnmount(clearSearchTimer)
   min-height: var(--touch-target);
   margin-top: 0.35rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 26%, transparent);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 0.55rem 0.625rem;

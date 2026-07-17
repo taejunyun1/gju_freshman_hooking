@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
   display: block;
   margin-top: 0.4rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.55rem 0.65rem;
   color: var(--color-ink);

@@ -361,7 +361,7 @@ onMounted(loadHistory)
   align-items: center;
   margin-top: 1.25rem;
   border: 1px solid var(--color-sequence);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-sequence);
   color: var(--color-surface);
   padding: 0.625rem 1rem;

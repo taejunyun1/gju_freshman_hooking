@@ -637,7 +637,7 @@ onBeforeUnmount(() => {
 .resource-detail__conflict dl { display: grid; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.75rem; }
 .resource-detail__conflict dl div { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 0.5rem; }
 .resource-detail__conflict dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.resource-detail :is(button):not(.resource-editor button) { min-height: var(--touch-target); border: 1px solid var(--color-resource); border-radius: 0; background: var(--color-surface); color: var(--color-resource); padding: 0.625rem 1rem; font-family: var(--font-display); font-weight: 700; cursor: pointer; }
+.resource-detail :is(button):not(.resource-editor button) { min-height: var(--touch-target); border: 1px solid var(--color-resource); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-resource); padding: 0.625rem 1rem; font-family: var(--font-display); font-weight: 700; cursor: pointer; }
 .resource-detail :is(a, button):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 3px; }
 .resource-detail__notice { margin: 0; border-left: 0.25rem solid var(--color-signal); background: color-mix(in srgb, var(--color-signal) 9%, var(--color-surface)); padding: 0.75rem; line-height: 1.55; }
 @media (min-width: 48rem) { .resource-detail__header { grid-template-columns: minmax(0, 1fr) minmax(16rem, auto); align-items: end; } }

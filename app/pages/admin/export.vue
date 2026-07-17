@@ -390,7 +390,7 @@ onBeforeUnmount(dispose)
   min-height: var(--touch-target);
   margin-top: 0.35rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 0.6rem 0.7rem;

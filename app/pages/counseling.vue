@@ -273,7 +273,7 @@ watch(queryAssessmentPublicId, () => {
 .counseling-page__direction h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.35rem, 5vw, 2rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.04em;
   line-height: 1.25;
   word-break: keep-all;
@@ -286,7 +286,7 @@ watch(queryAssessmentPublicId, () => {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--color-sequence);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-sequence);
   color: var(--color-surface);
   padding: 0.625rem 1rem;

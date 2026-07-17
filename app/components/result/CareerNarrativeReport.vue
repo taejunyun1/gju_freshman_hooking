@@ -189,7 +189,7 @@ const props = defineProps<{
 .career-narrative-report > button,
 .career-narrative-report__actions button {
   min-height: var(--touch-target);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   font-family: var(--font-display);
   font-weight: 720;
   cursor: pointer;

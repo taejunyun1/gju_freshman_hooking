@@ -17,10 +17,17 @@ const applicationVueFiles = ['app/pages', 'app/components', 'app/layouts']
   .flatMap((directory) => readdirSync(directory, { recursive: true })
     .filter((file) => file.endsWith('.vue'))
     .map((file) => `${directory}/${file}`))
+const applicationCssFiles = readdirSync('app/assets/css', { recursive: true })
+  .filter((file) => file.endsWith('.css'))
+  .map((file) => `app/assets/css/${file}`)
 const applicationStyles = applicationVueFiles
   .flatMap((file) => [...read(file).matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/gu)])
   .map(([, css]) => css)
   .join('\n')
+const allApplicationStyles = [
+  ...applicationCssFiles.map(read),
+  applicationStyles,
+].join('\n')
 const legacyAccentCss = [
   'app/pages/admin/export.vue',
   'app/components/admin/CampaignAttributionStrip.vue',
@@ -48,7 +55,7 @@ describe('Blue Photo Note visual contract', () => {
     expect(main).toMatch(/h1\s*\{[\s\S]*?font-size:\s*clamp\(1\.75rem,\s*4vw,\s*2rem\)/u)
   })
 
-  it('caps every page, component, and layout h1 declaration at 2rem', () => {
+  it('uses the approved clamp for every page, component, and layout h1 declaration', () => {
     const h1FontSizes: string[] = []
     for (const rule of applicationStyles.matchAll(/(?<selector>[^{}]*\bh1\b[^{}]*)\{(?<declarations>[^{}]*)\}/gu)) {
       const fontSize = rule.groups?.declarations.match(/font-size:\s*(?<value>[^;]+);/u)?.groups?.value
@@ -56,10 +63,11 @@ describe('Blue Photo Note visual contract', () => {
     }
 
     expect(h1FontSizes).not.toHaveLength(0)
-    for (const fontSize of h1FontSizes) {
-      const remValues = [...fontSize.matchAll(/(\d+(?:\.\d+)?)rem/gu)].map(([, value]) => Number(value))
-      if (remValues.length > 0) expect(Math.max(...remValues)).toBeLessThanOrEqual(2)
-    }
+    for (const fontSize of h1FontSizes) expect(fontSize).toBe('clamp(1.75rem, 4vw, 2rem)')
+  })
+
+  it('removes square and undersized border radii from application styles', () => {
+    expect(allApplicationStyles).not.toMatch(/border-radius:\s*(?:0\.125rem|0\.25rem|0\.375rem|0\.5rem|[1-9]px|0)(?:\s|;)/u)
   })
 
   it('removes the named non-semantic lavender and teal accents', () => {

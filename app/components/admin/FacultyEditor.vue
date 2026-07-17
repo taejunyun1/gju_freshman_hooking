@@ -579,7 +579,7 @@ const publicContactEntries = (person: Pick<PublicPerson, 'publicContacts'>) => {
 .faculty-editor legend { padding: 0 0.35rem; font-family: var(--font-display); font-size: 1.18rem; font-weight: 750; }
 .faculty-editor__grid, .faculty-editor__contacts { display: grid; gap: 0.75rem; }
 .faculty-editor label { min-width: 0; display: grid; gap: 0.35rem; font-weight: 650; }
-.faculty-editor :is(input, textarea, select, button) { min-width: 0; min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
+.faculty-editor :is(input, textarea, select, button) { min-width: 0; min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
 .faculty-editor textarea { min-height: 6rem; resize: vertical; }
 .faculty-editor button { cursor: pointer; font-family: var(--font-display); font-weight: 720; }
 .faculty-editor button:is(:disabled, [aria-disabled='true']) { cursor: not-allowed; opacity: 0.45; }

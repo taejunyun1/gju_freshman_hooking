@@ -210,7 +210,7 @@ onMounted(() => {
   gap: 1.5rem;
   margin-top: 2rem;
   border: 1px solid var(--color-sequence);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-sequence);
   color: var(--color-surface);
   padding: 0.875rem 1rem;

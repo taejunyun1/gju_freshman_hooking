@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
 .phone-dialog {
   width: min(100% - 2rem, 34rem);
   border: 1px solid var(--color-ink);
-  border-radius: 0;
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 1.25rem;

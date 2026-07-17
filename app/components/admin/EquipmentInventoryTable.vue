@@ -320,7 +320,7 @@ const onImport = (event: Event) => {
 .inventory h2, .inventory h3 { margin: 0; font-family: var(--font-display); }
 .inventory__filters { display: flex; flex-wrap: wrap; gap: 0.625rem; }
 .inventory label { display: grid; gap: 0.3rem; font-size: 0.8125rem; font-weight: 650; }
-.inventory :is(input, select, textarea, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.5rem; }
+.inventory :is(input, select, textarea, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.5rem; }
 .inventory button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
 .inventory button:disabled { cursor: not-allowed; opacity: 0.45; }
 .inventory :is(input, select, textarea, button):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }

@@ -223,7 +223,7 @@ onMounted(async () => {
   min-height: 3.25rem;
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.75rem;
 }

@@ -676,7 +676,7 @@ const onImageChange = (event: Event) => {
 .resource-editor h2 { margin: 0 0 1rem; font-family: var(--font-display); font-size: 1.2rem; }
 .resource-editor__fields, .resource-editor__type-fields { display: grid; gap: 0.75rem; }
 .resource-editor label { display: grid; gap: 0.35rem; font-weight: 650; }
-.resource-editor input, .resource-editor textarea, .resource-editor select, .resource-editor button { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
+.resource-editor input, .resource-editor textarea, .resource-editor select, .resource-editor button { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
 .resource-editor textarea { min-height: 6rem; resize: vertical; }
 .resource-editor button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
 .resource-editor button:disabled { cursor: not-allowed; opacity: 0.45; }

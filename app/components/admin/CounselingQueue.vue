@@ -701,7 +701,7 @@ onBeforeUnmount(() => {
   min-height: var(--touch-target);
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--color-ink) 34%, transparent);
-  border-radius: 0.25rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.65rem 0.75rem;
   color: var(--color-ink);

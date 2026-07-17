@@ -282,7 +282,7 @@ const submit = async (): Promise<void> => {
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.625rem;
   font-weight: 650;
@@ -324,7 +324,7 @@ const submit = async (): Promise<void> => {
   margin-top: 0.75rem;
   resize: vertical;
   border: 1px solid color-mix(in srgb, var(--color-ink) 32%, transparent);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 0.85rem;
@@ -396,7 +396,7 @@ const submit = async (): Promise<void> => {
   min-height: var(--touch-target);
   width: 100%;
   border: 1px solid var(--color-sequence);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-control);
   background: var(--color-sequence);
   color: var(--color-surface);
   padding: 0.75rem 1rem;
