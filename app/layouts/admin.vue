@@ -74,7 +74,7 @@ const logout = async (): Promise<void> => {
 .admin-shell__rail {
   display: grid;
   gap: 1.5rem;
-  background: var(--color-ink);
+  background: var(--color-primary-strong);
   color: var(--color-surface);
   padding: 1rem 1.25rem;
 }
@@ -116,6 +116,8 @@ const logout = async (): Promise<void> => {
   display: inline-flex;
   align-items: center;
   border: 1px solid color-mix(in srgb, var(--color-surface) 30%, transparent);
+  border-radius: var(--radius-control);
+  background: transparent;
   color: var(--color-surface);
   padding: 0.625rem 0.75rem;
   font-family: var(--font-display);
@@ -126,7 +128,7 @@ const logout = async (): Promise<void> => {
 
 .admin-shell nav a.router-link-exact-active {
   border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-sequence) 36%, transparent);
+  background: var(--color-primary);
 }
 
 .admin-shell__session {
@@ -144,7 +146,7 @@ const logout = async (): Promise<void> => {
 }
 
 .admin-shell__session button {
-  background: transparent;
+  border-color: color-mix(in srgb, var(--color-surface) 48%, transparent);
   cursor: pointer;
 }
 

@@ -67,6 +67,13 @@ describe('Blue Photo Note visual contract', () => {
     expect(read('app/components/result/CapabilityEvidence.vue')).toContain('border-radius: var(--radius-card)')
   })
 
+  it('uses the blue system in the administrator shell and shared panels', () => {
+    expect(read('app/layouts/admin.vue')).toContain('background: var(--color-primary-strong)')
+    expect(read('app/layouts/admin.vue')).toContain('border-radius: var(--radius-control)')
+    expect(read('app/components/admin/DataTable.vue')).toContain('border-radius: var(--radius-panel)')
+    expect(read('app/components/admin/RosterImportPanel.vue')).toContain('border-radius: var(--radius-panel)')
+  })
+
   it('uses direct approved palette tokens across the student entry journey', () => {
     const studentStyles = [
       'app/pages/index.vue',

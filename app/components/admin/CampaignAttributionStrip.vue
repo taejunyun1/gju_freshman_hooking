@@ -38,7 +38,10 @@ const frames = computed(() => [
   gap: 1px;
   margin: 0;
   padding: 1px;
-  background: color-mix(in srgb, var(--color-sequence) 35%, var(--color-ink));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--color-primary) 35%, var(--color-primary-strong));
   list-style: none;
 }
 
@@ -48,7 +51,7 @@ const frames = computed(() => [
   display: grid;
   align-content: space-between;
   gap: 0.25rem;
-  background: var(--color-ink);
+  background: var(--color-primary-strong);
   color: var(--color-surface);
   padding: 0.55rem;
 }

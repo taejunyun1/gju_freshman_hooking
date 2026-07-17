@@ -23,5 +23,19 @@ const select = (event: Event) => { const file = (event.target as HTMLInputElemen
   </section>
 </template>
 <style scoped>
-.import-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1rem;border:1px solid var(--color-resource);background:var(--color-surface);padding:1rem}.import-panel h2,.import-panel p{margin:0}.import-panel h2{font-family:var(--font-display);font-size:1.2rem}.import-panel__label{color:var(--color-sequence);font-family:var(--font-mono);font-size:.625rem;font-weight:700;letter-spacing:.08em}.import-panel p:not(.import-panel__label){margin-top:.4rem;color:color-mix(in srgb,var(--color-ink) 65%,transparent);font-size:.875rem}.import-panel__actions,.import-panel__confirm{display:flex;flex-wrap:wrap;align-items:end;gap:.5rem}.import-panel button{min-height:var(--touch-target);border:1px solid var(--color-ink);background:var(--color-ink);color:var(--color-surface);padding:.55rem .75rem;font-family:var(--font-display);font-weight:700;cursor:pointer}.import-panel button:disabled{opacity:.48;cursor:not-allowed}.import-panel__file{font-family:var(--font-mono);font-size:.68rem}.import-panel__error{grid-column:1/-1;color:#a22 !important}.import-panel__confirm{grid-column:1/-1;align-items:center;border-top:1px solid var(--color-resource);padding-top:1rem}.import-panel__confirm label{font-size:.8rem}.import-panel__confirm input{min-height:var(--touch-target);border:1px solid var(--color-resource);padding:.4rem;background:var(--color-canvas)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}@media(max-width:34rem){.import-panel{grid-template-columns:1fr}.import-panel__actions{align-items:start;flex-direction:column}}
+.import-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; border:1px solid color-mix(in srgb,var(--color-primary) 22%,transparent); border-radius: var(--radius-panel); background:var(--color-surface); padding:1rem; }
+.import-panel h2,.import-panel p { margin:0; }
+.import-panel h2 { font-family:var(--font-display); font-size:1.2rem; }
+.import-panel__label { color:var(--color-primary); font-family:var(--font-mono); font-size:.625rem; font-weight:700; letter-spacing:.08em; }
+.import-panel p:not(.import-panel__label) { margin-top:.4rem; color:color-mix(in srgb,var(--color-primary-strong) 65%,transparent); font-size:.875rem; }
+.import-panel__actions,.import-panel__confirm { display:flex; flex-wrap:wrap; align-items:end; gap:.5rem; }
+.import-panel button { min-height:var(--touch-target); border:1px solid var(--color-primary); border-radius:var(--radius-control); background:var(--color-primary); color:var(--color-surface); padding:.55rem .75rem; font-family:var(--font-display); font-weight:700; cursor:pointer; }
+.import-panel button:disabled { opacity:.48; cursor:not-allowed; }
+.import-panel__file { font-family:var(--font-mono); font-size:.68rem; }
+.import-panel__error { grid-column:1/-1; color:var(--color-error) !important; }
+.import-panel__confirm { grid-column:1/-1; align-items:center; border-top:1px solid color-mix(in srgb,var(--color-primary) 20%,transparent); padding-top:1rem; }
+.import-panel__confirm label { font-size:.8rem; }
+.import-panel__confirm input { min-height:var(--touch-target); border:1px solid color-mix(in srgb,var(--color-primary-strong) 25%,transparent); border-radius:var(--radius-control); padding:.4rem; background:var(--color-canvas); }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+@media(max-width:34rem) { .import-panel { grid-template-columns:1fr; } .import-panel__actions { align-items:start; flex-direction:column; } }
 </style>

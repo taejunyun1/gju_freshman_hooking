@@ -140,7 +140,8 @@ const detailTarget = (studentId: number) => ({
 
 .student-data__desktop {
   overflow-x: auto;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
 }
 
@@ -153,14 +154,14 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
   padding: 0.875rem 1rem;
   vertical-align: middle;
 }
 
 thead th {
-  background: color-mix(in srgb, var(--color-canvas) 70%, var(--color-surface));
-  color: color-mix(in srgb, var(--color-ink) 72%, transparent);
+  background: color-mix(in srgb, var(--color-primary-soft) 70%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-primary-strong) 72%, transparent);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
@@ -183,7 +184,7 @@ tbody td span {
 
 tbody td span {
   margin-top: 0.2rem;
-  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 62%, transparent);
   font-size: 0.8125rem;
 }
 
@@ -192,8 +193,9 @@ tbody td span {
   align-items: stretch;
   gap: 0.5rem;
   margin-bottom: 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 26%, transparent);
-  background: var(--color-ink);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 26%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--color-primary-strong);
   color: var(--color-surface);
   font-family: var(--font-mono);
   font-size: 0.5625rem;
@@ -226,14 +228,14 @@ a {
   min-height: var(--touch-target);
   display: inline-flex;
   align-items: center;
-  color: var(--color-resource);
+  color: var(--color-primary);
   font-family: var(--font-display);
   font-weight: 700;
   text-underline-offset: 0.2em;
 }
 
 a:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -255,7 +257,8 @@ a:focus-visible {
   }
 
   .student-data__mobile article {
-    border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+    border-radius: var(--radius-card);
     background: var(--color-surface);
     padding: 1rem;
   }
@@ -279,7 +282,7 @@ a:focus-visible {
   }
 
   .student-data__mobile dt {
-    color: color-mix(in srgb, var(--color-ink) 60%, transparent);
+    color: color-mix(in srgb, var(--color-primary-strong) 60%, transparent);
     font-family: var(--font-mono);
     font-size: 0.6875rem;
   }

@@ -314,37 +314,38 @@ const onImport = (event: Event) => {
 </template>
 
 <style scoped>
-.inventory { display: grid; gap: 1rem; border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent); background: var(--color-surface); padding: 1rem; }
+.inventory { display: grid; gap: 1rem; border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: var(--radius-panel); background: var(--color-surface); padding: 1rem; }
 .inventory__header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 1rem; }
-.inventory__header p { margin: 0 0 0.3rem; color: var(--color-resource); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; }
+.inventory__header p { margin: 0 0 0.3rem; color: var(--color-primary); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; }
 .inventory h2, .inventory h3 { margin: 0; font-family: var(--font-display); }
 .inventory__filters { display: flex; flex-wrap: wrap; gap: 0.625rem; }
 .inventory label { display: grid; gap: 0.3rem; font-size: 0.8125rem; font-weight: 650; }
-.inventory :is(input, select, textarea, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.5rem; }
+.inventory :is(input, select, textarea, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-primary-strong); padding: 0.5rem; }
 .inventory button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
 .inventory button:disabled { cursor: not-allowed; opacity: 0.45; }
-.inventory :is(input, select, textarea, button):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }
+.inventory :is(input, select, textarea, button):focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 .inventory__table-wrap { overflow-x: auto; }
 .inventory table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
-.inventory th, .inventory td { border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 13%, transparent); padding: 0.65rem; text-align: left; white-space: nowrap; }
+.inventory th, .inventory td { border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent); padding: 0.65rem; text-align: left; white-space: nowrap; }
 .inventory th { font-family: var(--font-mono); font-size: 0.625rem; letter-spacing: 0.04em; }
-.inventory [data-quality]:not([data-quality='verified']) { color: var(--color-signal); font-weight: 700; }
+.inventory [data-quality]:not([data-quality='verified']) { color: var(--color-primary); font-weight: 700; }
 .inventory__cards { display: none; }
-.inventory__editor, .inventory__import { display: grid; gap: 0.75rem; border-top: 0.25rem solid var(--color-resource); background: var(--color-canvas); padding: 1rem; }
+.inventory__editor, .inventory__import { display: grid; gap: 0.75rem; border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 1rem; }
 .inventory__editor-fields { display: grid; gap: 0.625rem; }
 .inventory__actions { display: flex; gap: 0.625rem; }
 .inventory__import p { margin: 0; }
-.inventory__empty, .inventory__conflict, .inventory__error { margin: 0; border-left: 0.25rem solid var(--color-signal); background: color-mix(in srgb, var(--color-signal) 9%, var(--color-surface)); padding: 0.75rem; line-height: 1.55; }
-.inventory__pending, .inventory__success { margin: 0; border-left: 0.25rem solid var(--color-resource); padding: 0.75rem; line-height: 1.55; }
+.inventory__empty { margin: 0; border-left: 0.25rem solid var(--color-primary); background: var(--color-primary-soft); padding: 0.75rem; line-height: 1.55; }
+.inventory__conflict, .inventory__error { margin: 0; border-left: 0.25rem solid var(--color-error); background: color-mix(in srgb, var(--color-error) 9%, var(--color-surface)); padding: 0.75rem; line-height: 1.55; }
+.inventory__pending, .inventory__success { margin: 0; border-left: 0.25rem solid var(--color-primary); padding: 0.75rem; line-height: 1.55; }
 .inventory__import ul { margin-bottom: 0; }
 @media (min-width: 48rem) { .inventory__editor-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 44.99rem) {
   .inventory__table-wrap { display: none; }
   .inventory__cards { display: grid; gap: 0.75rem; }
-  .inventory__cards article { border: 1px solid color-mix(in srgb, var(--color-ink) 15%, transparent); padding: 0.75rem; }
+  .inventory__cards article { border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: var(--radius-card); padding: 0.75rem; }
   .inventory__cards dl { display: grid; gap: 0.35rem; }
   .inventory__cards dl div { display: grid; grid-template-columns: 7rem 1fr; gap: 0.5rem; }
-  .inventory__cards dt { color: color-mix(in srgb, var(--color-ink) 60%, transparent); }
+  .inventory__cards dt { color: color-mix(in srgb, var(--color-primary-strong) 60%, transparent); }
   .inventory__cards dd { margin: 0; }
 }
 </style>

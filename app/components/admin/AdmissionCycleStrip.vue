@@ -19,11 +19,11 @@ defineProps<{ cycle: AdmissionCycle | null, phase: string }>()
 </template>
 
 <style scoped>
-.cycle-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin:0; padding:0; list-style:none; background:var(--color-resource); border:1px solid var(--color-resource); }
-.cycle-strip__frame { min-height:6.5rem; display:grid; align-content:space-between; gap:.35rem; background:var(--color-canvas); padding:.7rem; }
-.cycle-strip__frame.is-current { background:color-mix(in srgb,var(--color-sequence) 13%,var(--color-canvas)); box-shadow:inset 0 -3px var(--color-sequence); }
+.cycle-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin:0; padding:0; overflow:hidden; list-style:none; border:1px solid color-mix(in srgb,var(--color-primary) 22%,transparent); border-radius:var(--radius-panel); background:color-mix(in srgb,var(--color-primary) 20%,var(--color-surface)); }
+.cycle-strip__frame { min-height:6.5rem; display:grid; align-content:space-between; gap:.35rem; background:var(--color-surface); padding:.7rem; }
+.cycle-strip__frame.is-current { background:var(--color-primary-soft); box-shadow:inset 0 -3px var(--color-primary); }
 .cycle-strip span,.cycle-strip small { font-family:var(--font-mono); font-size:.625rem; letter-spacing:.07em; }
-.cycle-strip span { color:var(--color-sequence); font-weight:700; }.cycle-strip small{color:color-mix(in srgb,var(--color-ink) 60%,transparent)}
+.cycle-strip span { color:var(--color-primary); font-weight:700; }.cycle-strip small{color:color-mix(in srgb,var(--color-primary-strong) 60%,transparent)}
 .cycle-strip strong{font-family:var(--font-display);line-height:1.1}
 @media(max-width:34rem){.cycle-strip{grid-template-columns:1fr}.cycle-strip__frame{min-height:4.5rem}}
 </style>

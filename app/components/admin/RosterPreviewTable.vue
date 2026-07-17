@@ -12,5 +12,5 @@ const labels = { add: '신규', update: '변경', unchanged: '유지' } as const
   </div>
 </template>
 <style scoped>
-.preview-table{overflow:auto;border:1px solid var(--color-resource);background:var(--color-surface)}table{width:100%;border-collapse:collapse;font-size:.875rem}th,td{padding:.7rem;text-align:left;border-bottom:1px solid color-mix(in srgb,var(--color-resource) 55%,transparent);white-space:nowrap}th{font-family:var(--font-mono);font-size:.625rem;letter-spacing:.07em;color:color-mix(in srgb,var(--color-ink) 65%,transparent)}td:first-child,td:nth-child(2){font-family:var(--font-mono);font-size:.72rem}
+.preview-table{overflow:auto;border:1px solid color-mix(in srgb,var(--color-primary) 22%,transparent);border-radius:var(--radius-panel);background:var(--color-surface)}table{width:100%;border-collapse:collapse;font-size:.875rem}th,td{padding:.7rem;text-align:left;border-bottom:1px solid color-mix(in srgb,var(--color-primary) 16%,transparent);white-space:nowrap}tbody tr:last-child td{border-bottom:0}th{font-family:var(--font-mono);font-size:.625rem;letter-spacing:.07em;color:color-mix(in srgb,var(--color-primary-strong) 65%,transparent);background:var(--color-primary-soft)}td:first-child,td:nth-child(2){font-family:var(--font-mono);font-size:.72rem}
 </style>

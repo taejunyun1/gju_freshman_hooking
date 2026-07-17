@@ -23,10 +23,10 @@ const form = reactive({ name: '', phone: '', highSchool: '', grade: 'high3' })
 </template>
 
 <style scoped>
-.roster-student-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;border:1px solid var(--color-resource);background:var(--color-surface);padding:1rem}
+.roster-student-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;border:1px solid color-mix(in srgb,var(--color-primary) 22%,transparent);border-radius:var(--radius-card);background:var(--color-primary-soft);padding:1rem}
 .roster-student-form label{display:grid;gap:.3rem;font-family:var(--font-mono);font-size:.68rem;letter-spacing:.04em}
-.roster-student-form input,.roster-student-form select{min-height:var(--touch-target);border:1px solid var(--color-resource);background:var(--color-canvas);padding:.5rem;font:inherit}
+.roster-student-form input,.roster-student-form select{min-height:var(--touch-target);border:1px solid color-mix(in srgb,var(--color-primary-strong) 25%,transparent);border-radius:var(--radius-control);background:var(--color-surface);padding:.5rem;font:inherit}
 .roster-student-form__actions{grid-column:1/-1;display:flex;gap:.5rem;justify-content:flex-end}
-.roster-student-form button{min-height:var(--touch-target);border:1px solid var(--color-resource);background:var(--color-canvas);padding:.55rem .8rem;font-family:var(--font-display);font-weight:700}
+.roster-student-form button{min-height:var(--touch-target);border:1px solid var(--color-primary);border-radius:var(--radius-control);background:var(--color-surface);padding:.55rem .8rem;font-family:var(--font-display);font-weight:700}
 @media(max-width:36rem){.roster-student-form{grid-template-columns:1fr}}
 </style>

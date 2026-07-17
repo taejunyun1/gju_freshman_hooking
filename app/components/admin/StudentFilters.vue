@@ -148,7 +148,8 @@ onBeforeUnmount(clearSearchTimer)
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1rem;
 }
@@ -156,7 +157,7 @@ onBeforeUnmount(clearSearchTimer)
 .student-filters label {
   grid-column: span 2;
   min-width: 0;
-  color: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 68%, transparent);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -171,10 +172,10 @@ onBeforeUnmount(clearSearchTimer)
   width: 100%;
   min-height: var(--touch-target);
   margin-top: 0.35rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 26%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-surface);
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   padding: 0.55rem 0.625rem;
   font-family: var(--font-body);
   font-size: 0.875rem;
@@ -182,9 +183,9 @@ onBeforeUnmount(clearSearchTimer)
 
 .student-filters input:focus-visible,
 .student-filters select:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--color-sequence) 72%, transparent);
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 72%, transparent);
   outline-offset: 2px;
-  border-color: var(--color-sequence);
+  border-color: var(--color-primary);
 }
 
 .student-filters__actions {

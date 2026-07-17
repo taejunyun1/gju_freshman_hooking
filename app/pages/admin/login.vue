@@ -143,17 +143,16 @@ onMounted(async () => {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background:
-    linear-gradient(90deg, var(--color-ink) 0 0.5rem, transparent 0.5rem),
-    var(--color-canvas);
+  background: var(--color-canvas);
   padding: 1.25rem;
 }
 
 .admin-login__panel {
   width: min(100%, 34rem);
-  border: 1px solid color-mix(in srgb, var(--color-ink) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: 0.625rem 0.625rem 0 color-mix(in srgb, var(--color-ink) 8%, transparent);
+  box-shadow: var(--shadow-raised);
 }
 
 .admin-login__header {
@@ -162,7 +161,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   padding: 0.625rem 1rem;
 }
 
@@ -176,7 +175,7 @@ onMounted(async () => {
   text-decoration: none;
 }
 
-.admin-login__header a span { color: var(--color-sequence); }
+.admin-login__header a span { color: var(--color-primary); }
 
 .admin-login__header > span,
 .admin-login__eyebrow {
@@ -191,7 +190,7 @@ onMounted(async () => {
 
 .admin-login__eyebrow {
   margin: 0 0 0.75rem;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -204,7 +203,7 @@ onMounted(async () => {
 
 .admin-login__intro {
   margin: 1rem 0 2rem;
-  color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 70%, transparent);
   line-height: 1.65;
   word-break: keep-all;
 }
@@ -222,7 +221,7 @@ onMounted(async () => {
 .admin-login__form input {
   min-height: 3.25rem;
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 26%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.75rem;
@@ -238,7 +237,7 @@ onMounted(async () => {
 
 .admin-login__header a:focus-visible,
 .admin-login__form input:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 

@@ -17,11 +17,17 @@ definePageMeta({ layout: 'admin', middleware: 'admin' })
 </template>
 
 <style scoped>
-.admin-dashboard { max-width: 58rem; }
+.admin-dashboard {
+  max-width: 58rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: clamp(1.25rem, 4vw, 2rem);
+}
 
 .admin-dashboard__eyebrow {
   margin: 0 0 0.625rem;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -37,6 +43,6 @@ definePageMeta({ layout: 'admin', middleware: 'admin' })
 
 .admin-dashboard__intro {
   margin: 0.75rem 0 2rem;
-  color: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 68%, transparent);
 }
 </style>

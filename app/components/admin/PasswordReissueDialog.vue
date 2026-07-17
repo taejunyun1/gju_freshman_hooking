@@ -20,8 +20,8 @@ const emit = defineEmits<{ close: [] }>()
 </template>
 
 <style scoped>
-.password-dialog{position:fixed;inset:auto 1rem 1rem;max-width:28rem;border:1px solid var(--color-sequence);background:var(--color-canvas);box-shadow:0 1rem 2rem color-mix(in srgb,var(--color-ink) 18%,transparent);padding:1rem;z-index:20}
+.password-dialog{position:fixed;inset:auto 1rem 1rem;max-width:28rem;border:1px solid color-mix(in srgb,var(--color-primary) 28%,transparent);border-radius:var(--radius-card);background:var(--color-surface);box-shadow:var(--shadow-raised);padding:1rem;z-index:20}
 .password-dialog h2{margin:0 0 .5rem;font-family:var(--font-display)}
 .password-dialog dl{display:grid;gap:.4rem}.password-dialog div{display:flex;justify-content:space-between;gap:1rem}.password-dialog dt{font-family:var(--font-mono);font-size:.7rem}.password-dialog strong{font-size:1.4rem;letter-spacing:.08em}
-.password-dialog button{min-height:var(--touch-target);border:1px solid var(--color-resource);background:var(--color-surface);padding:.5rem .8rem;font-family:var(--font-display);font-weight:700}
+.password-dialog button{min-height:var(--touch-target);border:1px solid var(--color-primary);border-radius:var(--radius-control);background:var(--color-surface);color:var(--color-primary-strong);padding:.5rem .8rem;font-family:var(--font-display);font-weight:700}
 </style>

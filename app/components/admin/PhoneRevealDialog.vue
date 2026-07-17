@@ -227,20 +227,20 @@ onBeforeUnmount(() => {
 <style scoped>
 .phone-dialog {
   width: min(100% - 2rem, 34rem);
-  border: 1px solid var(--color-ink);
-  border-radius: var(--radius-panel);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 26%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   padding: 1.25rem;
 }
 
 .phone-dialog::backdrop {
-  background: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  background: color-mix(in srgb, var(--color-primary-strong) 68%, transparent);
 }
 
 .phone-dialog__header p {
   margin: 0 0 0.5rem;
-  color: var(--color-signal);
+  color: var(--color-primary);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 700;
@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
 }
 
 #phone-dialog-description {
-  color: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 68%, transparent);
   line-height: 1.6;
 }
 
@@ -270,12 +270,12 @@ onBeforeUnmount(() => {
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
   padding-top: 0.625rem;
 }
 
 .phone-dialog dt {
-  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 62%, transparent);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
 }
@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
 }
 
 .phone-dialog__revealed dd {
-  color: var(--color-signal);
+  color: var(--color-primary);
   font-size: 1.25rem;
 }
 
@@ -299,8 +299,8 @@ onBeforeUnmount(() => {
 }
 
 .phone-dialog__notice {
-  background: color-mix(in srgb, var(--color-signal) 10%, var(--color-surface));
-  color: var(--color-signal);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
 }
 
 .phone-dialog__error {
