@@ -55,6 +55,25 @@ describe('Blue Photo Note visual contract', () => {
     expect(main).toMatch(/h1\s*\{[\s\S]*?font-size:\s*clamp\(1\.75rem,\s*4vw,\s*2rem\)/u)
   })
 
+  it('uses the shared rounded tokens in student entry and assessment surfaces', () => {
+    expect(read('app/pages/index.vue')).toContain('border-radius: var(--radius-panel)')
+    expect(read('app/pages/login.vue')).toContain('border-radius: var(--radius-panel)')
+    expect(read('app/components/assessment/OptionCard.vue')).toContain('border-radius: var(--radius-card)')
+  })
+
+  it('uses direct approved palette tokens across the student entry journey', () => {
+    const studentStyles = [
+      'app/pages/index.vue',
+      'app/pages/login.vue',
+      'app/pages/assessment.vue',
+      'app/components/assessment/AssessmentProgress.vue',
+      'app/components/assessment/AssessmentStep.vue',
+      'app/components/assessment/OptionCard.vue',
+    ].map(read).join('\n')
+
+    expect(studentStyles).not.toMatch(/var\(--color-(?:ink|sequence|resource|signal)\)/u)
+  })
+
   it('uses the approved clamp for every page, component, and layout h1 declaration', () => {
     const h1FontSizes: string[] = []
     for (const rule of applicationStyles.matchAll(/(?<selector>[^{}]*\bh1\b[^{}]*)\{(?<declarations>[^{}]*)\}/gu)) {

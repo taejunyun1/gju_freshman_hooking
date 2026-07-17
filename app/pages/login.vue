@@ -124,7 +124,7 @@ const submitLogin = async (): Promise<void> => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 16%, transparent);
 }
 
 .login-page__brand {
@@ -132,7 +132,7 @@ const submitLogin = async (): Promise<void> => {
   align-items: center;
   min-block-size: 2.75rem;
   min-inline-size: 2.75rem;
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   font-family: var(--font-display);
   font-size: 1.125rem;
   font-weight: 800;
@@ -140,7 +140,7 @@ const submitLogin = async (): Promise<void> => {
   text-decoration: none;
 }
 
-.login-page__brand span { color: var(--color-sequence); }
+.login-page__brand span { color: var(--color-primary); }
 
 .login-page__timecode,
 .login-page__eyebrow {
@@ -149,7 +149,7 @@ const submitLogin = async (): Promise<void> => {
 }
 
 .login-page__timecode {
-  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  color: var(--color-muted);
   font-size: 0.625rem;
 }
 
@@ -159,6 +159,11 @@ const submitLogin = async (): Promise<void> => {
   grid-template-columns: 1.5rem minmax(0, 1fr);
   gap: 1rem;
   margin: 4.5rem auto 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised);
+  padding: clamp(1.25rem, 5vw, 2.25rem);
 }
 
 .login-page__rail {
@@ -172,30 +177,29 @@ const submitLogin = async (): Promise<void> => {
   width: 0.625rem;
   height: 0.625rem;
   flex: 0 0 auto;
-  border: 1px solid var(--color-sequence);
+  border: 1px solid var(--color-primary);
   border-radius: 50%;
-  background: var(--color-canvas);
+  background: var(--color-surface);
 }
 
-.login-page__rail .login-page__rail-dot--active { background: var(--color-sequence); }
+.login-page__rail .login-page__rail-dot--active { background: var(--color-primary); }
 
 .login-page__rail i {
   width: 1px;
   min-height: 4.25rem;
-  background: color-mix(in srgb, var(--color-sequence) 50%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 
 .login-page__eyebrow {
   margin: 0 0 0.875rem;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-size: 0.625rem;
   font-weight: 700;
 }
 
-h1 {
+.login-page__frame h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 4vw, 2rem);
   font-weight: 760;
   letter-spacing: -0.06em;
   line-height: 1.08;
@@ -204,7 +208,7 @@ h1 {
 
 .login-page__intro {
   margin: 1rem 0 2rem;
-  color: color-mix(in srgb, var(--color-ink) 72%, transparent);
+  color: var(--color-muted);
   line-height: 1.65;
   word-break: keep-all;
 }
@@ -228,17 +232,17 @@ h1 {
 .login-form input {
   min-height: 3.25rem;
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-surface);
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   padding: 0.75rem;
 }
 
 .login-form input:focus-visible,
 .login-form__submit:focus-visible,
 .login-page__brand:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -251,9 +255,9 @@ h1 {
 
 .login-form__submit {
   min-height: 3.25rem;
-  border: 1px solid var(--color-sequence);
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-control);
-  background: var(--color-sequence);
+  background: var(--color-primary);
   color: var(--color-surface);
   font-family: var(--font-display);
   font-weight: 750;

@@ -127,7 +127,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
 }
 
 .landing__brand {
@@ -135,7 +135,7 @@ onMounted(() => {
   min-block-size: var(--touch-target);
   display: inline-flex;
   align-items: center;
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   font-family: var(--font-display);
   font-size: 1.125rem;
   font-weight: 800;
@@ -144,12 +144,12 @@ onMounted(() => {
 }
 
 .landing__brand span {
-  color: var(--color-sequence);
+  color: var(--color-primary);
 }
 
 .landing__brand:focus-visible,
 .landing__cta:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -166,24 +166,24 @@ onMounted(() => {
 }
 
 .landing__timecode {
-  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  color: var(--color-muted);
   font-size: 0.6875rem;
 }
 
 .landing__hero {
   max-width: var(--content);
-  padding-block: clamp(3.75rem, 11vw, 7rem) clamp(4.5rem, 12vw, 8rem);
+  padding-block: clamp(3rem, 8vw, 5rem) clamp(3.5rem, 9vw, 6rem);
 }
 
 .landing__eyebrow {
   margin: 0 0 1rem;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-size: 0.6875rem;
   font-weight: 700;
 }
 
 .landing__hero h1 {
-  max-width: 13ch;
+  max-width: 22ch;
   margin: 0;
   font-family: var(--font-display);
   font-size: clamp(1.75rem, 4vw, 2rem);
@@ -196,7 +196,7 @@ onMounted(() => {
 .landing__intro {
   max-width: 34rem;
   margin: 1.5rem 0 0;
-  color: color-mix(in srgb, var(--color-ink) 76%, transparent);
+  color: var(--color-muted);
   font-size: clamp(1rem, 3.7vw, 1.125rem);
   line-height: 1.75;
   word-break: keep-all;
@@ -209,9 +209,9 @@ onMounted(() => {
   align-items: center;
   gap: 1.5rem;
   margin-top: 2rem;
-  border: 1px solid var(--color-sequence);
+  border: 1px solid var(--color-primary);
   border-radius: var(--radius-control);
-  background: var(--color-sequence);
+  background: var(--color-primary);
   color: var(--color-surface);
   padding: 0.875rem 1rem;
   font-family: var(--font-display);
@@ -222,7 +222,7 @@ onMounted(() => {
 
 .landing__cta:hover {
   background: var(--color-surface);
-  color: var(--color-sequence);
+  color: var(--color-primary);
 }
 
 .landing__cta::after {
@@ -242,7 +242,7 @@ onMounted(() => {
 .sequence__heading h2 {
   margin: 0.35rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 6vw, 2.75rem);
+  font-size: clamp(1.375rem, 3vw, 1.625rem);
   letter-spacing: -0.045em;
   line-height: 1.15;
 }
@@ -250,21 +250,23 @@ onMounted(() => {
 .sequence__heading > p {
   max-width: 26rem;
   margin: 0;
-  color: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  color: var(--color-muted);
   line-height: 1.6;
 }
 
 .sequence__kicker {
   margin: 0;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-size: 0.6875rem;
   font-weight: 700;
 }
 
 .sequence__frame {
-  border: 1px solid color-mix(in srgb, var(--color-ink) 32%, transparent);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: 0.5rem 0.5rem 0 color-mix(in srgb, var(--color-ink) 8%, transparent);
+  box-shadow: var(--shadow-raised);
 }
 
 .sequence__ruler {
@@ -272,9 +274,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
-  background: color-mix(in srgb, var(--color-canvas) 65%, var(--color-surface));
-  color: color-mix(in srgb, var(--color-ink) 64%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+  background: var(--color-primary-soft);
+  color: var(--color-muted);
   padding-inline: 0.875rem;
   font-size: 0.625rem;
 }
@@ -294,7 +296,7 @@ onMounted(() => {
   bottom: 2rem;
   left: 1.75rem;
   width: 2px;
-  background: var(--color-sequence);
+  background: var(--color-primary);
   content: '';
 }
 
@@ -312,29 +314,30 @@ onMounted(() => {
   height: 1rem;
   border: 3px solid var(--color-surface);
   border-radius: 50%;
-  background: var(--color-sequence);
-  box-shadow: 0 0 0 1px var(--color-sequence);
+  background: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
   content: '';
 }
 
 .sequence__clip {
   min-height: 8.25rem;
-  border: 1px solid color-mix(in srgb, var(--color-sequence) 44%, transparent);
-  border-top: 0.25rem solid var(--color-sequence);
-  background: color-mix(in srgb, var(--color-sequence) 7%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  border-top: 0.25rem solid var(--color-primary);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
   padding: 1rem;
 }
 
 .sequence__clip--signal {
-  border-color: color-mix(in srgb, var(--color-signal) 44%, transparent);
-  border-top-color: var(--color-signal);
-  background: color-mix(in srgb, var(--color-signal) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 24%, transparent);
+  border-top-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
 }
 
 .sequence__clip-label {
   display: block;
   margin-bottom: 1.25rem;
-  color: color-mix(in srgb, var(--color-ink) 65%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 65%, transparent);
   font-size: 0.625rem;
 }
 
@@ -347,7 +350,7 @@ onMounted(() => {
 
 .sequence__clip p {
   margin: 0.625rem 0 0;
-  color: color-mix(in srgb, var(--color-ink) 72%, transparent);
+  color: var(--color-muted);
   font-size: 0.875rem;
   line-height: 1.55;
   word-break: keep-all;
@@ -356,20 +359,20 @@ onMounted(() => {
 .sequence__evidence {
   display: grid;
   gap: 0.5rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-resource) 42%, transparent);
-  background: color-mix(in srgb, var(--color-resource) 7%, var(--color-surface));
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: var(--color-primary-soft);
   padding: 1rem;
 }
 
 .sequence__evidence-label {
-  color: var(--color-resource);
+  color: var(--color-primary);
   font-size: 0.625rem;
   font-weight: 700;
 }
 
 .sequence__evidence p {
   margin: 0;
-  color: color-mix(in srgb, var(--color-ink) 74%, transparent);
+  color: var(--color-muted);
   font-size: 0.8125rem;
   line-height: 1.55;
   word-break: keep-all;
@@ -380,8 +383,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
-  color: color-mix(in srgb, var(--color-ink) 64%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
+  color: color-mix(in srgb, var(--color-primary-strong) 64%, transparent);
   font-size: 0.5625rem;
 }
 

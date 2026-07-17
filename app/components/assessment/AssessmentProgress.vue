@@ -29,7 +29,7 @@ defineProps<{
 
 <style scoped>
 .assessment-progress {
-  border-block: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
+  border-block: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   padding-block: 0.75rem;
 }
 
@@ -41,7 +41,7 @@ defineProps<{
 }
 
 .assessment-progress__readout span {
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 700;
@@ -65,16 +65,16 @@ defineProps<{
 
 .assessment-progress li {
   height: 0.1875rem;
-  background: color-mix(in srgb, var(--color-ink) 18%, transparent);
+  background: var(--color-primary-soft);
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
 .assessment-progress .assessment-progress__past {
-  background: color-mix(in srgb, var(--color-sequence) 48%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 48%, var(--color-primary-soft));
 }
 
 .assessment-progress .assessment-progress__active {
-  background: var(--color-sequence);
+  background: var(--color-primary);
   transform: scaleY(2);
   transform-origin: center;
 }

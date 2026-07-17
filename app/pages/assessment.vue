@@ -325,18 +325,21 @@ onMounted(loadSession)
 }
 
 .assessment-page__masthead {
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
-  background: var(--color-surface);
+  background: var(--color-canvas);
+  padding-top: 1rem;
 }
 
 .assessment-page__masthead-inner {
+  width: min(calc(100% - 2.5rem), var(--content));
   min-height: 4.5rem;
-  max-width: var(--content);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin: 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
   padding-inline: 1.25rem;
 }
 
@@ -345,7 +348,7 @@ onMounted(loadSession)
   min-inline-size: var(--touch-target);
   display: inline-flex;
   align-items: center;
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   font-family: var(--font-display);
   font-size: 1.125rem;
   font-weight: 800;
@@ -353,7 +356,7 @@ onMounted(loadSession)
   text-decoration: none;
 }
 
-.assessment-page__brand span { color: var(--color-sequence); }
+.assessment-page__brand span { color: var(--color-primary); }
 
 .assessment-page__timecode,
 .assessment-page__state-code {
@@ -364,7 +367,7 @@ onMounted(loadSession)
 }
 
 .assessment-page__timecode {
-  color: color-mix(in srgb, var(--color-ink) 60%, transparent);
+  color: var(--color-muted);
   text-align: right;
 }
 
@@ -392,10 +395,10 @@ onMounted(loadSession)
 
 .assessment-page button {
   min-height: var(--touch-target);
-  border: 1px solid color-mix(in srgb, var(--color-ink) 38%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-surface);
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   padding: 0.625rem 1rem;
   font-family: var(--font-display);
   font-weight: 720;
@@ -405,7 +408,7 @@ onMounted(loadSession)
 
 .assessment-page button:focus-visible,
 .assessment-page__brand:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
@@ -429,7 +432,8 @@ onMounted(loadSession)
 .assessment-page__validated,
 .assessment-page__state-panel {
   margin-block: 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   padding: 1rem;
 }
@@ -445,7 +449,7 @@ onMounted(loadSession)
 }
 
 .assessment-page__inline-stale {
-  border-left: 0.35rem solid var(--color-sequence);
+  border-left: 0.35rem solid var(--color-primary);
 }
 
 .assessment-page__inline-error p,
@@ -457,13 +461,13 @@ onMounted(loadSession)
 }
 
 .assessment-page__validated {
-  border-left: 0.35rem solid var(--color-sequence);
+  border-left: 0.35rem solid var(--color-primary);
 }
 
 .assessment-page__validated .assessment-page__state-code,
 .assessment-page__state-code {
   margin-bottom: 0.75rem;
-  color: var(--color-sequence);
+  color: var(--color-primary);
 }
 
 .assessment-page__validated strong {
@@ -474,13 +478,15 @@ onMounted(loadSession)
 }
 
 .assessment-page__validated small {
-  color: color-mix(in srgb, var(--color-ink) 66%, transparent);
+  color: var(--color-muted);
   line-height: 1.5;
 }
 
 .assessment-page__state-panel {
   margin-top: 4rem;
-  border-top: 0.25rem solid var(--color-sequence);
+  border-top: 0.25rem solid var(--color-primary);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised);
 }
 
 .assessment-page__state-panel--error { border-top-color: var(--color-error); }
@@ -500,13 +506,13 @@ onMounted(loadSession)
   justify-content: space-between;
   gap: 0.75rem;
   margin-top: 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   padding-top: 1rem;
 }
 
 .assessment-page .assessment-page__primary-action {
-  border-color: var(--color-sequence);
-  background: var(--color-sequence);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
   color: var(--color-surface);
 }
 
@@ -521,7 +527,6 @@ onMounted(loadSession)
 }
 
 @media (min-width: 48rem) {
-  .assessment-page__masthead-inner,
   .assessment-page__workspace { padding-inline: 0; }
   .assessment-page__workspace { padding-top: 2rem; }
 }

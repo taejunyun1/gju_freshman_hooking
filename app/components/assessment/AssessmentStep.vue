@@ -140,7 +140,7 @@ const updateCareerOther = (event: Event): void => {
   max-width: 34rem;
   padding: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 7vw, 2.75rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   font-weight: 760;
   letter-spacing: -0.055em;
   line-height: 1.08;
@@ -149,7 +149,7 @@ const updateCareerOther = (event: Event): void => {
 
 .assessment-step__eyebrow {
   margin: 1rem 0 0;
-  color: var(--color-sequence);
+  color: var(--color-primary);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   font-weight: 700;
@@ -158,7 +158,7 @@ const updateCareerOther = (event: Event): void => {
 
 .assessment-step__instruction {
   margin: 0.5rem 0 1.5rem;
-  color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+  color: var(--color-muted);
   font-size: 0.9375rem;
 }
 
@@ -170,7 +170,8 @@ const updateCareerOther = (event: Event): void => {
 
 .assessment-step__career-other {
   margin-top: 1.25rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   padding: 1rem;
 }
@@ -198,21 +199,21 @@ const updateCareerOther = (event: Event): void => {
   width: 100%;
   min-height: var(--touch-target);
   margin-top: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 38%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-canvas);
-  color: var(--color-ink);
+  color: var(--color-primary-strong);
   padding: 0.625rem 0.75rem;
 }
 
 .assessment-step__career-other input:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 .assessment-step__career-other p {
   margin: 0.625rem 0 0;
-  color: color-mix(in srgb, var(--color-ink) 68%, transparent);
+  color: var(--color-muted);
   font-size: 0.75rem;
   line-height: 1.5;
 }
@@ -229,14 +230,14 @@ const updateCareerOther = (event: Event): void => {
   justify-content: space-between;
   gap: 1rem;
   margin-top: 1.25rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
   padding-top: 0.75rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
 }
 
 .assessment-step__selection-line [role='status'] {
-  color: var(--color-error);
+  color: var(--color-primary);
   text-align: right;
 }
 

@@ -115,7 +115,7 @@ describe('design tokens', () => {
     const page = readFileSync('app/pages/index.vue', 'utf8')
     const footerBlocks = [...page.matchAll(/\.landing__footer \{([\s\S]*?)\n\}/g)]
     const footerColor = footerBlocks
-      .map(([, block]) => block.match(/color: color-mix\(in srgb, var\(--color-ink\) (\d+)%, transparent\);/))
+      .map(([, block]) => block.match(/color: color-mix\(in srgb, var\(--color-primary-strong\) (\d+)%, transparent\);/))
       .find(Boolean)
 
     expect(footerColor).toBeDefined()
@@ -134,8 +134,8 @@ describe('design tokens', () => {
     const page = readFileSync('app/pages/index.vue', 'utf8')
     const clipLabel = page.match(/\.sequence__clip-label \{([\s\S]*?)\n\}/)?.[1]
     const sequenceClip = page.match(/\.sequence__clip \{([\s\S]*?)\n\}/)?.[1]
-    const labelOpacity = clipLabel?.match(/color: color-mix\(in srgb, var\(--color-ink\) (\d+)%, transparent\);/)
-    const sequenceTint = sequenceClip?.match(/background: color-mix\(in srgb, var\(--color-sequence\) (\d+)%, var\(--color-surface\)\);/)
+    const labelOpacity = clipLabel?.match(/color: color-mix\(in srgb, var\(--color-primary-strong\) (\d+)%, transparent\);/)
+    const sequenceTint = sequenceClip?.match(/background: color-mix\(in srgb, var\(--color-primary\) (\d+)%, var\(--color-surface\)\);/)
 
     expect(labelOpacity).toBeDefined()
     expect(sequenceTint).toBeDefined()
