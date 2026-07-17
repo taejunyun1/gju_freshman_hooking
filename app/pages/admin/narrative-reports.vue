@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
 .narrative-reports__header > div > p:last-child {
   max-width: 46rem;
   margin-bottom: 0;
-  color: var(--color-resource);
+  color: var(--color-muted);
 }
 
 .narrative-reports__rule {

@@ -374,6 +374,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .student-detail {
+  --student-status-color: v-bind('pendingStatus === "inactive" ? "var(--color-error)" : "var(--color-primary)"');
+  --student-status-background: v-bind('pendingStatus === "inactive" ? "var(--color-surface)" : "var(--color-primary-soft)"');
   display: grid;
   gap: 1.5rem;
   max-width: 70rem;
@@ -537,7 +539,8 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 .student-detail__operation-actions button:last-child { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-surface); }
-.student-detail__operation-actions [data-action="open-status-toggle"] { border-color: var(--color-error); background: var(--color-surface); color: var(--color-error); }
+.student-detail__operation-actions [data-action="open-status-toggle"] { border-color: var(--student-status-color); background: var(--student-status-background); color: var(--student-status-color); }
+.student-detail__operation-form[aria-label="학생 상태 변경 확인"] button[type="submit"] { border-color: var(--student-status-color); background: var(--student-status-color); color: var(--color-surface); }
 .student-detail__operation-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.875rem; }
 .student-detail__operation-form label { display: grid; gap: 0.3rem; font-family: var(--font-mono); font-size: 0.7rem; }
 .student-detail__operation-form input,

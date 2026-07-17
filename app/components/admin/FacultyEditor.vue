@@ -589,12 +589,15 @@ const publicContactEntries = (person: Pick<PublicPerson, 'publicContacts'>) => {
 .faculty-editor h3 { margin: 0.35rem 0; font-size: 0.92rem; }
 .faculty-editor__help, .faculty-editor__note, .faculty-editor__proof-empty { color: color-mix(in srgb, var(--color-ink) 70%, transparent); font-size: 0.82rem; line-height: 1.6; }
 .faculty-editor__note { border-left: 0.25rem solid var(--color-primary); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
-.faculty-editor__signal, .faculty-editor__preview-error { border-left: 0.25rem solid var(--color-primary); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
+.faculty-editor__signal { border-left: 0.25rem solid var(--color-primary); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
+.faculty-editor__preview-error { border-left: 0.25rem solid var(--color-error); border-radius: var(--radius-card); background: color-mix(in srgb, var(--color-error) 7%, var(--color-surface)); color: var(--color-error); padding: 0.75rem; }
 .faculty-editor__errors { border-left: 0.25rem solid var(--color-error); border-radius: var(--radius-card); background: color-mix(in srgb, var(--color-error) 7%, var(--color-surface)); color: var(--color-error); padding: 0.75rem; }
+.faculty-editor :is([data-action='remove-profile-item'], [data-action='remove-tag'], [data-action='remove-specialist-link']) { border-color: var(--color-error); color: var(--color-error); }
 .faculty-editor__actions, .faculty-editor__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
 .faculty-editor__actions button:first-child { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-surface); }
-.faculty-editor__confirm { border: 1px solid color-mix(in srgb, var(--color-error) 28%, transparent); border-radius: var(--radius-card); background: color-mix(in srgb, var(--color-error) 6%, var(--color-surface)); padding: 0.75rem; }
+.faculty-editor__confirm { border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
 .faculty-editor__confirm p { flex-basis: 100%; margin: 0; }
+.faculty-editor__confirm [data-action='confirm-publish'] { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-surface); }
 .faculty-editor__live { min-height: 1.5rem; margin: 0; }
 .faculty-editor__proof { min-width: 0; display: grid; gap: 0.85rem; border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-radius: var(--radius-panel); background: var(--color-primary-soft); padding: 0.8rem; }
 .faculty-editor__proof header > p, .faculty-editor__evidence, .faculty-editor__frames button span { font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; }
