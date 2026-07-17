@@ -106,9 +106,10 @@ const yearTitles = {
 
 <style scoped>
 .learning-path {
-  border: 1px solid color-mix(in srgb, var(--color-ink) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: 0.45rem 0.45rem 0 color-mix(in srgb, var(--color-ink) 7%, transparent);
+  overflow: hidden;
 }
 
 .learning-path__ruler {
@@ -118,8 +119,8 @@ const yearTitles = {
   align-items: center;
   justify-content: space-between;
   overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
-  background: color-mix(in srgb, var(--color-canvas) 58%, var(--color-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  background: var(--color-primary-soft);
   padding-inline: 0.9rem;
   color: color-mix(in srgb, var(--color-ink) 62%, transparent);
   font-family: var(--font-mono);
@@ -221,6 +222,7 @@ const yearTitles = {
   border: 1px dashed color-mix(in srgb, var(--color-ink) 28%, transparent);
   color: color-mix(in srgb, var(--color-ink) 62%, transparent);
   padding: 0.9rem;
+  border-radius: var(--radius-card);
   font-size: 0.8125rem;
   line-height: 1.5;
 }
@@ -228,8 +230,8 @@ const yearTitles = {
 .learning-path__project-lane {
   display: grid;
   gap: 0.85rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-resource) 40%, transparent);
-  background: color-mix(in srgb, var(--color-resource) 6%, var(--color-surface));
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface));
   padding: 1rem;
 }
 

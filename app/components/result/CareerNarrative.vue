@@ -50,6 +50,10 @@ defineProps<{
 .career-narrative {
   width: min(calc(100% - 2.5rem), var(--content));
   margin-inline: auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: clamp(1.25rem, 5vw, 2rem);
 }
 
 .career-narrative__header {
@@ -68,7 +72,7 @@ defineProps<{
 .career-narrative__header h2 {
   margin: 0.45rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.6rem, 5.5vw, 2.45rem);
+  font-size: clamp(1.375rem, 3vw, 1.625rem);
   letter-spacing: -0.05em;
   line-height: 1.18;
   word-break: keep-all;
@@ -77,7 +81,7 @@ defineProps<{
 .career-narrative__sequence {
   max-width: 68ch;
   display: grid;
-  gap: 0;
+  gap: 0.75rem;
   margin: 1.4rem 0 0;
   padding: 0;
   list-style: none;
@@ -88,24 +92,18 @@ defineProps<{
   display: grid;
   grid-template-columns: 2.8rem minmax(0, 1fr);
   gap: 0.85rem;
-  border-left: 1px solid color-mix(in srgb, var(--color-sequence) 56%, transparent);
-  padding: 0.15rem 0 1.35rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 52%, var(--color-surface));
+  padding: 0.9rem;
 }
 
 .career-narrative__sequence li:last-child {
-  border-left-color: transparent;
-  padding-bottom: 0.2rem;
+  padding-bottom: 0.9rem;
 }
 
 .career-narrative__sequence li::before {
-  position: absolute;
-  top: 0.3rem;
-  left: -0.26rem;
-  width: 0.45rem;
-  height: 0.45rem;
-  border: 1px solid var(--color-sequence);
-  background: var(--color-surface);
-  content: '';
+  content: none;
 }
 
 .career-narrative__sequence span {

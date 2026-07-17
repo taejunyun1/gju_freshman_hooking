@@ -3,6 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteUpdate } from 'vue-router'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
 import type { ResultSnapshot } from '../../../shared/types/result'
+import CapabilityEvidence from '../../components/result/CapabilityEvidence.vue'
+import CareerNarrative from '../../components/result/CareerNarrative.vue'
+import FacultyRecommendation from '../../components/result/FacultyRecommendation.vue'
+import LearningPath from '../../components/result/LearningPath.vue'
 
 type ResultPageState = 'loading' | 'ready' | 'not-found' | 'error' | 'unauthenticated'
 
@@ -143,7 +147,31 @@ onBeforeRouteUpdate((to) => {
       v-else-if="state === 'ready' && snapshot"
       :snapshot="snapshot"
       :result-public-id="routePublicId"
-    />
+    >
+      <template #learning-path>
+        <LearningPath
+          :years="snapshot.learningPath"
+          :projects="snapshot.resources.project"
+          :extracurricular="[]"
+        />
+      </template>
+      <template #faculty>
+        <FacultyRecommendation :faculty="snapshot.faculty" />
+      </template>
+      <template #career-narrative>
+        <CareerNarrative
+          :assessment-public-id="routePublicId"
+          :narrative="snapshot.careerNarrative"
+        />
+      </template>
+      <template #capability-evidence>
+        <CapabilityEvidence
+          :equipment="snapshot.resources.equipment"
+          :facility="snapshot.resources.facility"
+          :result-public-id="routePublicId"
+        />
+      </template>
+    </ResultTimeline>
 
     <section
       v-else
@@ -241,6 +269,7 @@ onBeforeRouteUpdate((to) => {
   min-height: 8rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 15%, transparent);
   background: var(--color-surface);
+  border-radius: var(--radius-panel);
   padding: 1rem;
 }
 
@@ -271,7 +300,8 @@ onBeforeRouteUpdate((to) => {
 .result-page__state {
   width: min(calc(100% - 2.5rem), var(--content));
   margin: 4rem auto;
-  border-top: 0.3rem solid var(--color-sequence);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
 }

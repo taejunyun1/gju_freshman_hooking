@@ -214,7 +214,8 @@ const submit = async (): Promise<void> => {
 .counseling-form {
   display: grid;
   gap: 2rem;
-  border-top: 0.4rem solid var(--color-sequence);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
 }
@@ -343,7 +344,8 @@ const submit = async (): Promise<void> => {
   align-items: start;
   gap: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--color-resource) 38%, transparent);
-  background: color-mix(in srgb, var(--color-resource) 5%, var(--color-surface));
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
   padding: 1rem;
   line-height: 1.55;
   cursor: pointer;

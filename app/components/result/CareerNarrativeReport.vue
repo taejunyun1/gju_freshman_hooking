@@ -206,8 +206,10 @@ const props = defineProps<{
 .career-narrative-report form {
   max-width: 42rem;
   margin-top: 0.75rem;
-  border-top: 1px dashed color-mix(in srgb, var(--color-ink) 24%, transparent);
-  padding-top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+  padding: 1rem;
 }
 
 .career-narrative-report fieldset {
@@ -242,6 +244,7 @@ const props = defineProps<{
   display: flex;
   align-items: center;
   border: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.65rem 0.75rem;
   cursor: pointer;

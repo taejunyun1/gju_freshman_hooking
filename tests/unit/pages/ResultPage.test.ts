@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -58,6 +59,13 @@ describe('owned result page', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('keeps learning, faculty, and career ahead of supporting resource evidence', () => {
+    const source = readFileSync('app/pages/result/[publicId].vue', 'utf8')
+    expect(source.indexOf('<LearningPath')).toBeLessThan(source.indexOf('<CapabilityEvidence'))
+    expect(source.indexOf('<FacultyRecommendation')).toBeLessThan(source.indexOf('<CapabilityEvidence'))
+    expect(source.indexOf('<CareerNarrative')).toBeLessThan(source.indexOf('<CapabilityEvidence'))
   })
 
   it('loads the owned result by route ID and keeps a layout-stable skeleton while pending', async () => {

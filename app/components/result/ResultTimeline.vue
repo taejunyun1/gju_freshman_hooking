@@ -20,6 +20,7 @@ const primaryConnection = computed(() => trackLabels[props.snapshot.rankedTracks
 const hasOutcomes = computed(() => (
   props.snapshot.resources.student_work.length
   + props.snapshot.resources.career.length
+  + props.snapshot.resources.extracurricular.length
   + props.snapshot.resources.support.length
 ) > 0)
 </script>
@@ -38,11 +39,6 @@ const hasOutcomes = computed(() => (
         점수보다 실제 교과와 프로젝트, 결과물의 순서부터 확인해 보세요.
       </p>
     </section>
-
-    <CareerNarrative
-      :assessment-public-id="resultPublicId"
-      :narrative="snapshot.careerNarrative"
-    />
 
     <section
       class="result-timeline__section result-timeline__section--interests"
@@ -63,6 +59,17 @@ const hasOutcomes = computed(() => (
     </section>
 
     <section
+      class="result-timeline__section result-timeline__section--scores"
+      data-result-section="scores"
+      aria-label="관심 분야 연결 점수"
+    >
+      <TrackScore
+        :scores="snapshot.trackScores"
+        :environment-score="snapshot.environmentScore"
+      />
+    </section>
+
+    <section
       class="result-timeline__section result-timeline__section--wide"
       data-result-section="learning-path"
       aria-labelledby="learning-path-title"
@@ -72,12 +79,38 @@ const hasOutcomes = computed(() => (
         <h2 id="learning-path-title">관심에서 포트폴리오까지 이어지는 학습경로</h2>
         <span>학년별 교과는 확인된 개설 정보만 표시하며, 프로젝트는 특정 학년에 임의 배정하지 않습니다.</span>
       </header>
-      <LearningPath
-        :years="snapshot.learningPath"
-        :projects="snapshot.resources.project"
-        :extracurricular="snapshot.resources.extracurricular"
-      />
+      <slot name="learning-path">
+        <LearningPath
+          :years="snapshot.learningPath"
+          :projects="snapshot.resources.project"
+          :extracurricular="[]"
+        />
+      </slot>
     </section>
+
+    <section
+      class="result-timeline__section result-timeline__section--faculty"
+      data-result-section="faculty"
+      aria-labelledby="faculty-title"
+    >
+      <header class="result-timeline__section-heading">
+        <p>NEXT / FACULTY</p>
+        <h2 id="faculty-title">이 학습경로를 함께 살펴볼 교수진</h2>
+      </header>
+      <slot name="faculty">
+        <FacultyRecommendation :faculty="snapshot.faculty" />
+      </slot>
+      <p class="result-timeline__faculty-note">
+        추천은 학생의 관심 분야를 바탕으로 한 상담 시작점이며, 실제 담당 교수가 확정된 상태를 뜻하지 않습니다.
+      </p>
+    </section>
+
+    <slot name="career-narrative">
+      <CareerNarrative
+        :assessment-public-id="resultPublicId"
+        :narrative="snapshot.careerNarrative"
+      />
+    </slot>
 
     <section
       class="result-timeline__section"
@@ -120,6 +153,19 @@ const hasOutcomes = computed(() => (
             class="result-timeline__empty"
           >확인된 학과 데이터를 준비 중입니다</p>
         </div>
+        <div class="result-timeline__outcome-lane result-timeline__outcome-lane--activities">
+          <h3>비교과·학생 활동</h3>
+          <ResourceCard
+            v-for="resource in snapshot.resources.extracurricular"
+            :key="resource.id"
+            :resource="resource"
+            variant="support"
+          />
+          <p
+            v-if="snapshot.resources.extracurricular.length === 0"
+            class="result-timeline__empty"
+          >확인된 학과 데이터를 준비 중입니다</p>
+        </div>
         <aside
           v-if="snapshot.resources.support.length > 0"
           class="result-timeline__support-lane"
@@ -150,37 +196,13 @@ const hasOutcomes = computed(() => (
         <h2 id="capability-title">이 제작을 가능하게 하는 학과 기반</h2>
         <span>장비와 시설은 추천의 주인공이 아니라, 위 학습경로를 실제로 수행할 수 있음을 뒷받침하는 근거입니다.</span>
       </header>
-      <CapabilityEvidence
-        :equipment="snapshot.resources.equipment"
-        :facility="snapshot.resources.facility"
-        :result-public-id="resultPublicId"
-      />
-    </section>
-
-    <section
-      class="result-timeline__section"
-      data-result-section="scores"
-      aria-label="관심 분야 연결 점수"
-    >
-      <TrackScore
-        :scores="snapshot.trackScores"
-        :environment-score="snapshot.environmentScore"
-      />
-    </section>
-
-    <section
-      class="result-timeline__section"
-      data-result-section="faculty"
-      aria-labelledby="faculty-title"
-    >
-      <header class="result-timeline__section-heading">
-        <p>NEXT / FACULTY</p>
-        <h2 id="faculty-title">이 학습경로를 함께 살펴볼 교수진</h2>
-      </header>
-      <FacultyRecommendation :faculty="snapshot.faculty" />
-      <p class="result-timeline__faculty-note">
-        추천은 학생의 관심 분야를 바탕으로 한 상담 시작점이며, 실제 담당 교수가 확정된 상태를 뜻하지 않습니다.
-      </p>
+      <slot name="capability-evidence">
+        <CapabilityEvidence
+          :equipment="snapshot.resources.equipment"
+          :facility="snapshot.resources.facility"
+          :result-public-id="resultPublicId"
+        />
+      </slot>
     </section>
 
     <section
@@ -198,8 +220,8 @@ const hasOutcomes = computed(() => (
   --result-gutter: 1.25rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(3.5rem, 10vw, 6.5rem);
-  padding-block: clamp(2.75rem, 8vw, 5.5rem) 5rem;
+  gap: clamp(2rem, 6vw, 3.5rem);
+  padding-block: clamp(2rem, 6vw, 4rem) 4rem;
 }
 
 .result-timeline__summary,
@@ -213,7 +235,10 @@ const hasOutcomes = computed(() => (
 }
 
 .result-timeline__summary {
-  padding-top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: clamp(1.25rem, 5vw, 2rem);
 }
 
 .result-timeline__eyebrow,
@@ -255,7 +280,7 @@ const hasOutcomes = computed(() => (
 .result-timeline__section-heading h2 {
   margin: 0.45rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.5rem, 5vw, 2.25rem);
+  font-size: clamp(1.375rem, 3vw, 1.625rem);
   letter-spacing: -0.045em;
   line-height: 1.2;
   word-break: keep-all;
@@ -286,7 +311,11 @@ const hasOutcomes = computed(() => (
 
 .result-timeline__outcomes {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: clamp(1rem, 4vw, 1.5rem);
 }
 
 .result-timeline__outcome-lane,
@@ -299,21 +328,21 @@ const hasOutcomes = computed(() => (
 .result-timeline__outcome-lane > h3,
 .result-timeline__support-lane > h3 {
   margin: 0;
-  border-left: 0.3rem solid var(--color-signal);
-  padding: 0.35rem 0 0.35rem 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  padding: 0 0 0.65rem;
   font-family: var(--font-display);
   font-size: 1rem;
   letter-spacing: -0.02em;
 }
 
 .result-timeline__support-lane {
-  border-top: 1px dashed color-mix(in srgb, var(--color-ink) 25%, transparent);
-  padding-top: 1rem;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+  padding: 1rem;
 }
 
 .result-timeline__support-lane > h3 {
-  border-left-color: var(--color-resource);
-  color: color-mix(in srgb, var(--color-ink) 74%, transparent);
+  color: var(--color-primary-strong);
 }
 
 .result-timeline__empty {
@@ -322,16 +351,33 @@ const hasOutcomes = computed(() => (
   color: color-mix(in srgb, var(--color-ink) 62%, transparent);
   padding: 1rem;
   line-height: 1.55;
+  border-radius: var(--radius-card);
 }
 
 .result-timeline__section--capability {
-  border: 1px solid color-mix(in srgb, var(--color-resource) 36%, transparent);
-  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+  padding: 1rem;
 }
 
 .result-timeline__section--capability .result-timeline__section-heading {
   margin: 0;
+  padding: 0 0 0.85rem;
+}
+
+.result-timeline__section--scores {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 56%, var(--color-surface));
   padding: 1rem;
+}
+
+.result-timeline__section--faculty {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: clamp(1rem, 4vw, 1.5rem);
 }
 
 .result-timeline__faculty-note {
@@ -342,9 +388,9 @@ const hasOutcomes = computed(() => (
 }
 
 .result-timeline__counseling {
-  border: 1px solid var(--color-signal);
-  border-left: 0.45rem solid var(--color-signal);
-  background: color-mix(in srgb, var(--color-signal) 6%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
 }
 
@@ -359,7 +405,7 @@ const hasOutcomes = computed(() => (
   }
 
   .result-timeline__outcomes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .result-timeline__support-lane { grid-column: 1 / -1; }

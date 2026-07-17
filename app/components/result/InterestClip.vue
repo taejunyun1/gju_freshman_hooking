@@ -32,20 +32,15 @@ const groupLabels = {
   position: relative;
   min-width: 0;
   flex: 0 0 min(16rem, 78vw);
-  border: 1px solid color-mix(in srgb, var(--color-sequence) 42%, transparent);
-  border-top: 0.25rem solid var(--color-sequence);
-  background: color-mix(in srgb, var(--color-sequence) 6%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
   padding: 0.85rem 1rem 1rem;
   scroll-snap-align: start;
 }
 
 .interest-clip::after {
-  position: absolute;
-  right: 0.6rem;
-  bottom: 0.45rem;
-  width: 1.8rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-sequence) 45%, transparent);
-  content: '';
+  content: none;
 }
 
 .interest-clip__group {

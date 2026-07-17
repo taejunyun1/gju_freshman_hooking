@@ -35,6 +35,7 @@ const counselingTarget = computed(() => canonicalUuidPattern.test(props.assessme
 .counseling-cta {
   display: grid;
   gap: 1.2rem;
+  border-radius: var(--radius-panel);
 }
 
 .counseling-cta__code {

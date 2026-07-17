@@ -298,11 +298,14 @@ onMounted(loadHistory)
 .history-page__list {
   list-style: none;
   margin-block: 0;
-  border-top: 1px solid var(--color-ink);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  overflow: hidden;
   padding: 0;
 }
 
-.history-page__list li { border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent); }
+.history-page__list li + li { border-top: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent); }
 
 .history-page__list a {
   min-height: calc(var(--touch-target) * 2);
@@ -316,19 +319,19 @@ onMounted(loadHistory)
 }
 
 .history-page__take { color: var(--color-sequence); }
-.history-page__date { justify-self: end; font-size: 0.8125rem; }
+.history-page__date { justify-self: end; color: var(--color-muted); font-size: 0.8125rem; }
 
 .history-page__list strong {
   grid-column: 1 / -1;
   font-family: var(--font-display);
-  font-size: clamp(1.5rem, 6vw, 2.25rem);
+  font-size: clamp(1.25rem, 4vw, 1.625rem);
   letter-spacing: -0.045em;
 }
 
 .history-page__score,
 .history-page__interests,
 .history-page__open { grid-column: 1 / -1; }
-.history-page__score { color: var(--color-resource); font-weight: 700; }
+.history-page__score { color: var(--color-primary-strong); font-weight: 700; }
 .history-page__interests { line-height: 1.55; }
 .history-page__open { margin-top: 0.5rem; font-family: var(--font-display); font-weight: 750; }
 
@@ -337,7 +340,9 @@ onMounted(loadHistory)
 .history-page__loading {
   display: grid;
   gap: 0;
-  border-top: 1px solid var(--color-ink);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
 }
 
 .history-page__loading span {
@@ -347,7 +352,8 @@ onMounted(loadHistory)
 }
 
 .history-page__state {
-  border-top: 0.3rem solid var(--color-sequence);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1.25rem;
 }

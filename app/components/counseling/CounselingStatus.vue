@@ -135,7 +135,8 @@ const formatDate = (value: string | null): string => {
 .counseling-status {
   display: grid;
   gap: 2.25rem;
-  border-top: 0.4rem solid var(--color-resource);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
 }
@@ -161,7 +162,6 @@ const formatDate = (value: string | null): string => {
 
 .counseling-status--compact {
   gap: 1.5rem;
-  border-top-width: 0.25rem;
   padding: 1rem;
 }
 
@@ -177,8 +177,8 @@ const formatDate = (value: string | null): string => {
 
 .counseling-status__faculty {
   border: 1px solid color-mix(in srgb, var(--color-sequence) 32%, transparent);
-  border-left: 0.35rem solid var(--color-sequence);
-  background: color-mix(in srgb, var(--color-sequence) 5%, var(--color-surface));
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
   padding: 1rem;
 }
 
@@ -242,6 +242,7 @@ const formatDate = (value: string | null): string => {
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: color-mix(in srgb, var(--color-ink) 48%, transparent);
   font-family: var(--font-mono);
@@ -287,16 +288,21 @@ const formatDate = (value: string | null): string => {
   display: grid;
   gap: 0;
   margin: 0;
-  border-top: 1px solid var(--color-ink);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 48%, var(--color-surface));
+  overflow: hidden;
 }
 
 .counseling-status__request > div {
   display: grid;
   grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
   gap: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
-  padding-block: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+  padding: 0.85rem;
 }
+
+.counseling-status__request > div:last-child { border-bottom: 0; }
 
 .counseling-status__request dt {
   color: color-mix(in srgb, var(--color-ink) 58%, transparent);

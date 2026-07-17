@@ -43,23 +43,23 @@ defineProps<{
 <style scoped>
 .faculty-recommendation {
   display: grid;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 23%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
+  overflow: hidden;
 }
 
 .faculty-recommendation__group {
   min-width: 0;
-  border-top: 0.25rem solid var(--color-sequence);
   padding: 1rem;
 }
 
 .faculty-recommendation__group + .faculty-recommendation__group {
-  border-top-width: 1px;
-  border-top-color: color-mix(in srgb, var(--color-ink) 20%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 .faculty-recommendation__group--specialists {
-  background: color-mix(in srgb, var(--color-signal) 5%, var(--color-surface));
+  background: var(--color-primary-soft);
 }
 
 .faculty-recommendation__group > h3 {
@@ -89,15 +89,13 @@ defineProps<{
   }
 
   .faculty-recommendation__group + .faculty-recommendation__group {
-    border-top-width: 0.25rem;
-    border-left: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
+    border-top: 0;
+    border-left: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
   }
-
-  .faculty-recommendation__group--backup { border-top-color: var(--color-resource); }
 
   .faculty-recommendation__group--specialists {
     grid-column: 1 / -1;
-    border-top: 1px solid color-mix(in srgb, var(--color-signal) 40%, transparent) !important;
+    border-top: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent) !important;
     border-left: 0 !important;
   }
 

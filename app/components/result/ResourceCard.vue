@@ -64,21 +64,18 @@ defineProps<{
 <style scoped>
 .resource-card {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 19%, transparent);
-  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 44%, var(--color-surface));
   padding: 0.9rem;
 }
 
 .resource-card--course {
-  border-top: 0.25rem solid var(--color-sequence);
-}
-
-.resource-card--project {
-  border-left: 0.3rem solid var(--color-resource);
+  background: var(--color-surface);
 }
 
 .resource-card--support {
-  background: color-mix(in srgb, var(--color-canvas) 56%, var(--color-surface));
+  background: var(--color-primary-soft);
 }
 
 .resource-card__header {
@@ -141,6 +138,7 @@ defineProps<{
   overflow: hidden;
   margin-top: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-canvas);
 }
 

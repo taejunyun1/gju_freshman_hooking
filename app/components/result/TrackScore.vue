@@ -52,8 +52,8 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
 .track-score {
   display: grid;
   gap: 1.25rem;
-  border-block: 1px solid color-mix(in srgb, var(--color-ink) 24%, transparent);
-  padding-block: 1.25rem;
+  border-radius: var(--radius-card);
+  padding: 0.25rem;
 }
 
 .track-score__explanation p {
@@ -128,7 +128,7 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
 }
 
 .track-score__environment {
-  border-top: 1px dashed color-mix(in srgb, var(--color-signal) 45%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
   padding-top: 0.75rem;
 }
 

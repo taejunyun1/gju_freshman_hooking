@@ -46,7 +46,12 @@ const hasContacts = computed(() => Object.keys(props.person.publicContacts).leng
 </template>
 
 <style scoped>
-.faculty-card { min-width: 0; }
+.faculty-card {
+  min-width: 0;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 48%, var(--color-surface));
+  padding: 1rem;
+}
 
 .faculty-card__heading {
   min-width: 0;

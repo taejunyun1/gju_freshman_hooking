@@ -233,15 +233,17 @@ watch(queryAssessmentPublicId, () => {
 }
 
 .counseling-page__prior {
-  border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
+  overflow: hidden;
 }
 
 .counseling-page__prior summary {
   min-height: var(--touch-target);
   display: flex;
   align-items: center;
-  border-left: 0.3rem solid var(--color-resource);
+  background: var(--color-primary-soft);
   padding: 0.75rem 1rem;
   font-family: var(--font-display);
   font-weight: 750;
@@ -265,7 +267,8 @@ watch(queryAssessmentPublicId, () => {
 .counseling-page__direction {
   display: grid;
   gap: 1.25rem;
-  border-top: 0.3rem solid var(--color-sequence);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
 }

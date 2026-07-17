@@ -61,6 +61,12 @@ describe('Blue Photo Note visual contract', () => {
     expect(read('app/components/assessment/OptionCard.vue')).toContain('border-radius: var(--radius-card)')
   })
 
+  it('uses primary and supporting card geometry in the result experience', () => {
+    expect(read('app/components/result/LearningPath.vue')).toContain('border-radius: var(--radius-panel)')
+    expect(read('app/components/result/FacultyRecommendation.vue')).toContain('border-radius: var(--radius-panel)')
+    expect(read('app/components/result/CapabilityEvidence.vue')).toContain('border-radius: var(--radius-card)')
+  })
+
   it('uses direct approved palette tokens across the student entry journey', () => {
     const studentStyles = [
       'app/pages/index.vue',

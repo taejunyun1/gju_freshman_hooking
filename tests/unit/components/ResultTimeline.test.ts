@@ -44,13 +44,13 @@ describe('result master sequence', () => {
       section.attributes('data-result-section')
     ))).toEqual([
       'summary',
-      'career-narrative',
       'interests',
+      'scores',
       'learning-path',
+      'faculty',
+      'career-narrative',
       'outcomes',
       'capability-evidence',
-      'scores',
-      'faculty',
       'counseling',
     ])
     expect(wrapper.get('h1').text()).toBe('선택한 관심사는 4년 동안 이렇게 이어집니다')

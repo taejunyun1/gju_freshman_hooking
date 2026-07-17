@@ -134,18 +134,19 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
 <style scoped>
 .capability {
   min-width: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-resource) 38%, transparent);
+  border-radius: var(--radius-card);
 }
 
 .capability__list {
   display: grid;
-  gap: 0;
+  gap: 0.75rem;
 }
 
 .capability__item {
   min-width: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-resource) 28%, transparent);
-  background: color-mix(in srgb, var(--color-resource) 5%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-primary-soft) 72%, var(--color-surface));
   padding: 1rem;
 }
 
@@ -203,6 +204,7 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-resource);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-resource);
   padding: 0.7rem 0.9rem;
@@ -254,12 +256,13 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
   background: color-mix(in srgb, var(--color-resource) 5%, var(--color-surface));
   color: color-mix(in srgb, var(--color-ink) 63%, transparent);
   padding: 1rem;
+  border-radius: var(--radius-card);
   line-height: 1.55;
 }
 
 .capability__more {
   width: 100%;
-  border-top: 0;
+  margin-top: 0.75rem;
 }
 
 @media (min-width: 1024px) {
@@ -267,9 +270,6 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .capability__item:nth-child(odd) {
-    border-right: 1px solid color-mix(in srgb, var(--color-resource) 28%, transparent);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
