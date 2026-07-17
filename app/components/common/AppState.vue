@@ -30,6 +30,7 @@ defineProps<{
   align-items: center;
   gap: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   padding: 1rem;
 }
@@ -50,11 +51,13 @@ defineProps<{
 }
 
 .app-state--loading {
-  color: var(--color-sequence);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .app-state--empty {
-  color: var(--color-resource);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .app-state--error {

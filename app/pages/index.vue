@@ -334,7 +334,7 @@ onMounted(() => {
 .sequence__clip-label {
   display: block;
   margin-bottom: 1.25rem;
-  color: color-mix(in srgb, var(--color-ink) 61%, transparent);
+  color: color-mix(in srgb, var(--color-ink) 65%, transparent);
   font-size: 0.625rem;
 }
 

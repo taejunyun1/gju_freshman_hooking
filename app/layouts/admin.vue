@@ -92,7 +92,7 @@ const logout = async (): Promise<void> => {
   text-decoration: none;
 }
 
-.admin-shell__brand span { color: #A98AE0; }
+.admin-shell__brand span { color: var(--color-primary); }
 
 .admin-shell__brand small {
   flex-basis: 100%;
@@ -125,7 +125,7 @@ const logout = async (): Promise<void> => {
 }
 
 .admin-shell nav a.router-link-exact-active {
-  border-color: #A98AE0;
+  border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-sequence) 36%, transparent);
 }
 
@@ -151,7 +151,7 @@ const logout = async (): Promise<void> => {
 .admin-shell__brand:focus-visible,
 .admin-shell nav a:focus-visible,
 .admin-shell__session button:focus-visible {
-  outline: 3px solid #A98AE0;
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 

@@ -33,7 +33,7 @@ withDefaults(defineProps<{
   justify-content: center;
   gap: 0.625rem;
   border: 1px solid transparent;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-control);
   padding: 0.625rem 1rem;
   font-family: var(--font-display);
   font-weight: 700;
@@ -43,14 +43,14 @@ withDefaults(defineProps<{
 }
 
 .app-button--primary {
-  background: var(--color-sequence);
+  background: var(--color-primary);
   color: var(--color-surface);
 }
 
 .app-button--secondary {
-  border-color: var(--color-resource);
+  border-color: var(--color-primary);
   background: var(--color-surface);
-  color: var(--color-resource);
+  color: var(--color-primary);
 }
 
 .app-button--danger {
@@ -60,10 +60,11 @@ withDefaults(defineProps<{
 
 .app-button:hover:not(:disabled) {
   filter: brightness(0.92);
+  box-shadow: var(--shadow-raised);
 }
 
 .app-button:focus-visible {
-  outline: 3px solid var(--color-sequence);
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
 
