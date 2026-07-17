@@ -10,13 +10,13 @@ const canonicalPublicId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{
 const canonicalResultHref = /^\/result\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const expectedSectionOrder = [
   'summary',
-  'career-narrative',
   'interests',
+  'scores',
   'learning-path',
+  'faculty',
+  'career-narrative',
   'outcomes',
   'capability-evidence',
-  'scores',
-  'faculty',
   'counseling',
 ]
 

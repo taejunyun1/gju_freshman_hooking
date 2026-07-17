@@ -24,6 +24,8 @@ const resultComponentSource = () => {
   return files.map(file => readFileSync(join(directory, file), 'utf8')).join('\n')
 }
 
+const trackScoreSource = () => readFileSync('app/components/result/TrackScore.vue', 'utf8')
+
 describe('result master sequence', () => {
   beforeEach(() => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ data: { accepted: true }, requestId: 'request-id' }))
@@ -260,6 +262,14 @@ describe('result master sequence', () => {
     expect(reducedMotionCss).toMatch(/transition(?:-duration)?:\s*(?:none|0m?s)/u)
     expect(source).not.toContain('100vw')
     expect(source).toMatch(/left:\s*calc\(100%\s*-\s*3\.1rem\)/u)
+  })
+
+  it('stacks score labels at 320px so fixed minimum columns cannot overflow', () => {
+    const source = trackScoreSource()
+    const mobileRule = source.slice(source.search(/@media\s*\(max-width:\s*20rem\)/u))
+
+    expect(mobileRule).toMatch(/\.track-score__tracks\s*>\s*div\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/u)
+    expect(mobileRule).not.toContain('minmax(7.5rem, 1fr)')
   })
 
   it('keeps long Korean labels, titles, reasons, and public contacts inside their tracks', async () => {

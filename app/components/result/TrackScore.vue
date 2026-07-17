@@ -94,11 +94,14 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
 }
 
 .track-score__tracks dt {
+  min-width: 0;
   font-size: 0.8125rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .track-score__tracks dd {
+  min-width: 0;
   display: grid;
   grid-template-columns: 1fr 3.5rem;
   align-items: center;
@@ -107,6 +110,7 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
 }
 
 .track-score meter {
+  min-width: 0;
   width: 100%;
   height: 0.45rem;
   border: 0;
@@ -134,6 +138,13 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
 
 .track-score__environment dt,
 .track-score__environment strong { color: var(--color-signal); }
+
+@media (max-width: 20rem) {
+  .track-score__tracks > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+}
 
 @media (min-width: 1024px) {
   .track-score {

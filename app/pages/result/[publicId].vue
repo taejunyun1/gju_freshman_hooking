@@ -12,13 +12,13 @@ type ResultPageState = 'loading' | 'ready' | 'not-found' | 'error' | 'unauthenti
 
 const sectionKeys = [
   'summary',
-  'career-narrative',
   'interests',
+  'scores',
   'learning-path',
+  'faculty',
+  'career-narrative',
   'outcomes',
   'capability-evidence',
-  'scores',
-  'faculty',
   'counseling',
 ] as const
 

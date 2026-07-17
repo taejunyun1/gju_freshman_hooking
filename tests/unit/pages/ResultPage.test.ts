@@ -76,7 +76,20 @@ describe('owned result page', () => {
 
     expect(fetch).toHaveBeenCalledWith(`/api/result/${resultPublicId}`)
     expect(wrapper.get('[data-testid="result-skeleton"]').attributes('aria-busy')).toBe('true')
-    expect(wrapper.findAll('[data-skeleton-section]')).toHaveLength(9)
+    expect(wrapper.findAll('[data-skeleton-section]').map(section => (
+      section.classes().find(className => className.startsWith('result-page__skeleton-section--'))
+        ?.replace('result-page__skeleton-section--', '')
+    ))).toEqual([
+      'summary',
+      'interests',
+      'scores',
+      'learning-path',
+      'faculty',
+      'career-narrative',
+      'outcomes',
+      'capability-evidence',
+      'counseling',
+    ])
 
     pending.resolve({ data: makeResultSnapshot(), requestId: 'request-id' })
     await flushPromises()
