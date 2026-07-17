@@ -575,7 +575,7 @@ const publicContactEntries = (person: Pick<PublicPerson, 'publicContacts'>) => {
 .faculty-editor { min-width: 0; }
 .faculty-editor__layout { min-width: 0; display: grid; gap: 1rem; align-items: start; }
 .faculty-editor__form { min-width: 0; display: grid; gap: 1rem; }
-.faculty-editor fieldset { min-width: 0; margin: 0; border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent); background: var(--color-surface); padding: 1rem; }
+.faculty-editor fieldset { min-width: 0; margin: 0; border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent); border-radius: var(--radius-panel); background: var(--color-surface); padding: 1rem; }
 .faculty-editor legend { padding: 0 0.35rem; font-family: var(--font-display); font-size: 1.18rem; font-weight: 750; }
 .faculty-editor__grid, .faculty-editor__contacts { display: grid; gap: 0.75rem; }
 .faculty-editor label { min-width: 0; display: grid; gap: 0.35rem; font-weight: 650; }
@@ -588,25 +588,25 @@ const publicContactEntries = (person: Pick<PublicPerson, 'publicContacts'>) => {
 .faculty-editor__array, .faculty-editor__tags { min-width: 0; display: grid; gap: 0.55rem; margin-top: 1rem; }
 .faculty-editor h3 { margin: 0.35rem 0; font-size: 0.92rem; }
 .faculty-editor__help, .faculty-editor__note, .faculty-editor__proof-empty { color: color-mix(in srgb, var(--color-ink) 70%, transparent); font-size: 0.82rem; line-height: 1.6; }
-.faculty-editor__note { border-left: 0.25rem solid var(--color-sequence); background: color-mix(in srgb, var(--color-sequence) 7%, var(--color-surface)); padding: 0.75rem; }
-.faculty-editor__signal, .faculty-editor__errors, .faculty-editor__preview-error { border-left: 0.25rem solid var(--color-signal); background: color-mix(in srgb, var(--color-signal) 8%, var(--color-surface)); padding: 0.75rem; }
-.faculty-editor__errors { border-left-color: var(--color-error); }
+.faculty-editor__note { border-left: 0.25rem solid var(--color-primary); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
+.faculty-editor__signal, .faculty-editor__preview-error { border-left: 0.25rem solid var(--color-primary); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.75rem; }
+.faculty-editor__errors { border-left: 0.25rem solid var(--color-error); border-radius: var(--radius-card); background: color-mix(in srgb, var(--color-error) 7%, var(--color-surface)); color: var(--color-error); padding: 0.75rem; }
 .faculty-editor__actions, .faculty-editor__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.625rem; }
-.faculty-editor__actions button:first-child { background: var(--color-ink); color: var(--color-surface); }
-.faculty-editor__confirm { border: 1px solid var(--color-signal); padding: 0.75rem; }
+.faculty-editor__actions button:first-child { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-surface); }
+.faculty-editor__confirm { border: 1px solid color-mix(in srgb, var(--color-error) 28%, transparent); border-radius: var(--radius-card); background: color-mix(in srgb, var(--color-error) 6%, var(--color-surface)); padding: 0.75rem; }
 .faculty-editor__confirm p { flex-basis: 100%; margin: 0; }
 .faculty-editor__live { min-height: 1.5rem; margin: 0; }
-.faculty-editor__proof { min-width: 0; display: grid; gap: 0.85rem; border: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent); background: var(--color-surface); padding: 0.8rem; }
+.faculty-editor__proof { min-width: 0; display: grid; gap: 0.85rem; border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-radius: var(--radius-panel); background: var(--color-primary-soft); padding: 0.8rem; }
 .faculty-editor__proof header > p, .faculty-editor__evidence, .faculty-editor__frames button span { font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; }
 .faculty-editor__proof header > p { margin: 0; color: var(--color-sequence); }
 .faculty-editor__proof h2 { margin: 0.25rem 0 0; font-family: var(--font-display); font-size: 1.25rem; }
-.faculty-editor__frames { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem; background: var(--color-ink); padding: 0.35rem; }
-.faculty-editor__frames button { min-width: 0; display: grid; align-content: end; gap: 0.35rem; min-height: 5.5rem; border-color: color-mix(in srgb, var(--color-surface) 28%, transparent); background: color-mix(in srgb, var(--color-ink) 92%, var(--color-sequence)); color: var(--color-surface); text-align: left; overflow-wrap: anywhere; }
-.faculty-editor__frames button[aria-selected='true'] { border-color: var(--color-signal); box-shadow: inset 0 -0.25rem 0 var(--color-signal); }
+.faculty-editor__frames { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem; border-radius: var(--radius-card); background: var(--color-primary-strong); padding: 0.35rem; }
+.faculty-editor__frames button { min-width: 0; display: grid; align-content: end; gap: 0.35rem; min-height: 5.5rem; border-color: color-mix(in srgb, var(--color-surface) 28%, transparent); background: var(--color-primary-strong); color: var(--color-surface); text-align: left; overflow-wrap: anywhere; }
+.faculty-editor__frames button[aria-selected='true'] { border-color: var(--color-primary); background: var(--color-primary); box-shadow: inset 0 -0.25rem 0 var(--color-surface); }
 .faculty-editor__frames button span { color: color-mix(in srgb, var(--color-surface) 65%, transparent); }
 .faculty-editor__proof-panel { min-width: 0; display: grid; gap: 0.75rem; }
 .faculty-editor__evidence { margin: 0; border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 25%, transparent); padding-bottom: 0.65rem; overflow-wrap: anywhere; }
-.faculty-editor__proof-panel article, .faculty-editor__specialists { min-width: 0; border-left: 0.22rem solid var(--color-sequence); background: var(--color-canvas); padding: 0.75rem; }
+.faculty-editor__proof-panel article, .faculty-editor__specialists { min-width: 0; border-left: 0.22rem solid var(--color-sequence); border-radius: var(--radius-card); background: var(--color-surface); padding: 0.75rem; }
 .faculty-editor__proof-panel article:nth-of-type(2) { border-left-color: var(--color-resource); }
 .faculty-editor__proof-panel :is(h3, p, dl) { margin-top: 0; }
 .faculty-editor__proof-panel dl { display: grid; gap: 0.25rem; font-size: 0.78rem; }

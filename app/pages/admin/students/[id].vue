@@ -401,6 +401,7 @@ onBeforeUnmount(() => {
   gap: 1.5rem;
   border-top: 3px solid var(--color-ink);
   border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1.5rem;
 }
@@ -455,7 +456,9 @@ onBeforeUnmount(() => {
   gap: 1px;
   margin: 0;
   border: 1px solid var(--color-resource);
+  border-radius: var(--radius-panel);
   background: var(--color-resource);
+  overflow: hidden;
 }
 
 .student-detail__identity > div {
@@ -484,6 +487,8 @@ onBeforeUnmount(() => {
   gap: 1px;
   margin: 0;
   background: color-mix(in srgb, var(--color-ink) 14%, transparent);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
 }
 
 .student-detail__facts > div {
@@ -500,8 +505,10 @@ onBeforeUnmount(() => {
 .student-detail__operations {
   display: grid;
   gap: 0.75rem;
-  border-block: 1px solid var(--color-resource);
-  padding-block: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: 1rem;
 }
 
 .student-detail__operations header p,
@@ -522,22 +529,24 @@ onBeforeUnmount(() => {
 .student-detail__operation-form button {
   min-height: var(--touch-target);
   border: 1px solid var(--color-resource);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-ink);
   padding: 0.55rem 0.8rem;
   font-family: var(--font-display);
   font-weight: 700;
 }
-.student-detail__operation-actions button:last-child { border-color: var(--color-sequence); }
-.student-detail__operation-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; border: 1px solid var(--color-resource); background: var(--color-surface); padding: 0.875rem; }
+.student-detail__operation-actions button:last-child { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-surface); }
+.student-detail__operation-actions [data-action="open-status-toggle"] { border-color: var(--color-error); background: var(--color-surface); color: var(--color-error); }
+.student-detail__operation-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 0.875rem; }
 .student-detail__operation-form label { display: grid; gap: 0.3rem; font-family: var(--font-mono); font-size: 0.7rem; }
 .student-detail__operation-form input,
-.student-detail__operation-form select { min-height: var(--touch-target); border: 1px solid var(--color-resource); background: var(--color-canvas); padding: 0.5rem; color: var(--color-ink); font: inherit; }
+.student-detail__operation-form select { min-height: var(--touch-target); border: 1px solid var(--color-resource); border-radius: var(--radius-control); background: var(--color-surface); padding: 0.5rem; color: var(--color-ink); font: inherit; }
 .student-detail__operation-form > p,
 .student-detail__operation-form > div { grid-column: 1 / -1; margin: 0; }
 .student-detail__operation-form > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
 .student-detail__action-message { margin: 0; color: var(--color-sequence); font-family: var(--font-mono); font-size: 0.8rem; }
-.student-detail__action-error { margin: 0; color: #a8251a; font-family: var(--font-mono); font-size: 0.8rem; }
+.student-detail__action-error { margin: 0; color: var(--color-error); font-family: var(--font-mono); font-size: 0.8rem; }
 
 .student-detail__section {
   display: grid;
@@ -554,6 +563,7 @@ onBeforeUnmount(() => {
 .student-detail__table-wrap {
   overflow-x: auto;
   border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
 }
 
@@ -591,6 +601,7 @@ tbody tr:last-child td {
 
 .student-detail__counseling > li {
   border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   padding: 1rem;
 }

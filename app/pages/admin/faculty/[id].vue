@@ -352,13 +352,13 @@ onBeforeUnmount(() => {
 .faculty-detail__header > div > p:first-child { margin: 0 0 0.5rem; color: var(--color-sequence); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; }
 .faculty-detail h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); letter-spacing: -0.05em; overflow-wrap: anywhere; }
 .faculty-detail__header > div > p:last-child { max-width: 54rem; margin-bottom: 0; color: color-mix(in srgb, var(--color-ink) 70%, transparent); }
-.faculty-detail__header dl { min-width: 0; display: grid; gap: 0.45rem; margin: 0; border-left: 0.25rem solid var(--color-sequence); background: var(--color-surface); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.6875rem; }
+.faculty-detail__header dl { min-width: 0; display: grid; gap: 0.45rem; margin: 0; border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent); border-radius: var(--radius-panel); background: var(--color-surface); padding: 0.875rem; font-family: var(--font-mono); font-size: 0.6875rem; }
 .faculty-detail__header dl div, .faculty-detail__conflict dl div { min-width: 0; display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 0.5rem; }
 .faculty-detail dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .faculty-detail__state { display: grid; justify-items: start; gap: 0.75rem; }
 .faculty-detail :is(button, a):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }
 .faculty-detail button { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; font-family: var(--font-display); font-weight: 700; }
-.faculty-detail__conflict { display: grid; justify-items: start; gap: 0.75rem; border: 1px solid var(--color-signal); border-left-width: 0.25rem; background: color-mix(in srgb, var(--color-signal) 8%, var(--color-surface)); padding: 1rem; }
+.faculty-detail__conflict { display: grid; justify-items: start; gap: 0.75rem; border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-radius: var(--radius-card); background: var(--color-primary-soft); padding: 1rem; }
 .faculty-detail__conflict :is(h2, p, dl) { margin: 0; }
 .faculty-detail__conflict dl { display: grid; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.75rem; }
 @media (min-width: 52rem) {

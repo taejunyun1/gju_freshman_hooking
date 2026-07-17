@@ -271,8 +271,10 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
   gap: 0.75rem;
-  border-block: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
-  padding-block: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 16%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: 1rem;
 }
 
 .counseling-filters label {

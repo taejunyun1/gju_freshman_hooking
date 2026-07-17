@@ -226,8 +226,8 @@ onBeforeUnmount(() => {
   max-width: 50rem;
 }
 .student-operations__actions { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
-.student-operations__actions a { min-height:var(--touch-target); display:inline-flex; align-items:center; border:1px solid var(--color-resource); padding:.625rem 1rem; color:var(--color-resource); font-family:var(--font-display); font-weight:700; text-decoration:none; }
-.student-operations__actions button { min-height:var(--touch-target); border:1px solid var(--color-sequence); background:var(--color-surface); color:var(--color-ink); padding:.625rem 1rem; font-family:var(--font-display); font-weight:700; }
+.student-operations__actions a { min-height:var(--touch-target); display:inline-flex; align-items:center; border:1px solid var(--color-primary); border-radius:var(--radius-control); padding:.625rem 1rem; color:var(--color-primary); font-family:var(--font-display); font-weight:700; text-decoration:none; }
+.student-operations__actions button { min-height:var(--touch-target); border:1px solid var(--color-primary); border-radius:var(--radius-control); background:var(--color-primary); color:var(--color-surface); padding:.625rem 1rem; font-family:var(--font-display); font-weight:700; }
 
 .student-operations__eyebrow {
   margin: 0 0 0.625rem;
@@ -280,6 +280,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--color-resource);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-resource);
   padding: 0.625rem 1rem;

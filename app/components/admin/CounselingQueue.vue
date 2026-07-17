@@ -547,7 +547,9 @@ onBeforeUnmount(() => {
 .counseling-record {
   border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
   border-top: 0.3rem solid var(--color-resource);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
+  overflow: hidden;
 }
 
 .counseling-record__header,
@@ -632,14 +634,14 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 .counseling-record__progress span + span { border-left: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent); }
-.counseling-record__progress span[data-state="done"] { background: color-mix(in srgb, var(--color-resource) 8%, var(--color-surface)); color: var(--color-resource); }
-.counseling-record__progress span[data-state="active"] { background: var(--color-ink); color: var(--color-surface); }
+.counseling-record__progress span[data-state="done"] { background: var(--color-primary-soft); color: var(--color-primary); }
+.counseling-record__progress span[data-state="active"] { background: var(--color-primary); color: var(--color-surface); }
 
 .counseling-record__path {
   display: grid;
   grid-template-columns: minmax(10rem, 0.75fr) repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  background: color-mix(in srgb, var(--color-sequence) 4%, var(--color-surface));
+  background: var(--color-primary-soft);
 }
 .counseling-record__path > div { min-width: 0; }
 .counseling-record__path p,
@@ -673,7 +675,8 @@ onBeforeUnmount(() => {
   align-items: baseline;
   gap: 0.35rem;
   border-left: 0.2rem solid var(--color-sequence);
-  background: color-mix(in srgb, var(--color-sequence) 6%, var(--color-surface));
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
   padding: 0.5rem 0.65rem;
 }
 .counseling-record__faculty li small { font-family: var(--font-mono); font-size: 0.65rem; }
@@ -730,6 +733,7 @@ onBeforeUnmount(() => {
 .reauthentication-dialog__panel {
   width: min(100%, 28rem);
   border-top: 0.35rem solid var(--color-sequence);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1.5rem;
   box-shadow: 0 1.5rem 4rem color-mix(in srgb, var(--color-ink) 28%, transparent);

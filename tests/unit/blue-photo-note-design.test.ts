@@ -55,6 +55,34 @@ describe('Blue Photo Note visual contract', () => {
     expect(main).toMatch(/h1\s*\{[\s\S]*?font-size:\s*clamp\(1\.75rem,\s*4vw,\s*2rem\)/u)
   })
 
+  it('keeps every administrator h1 declaration at or below 2rem', () => {
+    const adminPages = [
+      'app/pages/admin/campaigns.vue',
+      'app/pages/admin/counseling.vue',
+      'app/pages/admin/export.vue',
+      'app/pages/admin/faculty/[id].vue',
+      'app/pages/admin/faculty/index.vue',
+      'app/pages/admin/index.vue',
+      'app/pages/admin/login.vue',
+      'app/pages/admin/narrative-reports.vue',
+      'app/pages/admin/resources/[id].vue',
+      'app/pages/admin/resources/index.vue',
+      'app/pages/admin/students/[id].vue',
+      'app/pages/admin/students/index.vue',
+      'app/pages/admin/students/roster.vue',
+    ]
+    for (const path of adminPages) {
+      const blocks = [...read(path).matchAll(/h1[^{}]*\{(?<body>[^}]*)\}/gu)]
+      for (const block of blocks) {
+        const declaration = block.groups?.body.match(/font-size:\s*(?<value>[^;]+)/u)?.groups?.value
+        if (!declaration) continue
+        const remValues = [...declaration.matchAll(/(?<value>\d+(?:\.\d+)?)rem/gu)]
+          .map(match => Number(match.groups?.value))
+        expect(Math.max(...remValues)).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+
   it('uses the shared rounded tokens in student entry and assessment surfaces', () => {
     expect(read('app/pages/index.vue')).toContain('border-radius: var(--radius-panel)')
     expect(read('app/pages/login.vue')).toContain('border-radius: var(--radius-panel)')

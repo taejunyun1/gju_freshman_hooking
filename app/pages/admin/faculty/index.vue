@@ -477,8 +477,10 @@ onBeforeUnmount(() => {
 
 .faculty-list__filters {
   border-top: 0.25rem solid var(--color-sequence);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1rem;
+  box-shadow: var(--shadow-raised);
 }
 
 .faculty-list__filters fieldset {
@@ -527,6 +529,8 @@ onBeforeUnmount(() => {
 .faculty-list__table-wrap {
   min-width: 0;
   overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 14%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
 }
 
@@ -573,6 +577,7 @@ onBeforeUnmount(() => {
 .faculty-list__status {
   display: inline-flex;
   border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
   padding: 0.2rem 0.45rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -604,6 +609,7 @@ onBeforeUnmount(() => {
 
 .faculty-list__tags li {
   border: 1px solid color-mix(in srgb, var(--color-sequence) 45%, transparent);
+  border-radius: var(--radius-pill);
   padding: 0.2rem 0.4rem;
   font-size: 0.75rem;
 }
@@ -615,6 +621,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--color-sequence);
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.625rem 1rem;
   text-decoration: none;
@@ -628,6 +635,7 @@ onBeforeUnmount(() => {
     min-width: 0;
     border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
     border-left: 0.25rem solid var(--color-sequence);
+    border-radius: var(--radius-card);
     background: var(--color-surface);
     padding: 1rem;
   }

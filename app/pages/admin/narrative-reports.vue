@@ -454,8 +454,10 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.75rem;
-  border-block: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
-  padding-block: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 14%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: 0.875rem 1rem;
 }
 
 .narrative-reports__rule strong {
@@ -467,8 +469,9 @@ onBeforeUnmount(() => {
 
 .narrative-reports__status {
   margin: 0;
-  border-left: 0.25rem solid var(--color-sequence);
-  background: color-mix(in srgb, var(--color-sequence) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
   padding: 0.75rem 1rem;
 }
 
@@ -483,6 +486,7 @@ onBeforeUnmount(() => {
   gap: 1rem;
   border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
   border-left: 0.375rem solid var(--color-sequence);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   padding: 1rem;
 }
@@ -530,6 +534,7 @@ onBeforeUnmount(() => {
 
 .report-card__meta b {
   border: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
+  border-radius: var(--radius-pill);
   padding: 0.125rem 0.375rem;
   font-family: var(--font-mono);
   font-size: 0.625rem;
@@ -582,7 +587,8 @@ onBeforeUnmount(() => {
 .result-review,
 .result-review-error {
   border: 1px solid var(--color-sequence);
-  background: var(--color-surface);
+  border-radius: var(--radius-panel);
+  background: var(--color-primary-soft);
   padding: clamp(1rem, 3vw, 2rem);
 }
 
@@ -606,8 +612,10 @@ onBeforeUnmount(() => {
 }
 
 .result-review__grid > section {
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
-  padding-top: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: 1rem;
 }
 
 .result-review__interests { display: grid; gap: 0.5rem; margin: 0; }
@@ -620,7 +628,9 @@ onBeforeUnmount(() => {
 .result-review__narrative {
   margin-top: 1.5rem;
   border-top: 2px solid var(--color-ink);
-  padding-top: 1.25rem;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: 1.25rem;
 }
 
 .result-review__narrative li + li { margin-top: 0.75rem; }

@@ -268,6 +268,8 @@ onBeforeUnmount(dispose)
 }
 
 .export-page__header {
+  display: grid;
+  gap: 0;
   max-width: 52rem;
 }
 
@@ -304,6 +306,8 @@ onBeforeUnmount(dispose)
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
   background: var(--color-ink);
   color: color-mix(in srgb, var(--color-surface) 58%, transparent);
   list-style: none;
@@ -334,7 +338,9 @@ onBeforeUnmount(dispose)
 .export-filter,
 .export-status {
   border: 1px solid color-mix(in srgb, var(--color-ink) 18%, transparent);
+  border-radius: var(--radius-panel);
   background: var(--color-surface);
+  overflow: hidden;
 }
 
 .export-filter { padding: clamp(1rem, 3vw, 1.75rem); }
@@ -408,9 +414,9 @@ onBeforeUnmount(dispose)
 .export-filter fieldset:disabled { opacity: 0.58; }
 .export-filter__error {
   margin: 0.75rem 0 0;
-  border-left: 3px solid #B34E48;
-  background: color-mix(in srgb, #B34E48 8%, var(--color-surface));
-  color: #8B302B;
+  border-left: 3px solid var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  color: var(--color-error);
   padding: 0.65rem 0.75rem;
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -457,7 +463,7 @@ onBeforeUnmount(dispose)
 }
 
 .export-status__head > span[data-phase="completed"] { border-color: var(--color-primary); color: var(--color-primary-soft); }
-.export-status__head > span[data-phase="failed"] { border-color: #D77973; color: #FFD5D2; }
+.export-status__head > span[data-phase="failed"] { border-color: var(--color-error); color: var(--color-surface); }
 
 .export-ledger { margin-top: 1.25rem; border-top: 1px solid color-mix(in srgb, var(--color-surface) 20%, transparent); }
 
@@ -496,7 +502,7 @@ onBeforeUnmount(dispose)
 .export-live span { color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.6875rem; }
 .export-live p { margin: 0.35rem 0 0; line-height: 1.55; }
 .export-live strong { display: block; margin-top: 0.5rem; overflow-wrap: anywhere; color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.75rem; }
-.export-error { margin: 0.75rem 0 0; border: 1px solid #D77973; padding: 0.75rem; color: #FFD5D2; font-size: 0.8125rem; line-height: 1.55; }
+.export-error { margin: 0.75rem 0 0; border: 1px solid var(--color-error); border-radius: var(--radius-card); padding: 0.75rem; color: var(--color-surface); font-size: 0.8125rem; line-height: 1.55; }
 .export-status__privacy { margin: 1rem 0 0; color: color-mix(in srgb, var(--color-surface) 52%, transparent); font-size: 0.6875rem; line-height: 1.6; }
 
 @media (min-width: 36rem) {
