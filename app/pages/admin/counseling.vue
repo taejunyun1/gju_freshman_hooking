@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 .counseling-operations h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2rem, 6vw, 3.25rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.05em;
 }
 

@@ -186,7 +186,7 @@ onMounted(() => {
   max-width: 13ch;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.25rem, 9.5vw, 4.75rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   font-weight: 760;
   letter-spacing: -0.06em;
   line-height: 1.07;

@@ -195,7 +195,7 @@ const submitLogin = async (): Promise<void> => {
 h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2rem, 9vw, 3.25rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   font-weight: 760;
   letter-spacing: -0.06em;
   line-height: 1.08;

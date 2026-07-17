@@ -287,7 +287,7 @@ onBeforeRouteUpdate((to) => {
 .result-page__state h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 8vw, 2.75rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.05em;
   line-height: 1.08;
 }

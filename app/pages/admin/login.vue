@@ -198,7 +198,7 @@ onMounted(async () => {
 .admin-login h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2rem, 8vw, 3rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.055em;
 }
 

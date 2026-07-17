@@ -283,7 +283,7 @@ onMounted(loadHistory)
 .history-page__intro h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.5rem, 12vw, 5rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.065em;
   line-height: 0.95;
 }

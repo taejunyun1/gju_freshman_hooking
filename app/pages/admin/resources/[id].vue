@@ -626,7 +626,7 @@ onBeforeUnmount(() => {
 .resource-detail__back { min-height: var(--touch-target); display: inline-flex; width: fit-content; align-items: center; color: var(--color-resource); font-weight: 700; text-decoration: none; }
 .resource-detail__header { display: grid; gap: 1rem; border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent); padding-bottom: 1rem; }
 .resource-detail__header > div > p:first-child { margin: 0 0 0.5rem; color: var(--color-resource); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; }
-.resource-detail h1 { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 6vw, 3.25rem); letter-spacing: -0.05em; }
+.resource-detail h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); letter-spacing: -0.05em; }
 .resource-detail__header > div > p:last-child { max-width: 50rem; margin-bottom: 0; color: color-mix(in srgb, var(--color-ink) 68%, transparent); }
 .resource-detail__header dl { display: grid; gap: 0.45rem; margin: 0; border-left: 0.25rem solid var(--color-resource); background: var(--color-surface); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.6875rem; }
 .resource-detail__header dl div { display: grid; grid-template-columns: 4rem 1fr; gap: 0.5rem; }

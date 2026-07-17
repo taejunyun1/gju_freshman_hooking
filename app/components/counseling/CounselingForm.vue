@@ -231,7 +231,7 @@ const submit = async (): Promise<void> => {
 .counseling-form__heading h1 {
   margin: 0.45rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.85rem, 7vw, 2.75rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   letter-spacing: -0.05em;
   line-height: 1.12;
   word-break: keep-all;

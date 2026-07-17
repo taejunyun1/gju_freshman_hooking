@@ -285,7 +285,7 @@ onBeforeUnmount(dispose)
 .export-page__header h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.25rem, 6vw, 4.75rem);
+  font-size: clamp(1.75rem, 4vw, 2rem);
   font-weight: 850;
   letter-spacing: -0.065em;
   line-height: 0.94;
@@ -324,7 +324,7 @@ onBeforeUnmount(dispose)
 
 .export-sequence li:last-child { border-right: 0; }
 .export-sequence li[data-active="true"] { background: var(--color-sequence); color: var(--color-surface); }
-.export-sequence li[data-complete="true"] { color: #C9B7EC; }
+.export-sequence li[data-complete="true"] { color: var(--color-primary-soft); }
 
 .export-page__grid {
   display: grid;
@@ -445,7 +445,7 @@ onBeforeUnmount(dispose)
   padding: clamp(1rem, 3vw, 1.5rem);
 }
 
-.export-status__head p { color: #BCA7E4; }
+.export-status__head p { color: var(--color-primary-soft); }
 
 .export-status__head > span {
   border: 1px solid color-mix(in srgb, var(--color-surface) 26%, transparent);
@@ -456,7 +456,7 @@ onBeforeUnmount(dispose)
   letter-spacing: 0.1em;
 }
 
-.export-status__head > span[data-phase="completed"] { border-color: #8BC6BC; color: #A9DDD4; }
+.export-status__head > span[data-phase="completed"] { border-color: var(--color-primary); color: var(--color-primary-soft); }
 .export-status__head > span[data-phase="failed"] { border-color: #D77973; color: #FFD5D2; }
 
 .export-ledger { margin-top: 1.25rem; border-top: 1px solid color-mix(in srgb, var(--color-surface) 20%, transparent); }
@@ -469,7 +469,7 @@ onBeforeUnmount(dispose)
   border-bottom: 1px solid color-mix(in srgb, var(--color-surface) 20%, transparent);
 }
 
-.export-ledger article > span { color: #BCA7E4; font-family: var(--font-mono); font-size: 0.6875rem; }
+.export-ledger article > span { color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.6875rem; }
 .export-ledger h2 { margin: 0; font-family: var(--font-display); font-size: 1rem; }
 .export-ledger p { margin: 0.35rem 0 0; color: color-mix(in srgb, var(--color-surface) 62%, transparent); font-size: 0.75rem; line-height: 1.55; }
 
@@ -493,9 +493,9 @@ onBeforeUnmount(dispose)
   padding: 0.875rem 1rem;
 }
 
-.export-live span { color: #BCA7E4; font-family: var(--font-mono); font-size: 0.6875rem; }
+.export-live span { color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.6875rem; }
 .export-live p { margin: 0.35rem 0 0; line-height: 1.55; }
-.export-live strong { display: block; margin-top: 0.5rem; overflow-wrap: anywhere; color: #A9DDD4; font-family: var(--font-mono); font-size: 0.75rem; }
+.export-live strong { display: block; margin-top: 0.5rem; overflow-wrap: anywhere; color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.75rem; }
 .export-error { margin: 0.75rem 0 0; border: 1px solid #D77973; padding: 0.75rem; color: #FFD5D2; font-size: 0.8125rem; line-height: 1.55; }
 .export-status__privacy { margin: 1rem 0 0; color: color-mix(in srgb, var(--color-surface) 52%, transparent); font-size: 0.6875rem; line-height: 1.6; }
 

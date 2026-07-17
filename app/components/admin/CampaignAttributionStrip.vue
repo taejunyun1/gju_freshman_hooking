@@ -54,7 +54,7 @@ const frames = computed(() => [
 }
 
 .attribution-strip__index {
-  color: #CDBBEF;
+  color: var(--color-primary-soft);
   font-family: var(--font-mono);
   font-size: 0.625rem;
 }

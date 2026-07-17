@@ -538,7 +538,7 @@ onBeforeUnmount(() => {
 .campaigns-page__header > div { max-width: 54rem; }
 .campaigns-page__eyebrow,
 .campaigns-page__maker-intro > p { margin: 0 0 0.625rem; color: var(--color-sequence); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; }
-.campaigns-page h1 { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 6vw, 3.25rem); letter-spacing: -0.05em; }
+.campaigns-page h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); letter-spacing: -0.05em; }
 .campaigns-page__header p:last-child { margin: 0.75rem 0 0; color: color-mix(in srgb, var(--color-ink) 68%, transparent); }
 .campaigns-page :is(input, select, button) { min-height: var(--touch-target); border: 1px solid color-mix(in srgb, var(--color-ink) 30%, transparent); border-radius: 0; background: var(--color-surface); color: var(--color-ink); padding: 0.625rem; }
 .campaigns-page button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }

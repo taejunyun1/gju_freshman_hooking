@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
 .faculty-detail__back { min-height: var(--touch-target); display: inline-flex; width: fit-content; align-items: center; color: var(--color-sequence); font-weight: 700; text-decoration: none; }
 .faculty-detail__header { min-width: 0; display: grid; gap: 1rem; border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 20%, transparent); padding-bottom: 1rem; }
 .faculty-detail__header > div > p:first-child { margin: 0 0 0.5rem; color: var(--color-sequence); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; }
-.faculty-detail h1 { margin: 0; font-family: var(--font-display); font-size: clamp(2rem, 6vw, 3.25rem); letter-spacing: -0.05em; overflow-wrap: anywhere; }
+.faculty-detail h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); letter-spacing: -0.05em; overflow-wrap: anywhere; }
 .faculty-detail__header > div > p:last-child { max-width: 54rem; margin-bottom: 0; color: color-mix(in srgb, var(--color-ink) 70%, transparent); }
 .faculty-detail__header dl { min-width: 0; display: grid; gap: 0.45rem; margin: 0; border-left: 0.25rem solid var(--color-sequence); background: var(--color-surface); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.6875rem; }
 .faculty-detail__header dl div, .faculty-detail__conflict dl div { min-width: 0; display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 0.5rem; }
