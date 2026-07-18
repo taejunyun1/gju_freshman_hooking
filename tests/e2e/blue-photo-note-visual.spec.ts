@@ -82,44 +82,49 @@ for (const path of ['/', '/login', '/admin/login']) {
 test('a local assessment state and populated result expose the visual and accessibility cues', async ({ page }, testInfo) => {
   await page.setViewportSize(desktop)
   const phone = uniqueAssessmentPhone(testInfo)
-  const credentials = provisionLocalRosterStudent(phone)
-  await registerAndLoginStudent(page, phone, undefined, { phone, ...credentials })
+  const fixture = provisionLocalRosterStudent(phone)
+  try {
+    await registerAndLoginStudent(page, phone, undefined, { phone, password: fixture.password })
 
-  const firstChoice = page.getByRole('checkbox', { name: /제품·패션·광고 이미지 만들기/u })
-  await firstChoice.check()
-  const optionCard = firstChoice.locator('xpath=ancestor::label[contains(@class, "option-card")]')
-  await assertVisualContract(page)
-  await assertRadius(optionCard)
-  await assertKeyControl(page.getByTestId('assessment-next'))
-  await assertKeyboardFocusOutline(page)
-  await expect(optionCard).toContainText('선택됨')
-  await expect(optionCard).toHaveClass(/option-card--selected/u)
+    const firstChoice = page.getByRole('checkbox', { name: /제품·패션·광고 이미지 만들기/u })
+    await firstChoice.check()
+    const optionCard = firstChoice.locator('xpath=ancestor::label[contains(@class, "option-card")]')
+    await assertVisualContract(page)
+    await assertRadius(optionCard)
+    await assertKeyControl(page.getByTestId('assessment-next'))
+    await assertKeyboardFocusOutline(page)
+    await expect(optionCard).toContainText('선택됨')
+    await expect(optionCard).toHaveClass(/option-card--selected/u)
 
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  expect(await optionCard.evaluate(node => Number.parseFloat(getComputedStyle(node).transitionDuration))).toBeLessThanOrEqual(0.01)
-  expect(await optionCard.evaluate(node => getComputedStyle(node).scrollBehavior)).toBe('auto')
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    expect(await optionCard.evaluate(node => Number.parseFloat(getComputedStyle(node).transitionDuration))).toBeLessThanOrEqual(0.01)
+    expect(await optionCard.evaluate(node => getComputedStyle(node).scrollBehavior)).toBe('auto')
 
-  await selectCommercialPath(page)
-  const submitResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/assessment/submit')
-  await page.getByTestId('assessment-submit').click()
-  expect((await submitResponse).ok()).toBe(true)
-  await expect(page).toHaveURL(/\/result\/[0-9a-f-]{36}$/u)
-  await expect(page.getByRole('heading', { level: 1, name: '선택한 관심사는 4년 동안 이렇게 이어집니다' })).toBeVisible()
-  await assertVisualContract(page)
-  await assertRadius(page.locator('[data-result-section="summary"]'))
-  await assertKeyControl(page.getByRole('link', { name: '최근 편집본' }))
+    await selectCommercialPath(page)
+    const submitResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/assessment/submit')
+    await page.getByTestId('assessment-submit').click()
+    expect((await submitResponse).ok()).toBe(true)
+    await expect(page).toHaveURL(/\/result\/[0-9a-f-]{36}$/u)
+    await expect(page.getByRole('heading', { level: 1, name: '선택한 관심사는 4년 동안 이렇게 이어집니다' })).toBeVisible()
+    await assertVisualContract(page)
+    await assertRadius(page.locator('[data-result-section="summary"]'))
+    await assertKeyControl(page.getByRole('link', { name: '최근 편집본' }))
 
-  await page.setViewportSize(mobile)
-  await assertVisualContract(page)
+    await page.setViewportSize(mobile)
+    await assertVisualContract(page)
 
-  await page.route('**/api/assessment/options', route => route.fulfill({
-    status: 500,
-    contentType: 'application/json',
-    body: JSON.stringify({ error: { code: 'VISUAL_LOCAL_FAILURE' } }),
-  }))
-  await page.goto('/assessment')
-  await expect(page.getByText('LOAD / INTERRUPTED', { exact: true })).toBeVisible()
-  await expect(page.getByRole('alert')).toContainText('선택지를 불러오지 못했습니다')
+    await page.route('**/api/assessment/options', route => route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'VISUAL_LOCAL_FAILURE' } }),
+    }))
+    await page.goto('/assessment')
+    await expect(page.getByText('LOAD / INTERRUPTED', { exact: true })).toBeVisible()
+    await expect(page.getByRole('alert')).toContainText('선택지를 불러오지 못했습니다')
+  }
+  finally {
+    fixture.cleanup()
+  }
 })
 
 test('the route-intercepted administrator students surface keeps visual contracts without external data', async ({ page }) => {

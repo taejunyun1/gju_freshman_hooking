@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
 const config = readFileSync('supabase/config.toml', 'utf8')
@@ -8,7 +8,15 @@ const projectId = config.match(/^project_id = "([a-z0-9-]+)"$/mu)?.[1]
 if (!projectId) throw new Error('로컬 Supabase project_id를 확인할 수 없습니다.')
 
 const databaseContainer = `supabase_db_${projectId}`
-const currentCycleId = '00000000-0000-4000-8000-000000000002'
+
+export type LocalRosterStudentFixture = {
+  cleanup: () => void
+  password: string
+}
+
+type LocalRosterStudentFixtureHooks = {
+  beforeVerification?: () => void
+}
 
 const passwordVersion = (): number => {
   const value = process.env.NUXT_PASSWORD_PEPPER_VERSION
@@ -54,7 +62,17 @@ const digest = (domain: string, value: string, key: Buffer): string => createHma
 
 const passwordForPhone = (phone: string): string => `${phone.slice(-4)}AA`
 
-export const provisionLocalRosterStudent = (phone: string): { password: string } => {
+const runDatabaseSql = (input: string, tuplesOnly = false): string => (
+  execFileSync('docker', [
+    'exec', '-i', databaseContainer, 'psql', '-X', ...(tuplesOnly ? ['-Atq'] : []),
+    '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres',
+  ], { encoding: 'utf8', input, stdio: ['pipe', tuplesOnly ? 'pipe' : 'ignore', 'pipe'] }) ?? ''
+).trim()
+
+export const provisionLocalRosterStudent = (
+  phone: string,
+  hooks: LocalRosterStudentFixtureHooks = {},
+): LocalRosterStudentFixture => {
   if (!/^010\d{8}$/u.test(phone)) throw new Error('E2E fixture 전화번호 형식이 올바르지 않습니다.')
   requireLocalRuntime()
 
@@ -63,20 +81,50 @@ export const provisionLocalRosterStudent = (phone: string): { password: string }
   const phoneHmac = digest('phone-lookup-v1', phone, secret('NUXT_PHONE_HMAC_KEY'))
   const passwordDigest = digest('password-verify-v1', password, secret('NUXT_PASSWORD_PEPPER'))
   const nickname = `visual-e2e-${phoneHmac.slice(0, 20)}`
+  const currentCycle = runDatabaseSql(String.raw`
+select id::text || '|' || password_key_version::text
+from public.admission_cycles
+where status = 'current'
+limit 1;
+`, true)
+  const [existingCycleId, existingPasswordVersion] = currentCycle === '' ? [] : currentCycle.split('|')
+  if (existingCycleId && Number(existingPasswordVersion) !== version) {
+    throw new Error('현재 입학전형 주기의 비밀번호 키 버전이 E2E 실행 환경과 다릅니다.')
+  }
+
+  const cycleId = existingCycleId ?? randomUUID()
+  const createdCycle = existingCycleId === undefined
+  if (createdCycle) {
+    runDatabaseSql(String.raw`
+insert into public.admission_cycles(id, year, status, roster_version, password_key_version, archived_at)
+select '${cycleId}'::uuid, candidate_year, 'current', 0, ${version}, null
+from pg_catalog.generate_series(2200, 2020, -1) candidate_year
+where not exists (
+  select 1 from public.admission_cycles existing where existing.year = candidate_year
+)
+order by candidate_year desc
+limit 1;
+`)
+  }
+
+  let fixtureInserted = false
+  const cleanup = (): void => {
+    requireLocalRuntime()
+    runDatabaseSql(String.raw`
+begin;
+${fixtureInserted ? `delete from public.prospects
+where nickname = '${nickname}'
+  and phone_hmac = pg_catalog.decode('${phoneHmac}', 'hex')
+  and is_test = true;` : ''}
+${createdCycle ? `delete from public.admission_cycles
+where id = '${cycleId}'::uuid
+  and not exists (select 1 from public.prospects where admission_cycle_id = '${cycleId}'::uuid);` : ''}
+commit;
+`)
+  }
+
   const fixtureSql = String.raw`
 begin;
-update public.admission_cycles
-set status = 'archived', archived_at = pg_catalog.clock_timestamp()
-where status = 'current' and id <> '${currentCycleId}'::uuid;
-
-insert into public.admission_cycles(id, year, status, roster_version, password_key_version, archived_at)
-values ('${currentCycleId}', 2030, 'current', 0, ${version}, null)
-on conflict (id) do update set
-  status = 'current',
-  roster_version = 0,
-  password_key_version = ${version},
-  archived_at = null;
-
 with inserted_prospect as (
   insert into public.prospects(
     nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage, region, admission_cycle_id, is_test
@@ -85,17 +133,8 @@ with inserted_prospect as (
     pg_catalog.decode('${phoneHmac}', 'hex'),
     pg_catalog.decode(repeat('00', 16), 'hex'),
     pg_catalog.decode(repeat('00', 12), 'hex'),
-    '로컬 시각 QA 고교', 'high3', 'other', '${currentCycleId}'::uuid, true
+    '로컬 시각 QA 고교', 'high3', 'other', '${cycleId}'::uuid, true
   )
-  on conflict (phone_hmac) do update set
-    nickname = excluded.nickname,
-    school_name = excluded.school_name,
-    applicant_stage = excluded.applicant_stage,
-    region = excluded.region,
-    admission_cycle_id = excluded.admission_cycle_id,
-    status = 'active',
-    is_test = true,
-    updated_at = pg_catalog.clock_timestamp()
   returning id
 )
 insert into public.student_credentials(
@@ -118,16 +157,12 @@ on conflict (prospect_id) do update set
 commit;
 `
 
-  execFileSync('docker', [
-    'exec', '-i', databaseContainer, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres',
-  ], { encoding: 'utf8', input: fixtureSql, stdio: ['pipe', 'ignore', 'pipe'] })
+  try {
+    runDatabaseSql(fixtureSql)
+    fixtureInserted = true
+    hooks.beforeVerification?.()
 
-  const verification = execFileSync('docker', [
-    'exec', '-i', databaseContainer, 'psql', '-X', '-Atq', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres',
-  ], {
-    encoding: 'utf8',
-    input: String.raw`select exists (
-      select 1
+    const verification = runDatabaseSql(String.raw`select prospect.id
       from public.prospects prospect
       join public.student_credentials credential on credential.prospect_id = prospect.id
       join public.admission_cycles cycle on cycle.id = prospect.admission_cycle_id
@@ -136,9 +171,15 @@ commit;
         and cycle.status = 'current'
         and credential.password_generation = 1
         and extensions.crypt(pg_catalog.encode(pg_catalog.decode('${passwordDigest}', 'hex'), 'hex'), credential.password_bcrypt) = credential.password_bcrypt
-    );`,
-  }).trim()
-  if (verification !== 't') throw new Error('로컬 시각 QA 학생 fixture 검증에 실패했습니다.')
+      limit 1;`, true)
+    if (!/^[1-9][0-9]*$/u.test(verification)) {
+      throw new Error('로컬 시각 QA 학생 fixture 검증에 실패했습니다.')
+    }
+  }
+  catch (error) {
+    cleanup()
+    throw error
+  }
 
-  return { password }
+  return { cleanup, password }
 }
