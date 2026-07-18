@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { z } from 'zod'
+import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
 import {
   studentCounselingStatusSchema,
   type StudentCounselingStatus,
@@ -115,7 +116,7 @@ const submit = async (): Promise<void> => {
     <header class="counseling-form__heading">
       <p>REQUEST CARD / 01</p>
       <h1>상담을 신청합니다</h1>
-      <span>연락받기 편한 방법과 시간을 알려주세요. 신청 후 관리자가 담당 교수를 확정합니다.</span>
+      <span>{{ DEPARTMENT_NAME }} 상담으로 관심 경로를 이어갑니다. 연락받기 편한 방법과 시간을 알려주세요. 신청 후 관리자가 담당 교수를 확정합니다.</span>
     </header>
 
     <fieldset>

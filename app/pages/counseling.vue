@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { z } from 'zod'
+import { HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import {
   studentCounselingStatusSchema,
   type StudentCounselingStatus,
@@ -91,7 +92,7 @@ watch(queryAssessmentPublicId, () => {
         <NuxtLink
           class="counseling-page__brand"
           to="/"
-          aria-label="PHOTO:NEXT 홈"
+          :aria-label="HOME_ARIA_LABEL"
         >PHOTO:<span>NEXT</span></NuxtLink>
         <NuxtLink class="counseling-page__history" to="/history">최근 편집본</NuxtLink>
       </div>

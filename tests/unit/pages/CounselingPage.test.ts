@@ -125,6 +125,16 @@ describe('student counseling page', () => {
     expect(wrapper.find('[data-testid="counseling-status"]').exists()).toBe(false)
   })
 
+  it('uses the shared full-name home label in the masthead', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue(envelope(null)))
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    expect(wrapper.get('.counseling-page__brand').attributes('aria-label')).toBe(
+      '광주대학교 사진영상미디어학과 PHOTO:NEXT 홈',
+    )
+  })
+
   it('handles null, authentication, generic error, and a successful retry with accurate copy', async () => {
     routeQuery.value = { assessmentPublicId }
     const fetch = vi.fn()

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
 import { trackLabels } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CounselingCTA from '../counseling/CounselingCTA.vue'
@@ -35,6 +36,8 @@ const hasOutcomes = computed(() => (
       <p class="result-timeline__eyebrow">MASTER SEQUENCE / 04Y</p>
       <h1 id="result-title">선택한 관심사는 4년 동안 이렇게 이어집니다</h1>
       <p class="result-timeline__lead">
+        선택한 관심사가 {{ DEPARTMENT_NAME }}의 교과와 프로젝트를 거쳐 어떤 작업과 진로로 이어지는지 확인해 보세요.
+        <br>
         선택한 관심사는 <strong>{{ primaryConnection }}</strong> 경로와 가장 높은 연결을 보입니다.
         점수보다 실제 교과와 프로젝트, 결과물의 순서부터 확인해 보세요.
       </p>

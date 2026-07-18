@@ -63,6 +63,16 @@ describe('CounselingForm', () => {
     expect(submit.attributes('disabled')).toBeUndefined()
   })
 
+  it('introduces counseling with the official department name before contact instructions', async () => {
+    const { default: CounselingForm } = await import(
+      '../../../app/components/counseling/CounselingForm.vue'
+    )
+    const wrapper = mount(CounselingForm, { props: { assessmentPublicId } })
+
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과 상담으로 관심 경로를 이어갑니다.')
+    expect(wrapper.get('.counseling-form__heading').text()).toContain('연락받기 편한 방법과 시간을 알려주세요.')
+  })
+
   it('shows the 200-character limit and live counter', async () => {
     const { default: CounselingForm } = await import(
       '../../../app/components/counseling/CounselingForm.vue'

@@ -59,6 +59,10 @@ describe('assessment history page', () => {
       expect(card.text()).toContain('관심 요약')
     }
     expect(wrapper.text()).toContain('최근 편집본')
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과와 연결해 본 관심사를 다시 열어보세요.')
+    expect(wrapper.get('.history-page__brand').attributes('aria-label')).toBe(
+      '광주대학교 사진영상미디어학과 PHOTO:NEXT 홈',
+    )
     expect(wrapper.text()).not.toMatch(/private-062-000-0000|rawWeights|commercial.*3/u)
   })
 

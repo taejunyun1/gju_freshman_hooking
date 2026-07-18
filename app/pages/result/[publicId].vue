@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteUpdate } from 'vue-router'
+import { HOME_ARIA_LABEL } from '../../../shared/constants/department-brand'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CapabilityEvidence from '../../components/result/CapabilityEvidence.vue'
@@ -109,7 +110,7 @@ onBeforeRouteUpdate((to) => {
         <NuxtLink
           class="result-page__brand"
           to="/"
-          aria-label="PHOTO:NEXT 홈"
+          :aria-label="HOME_ARIA_LABEL"
         >
           PHOTO:<span>NEXT</span>
         </NuxtLink>

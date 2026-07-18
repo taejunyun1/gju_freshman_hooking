@@ -58,6 +58,15 @@ describe('result master sequence', () => {
     expect(wrapper.get('h1').text()).toBe('선택한 관심사는 4년 동안 이렇게 이어집니다')
   })
 
+  it('introduces the result with the official department name before the track summary', async () => {
+    const wrapper = await mountTimeline()
+
+    expect(wrapper.text()).toContain(
+      '선택한 관심사가 광주대학교 사진영상미디어학과의 교과와 프로젝트를 거쳐 어떤 작업과 진로로 이어지는지 확인해 보세요.',
+    )
+    expect(wrapper.get('[data-result-section="summary"]').text()).toContain('광고사진 경로와 가장 높은 연결을 보입니다.')
+  })
+
   it('renders selected interests as read-only clips labelled by group', async () => {
     const wrapper = await mountTimeline()
     const clips = wrapper.findAll('[data-interest-clip]')

@@ -68,6 +68,13 @@ describe('owned result page', () => {
     expect(source.indexOf('<CareerNarrative')).toBeLessThan(source.indexOf('<CapabilityEvidence'))
   })
 
+  it('uses the shared full-name home label in the masthead', () => {
+    const source = readFileSync('app/pages/result/[publicId].vue', 'utf8')
+
+    expect(source).toContain("import { HOME_ARIA_LABEL } from '../../../shared/constants/department-brand'")
+    expect(source).toContain(':aria-label="HOME_ARIA_LABEL"')
+  })
+
   it('loads the owned result by route ID and keeps a layout-stable skeleton while pending', async () => {
     const pending = deferred<unknown>()
     const fetch = vi.fn().mockReturnValue(pending.promise)

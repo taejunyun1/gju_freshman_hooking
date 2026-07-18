@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { z } from 'zod'
+import { DEPARTMENT_NAME, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import { selectedInterestSchema } from '../../shared/schemas/result'
 import { trackKeys, trackLabels, type TrackKey } from '../../shared/types/domain'
 import type { SelectedInterest } from '../../shared/types/result'
@@ -146,7 +147,7 @@ onMounted(loadHistory)
       <NuxtLink
         class="history-page__brand"
         to="/"
-        aria-label="PHOTO:NEXT 홈"
+        :aria-label="HOME_ARIA_LABEL"
       >
         PHOTO:<span>NEXT</span>
       </NuxtLink>
@@ -156,7 +157,7 @@ onMounted(loadHistory)
     <section class="history-page__intro">
       <p>MASTER SEQUENCE / HISTORY</p>
       <h1>최근 편집본</h1>
-      <p>관심사와 학과의 연결을 다시 열어보세요. 최근 결과는 세 개까지 보관됩니다.</p>
+      <p>{{ DEPARTMENT_NAME }}와 연결해 본 관심사를 다시 열어보세요. 최근 결과는 세 개까지 보관됩니다.</p>
     </section>
 
     <section
