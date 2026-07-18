@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 select isnt(
   pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'),
@@ -58,6 +58,13 @@ select is(
 select ok(
   coalesce(position('touch_student_session' in pg_get_functiondef(pg_catalog.to_regprocedure('public.read_roster_student_session_v1(bytea)'))), 0) = 0,
   'roster session read does not call the legacy touch function'
+);
+
+select ok(
+  position('nameCiphertext' in pg_get_functiondef(pg_catalog.to_regprocedure('public.read_roster_student_session_v1(bytea)'))) > 0
+  and position('nameIv' in pg_get_functiondef(pg_catalog.to_regprocedure('public.read_roster_student_session_v1(bytea)'))) > 0
+  and position('nickname' in lower(pg_get_functiondef(pg_catalog.to_regprocedure('public.read_roster_student_session_v1(bytea)')))) = 0,
+  'roster session read returns only encrypted applicant-name fields'
 );
 
 select ok(
@@ -269,6 +276,11 @@ select ok(
 select ok(
   position('for update of c' in lower(pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)')))) > 0,
   'roster login contains the exact FOR UPDATE OF c credential-lock contract'
+);
+select ok(
+  (public.read_roster_student_session_v1(decode(repeat('da', 32), 'hex')) ?& array['nameCiphertext', 'nameIv'])
+  and not (public.read_roster_student_session_v1(decode(repeat('da', 32), 'hex')) ? 'nickname'),
+  'an active roster session exposes encrypted name fields without the placeholder nickname'
 );
 
 select * from finish();
