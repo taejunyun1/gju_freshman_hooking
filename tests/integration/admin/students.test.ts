@@ -501,6 +501,8 @@ describe('administrator student phone reveal', () => {
 })
 
 describe('administrator student store DTO', () => {
+  const rosterPlaceholder = `roster:11111111-1111-4111-8111-111111111111:${'ab'.repeat(32)}`
+
   const rawRow = (overrides: Record<string, unknown> = {}) => ({
     id: 42,
     nickname: '선명한프레임42',
@@ -530,9 +532,36 @@ describe('administrator student store DTO', () => {
       rawRow({ phone_iv: '\\x01' }),
       rawRow({ id: 0 }),
       rawRow({ nickname: 'bad\u0000nickname' }),
+      rawRow({ nickname: ` ${rosterPlaceholder}` }),
+      rawRow({ nickname: 'x'.repeat(129) }),
       rawRow({ last_active_at: 'not-a-date' }),
     ]) {
       expect(() => decodeAdminStudentRow(malformed)).toThrow('ADMIN_STUDENT_STORE_INVALID')
     }
+  })
+
+  it('accepts the longest roster placeholder but exposes the decrypted applicant name', async () => {
+    expect(rosterPlaceholder).toHaveLength(108)
+    const student = decodeAdminStudentRow(rawRow({
+      nickname: rosterPlaceholder,
+      admission_cycle_id: '11111111-1111-4111-8111-111111111111',
+      is_test: false,
+      name_ciphertext: `\\x${'03'.repeat(16)}`,
+      name_iv: `\\x${'04'.repeat(12)}`,
+    }))
+    const decryptName = vi.fn(async () => '윤 태준')
+    const service = createAdminStudentsService(dependencies({
+      decryptName,
+      listStudents: vi.fn(async () => [student]),
+    }))
+
+    const result = await service.list({ limit: 20 })
+
+    expect(result.items).toEqual([expect.objectContaining({ nickname: '윤 태준' })])
+    expect(JSON.stringify(result)).not.toContain(rosterPlaceholder)
+    expect(decryptName).toHaveBeenCalledWith({
+      ciphertext: student.nameCiphertext,
+      iv: student.nameIv,
+    })
   })
 })

@@ -148,7 +148,7 @@ export const parseAdminStudentId = (input: string | undefined): number => {
 
 const rawStudentRowSchema = z.object({
   id: safeIdSchema,
-  nickname: storedText(100),
+  nickname: storedText(128),
   admission_cycle_id: z.string().uuid().optional(),
   is_test: z.boolean().optional(),
   name_ciphertext: z.string().min(1).max(260).optional(),
@@ -165,7 +165,7 @@ const rawStudentRowSchema = z.object({
 
 const storedStudentSchema = z.object({
   studentId: safeIdSchema,
-  nickname: storedText(100),
+  nickname: storedText(128),
   cycleId: z.string().uuid().optional(),
   isTest: z.boolean().optional(),
   nameCiphertext: z.instanceof(Uint8Array).refine(value => value.byteLength >= 16 && value.byteLength <= 128).optional(),
