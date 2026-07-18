@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { equipmentCategories } from '../types/result'
 
 export const adminResourceTypes = [
   'course',
@@ -135,7 +136,7 @@ export const facilityAdminResourceMetadataSchema = z.object({
 
 const equipmentMetadataWriteShape = {
   seedKey: cleanText(1, 300).optional(),
-  category: cleanText(1, 100).optional(),
+  category: z.enum(equipmentCategories).optional(),
   locationKey: z.enum(['department_equipment_room', 'fantasy_lab']).optional(),
   locationLabel: cleanText(1, 120).optional(),
   accessMode: z.enum(['reservation', 'inquiry']).optional(),

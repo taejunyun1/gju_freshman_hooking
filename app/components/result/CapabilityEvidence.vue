@@ -136,6 +136,13 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
       >
         확인된 학과 데이터를 준비 중입니다
       </p>
+      <p
+        v-else-if="facilities.length === 0"
+        class="capability__empty capability__empty--facility"
+        data-facility-empty
+      >
+        확인된 시설 정보는 준비 중이며, 기자재 근거만 먼저 보여드립니다.
+      </p>
     </div>
 
     <button
@@ -279,6 +286,13 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
   padding: 1rem;
   border-radius: var(--radius-card);
   line-height: 1.55;
+}
+
+.capability__empty--facility {
+  grid-column: 1 / -1;
+  border-left: 0.15rem solid color-mix(in srgb, var(--color-resource) 32%, transparent);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.75rem;
 }
 
 .capability__more {

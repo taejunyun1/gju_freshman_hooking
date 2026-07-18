@@ -22,6 +22,14 @@ export interface CourseDisplayMetadata {
 
 export const equipmentCategories = ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const
 export type EquipmentCategory = typeof equipmentCategories[number]
+export const equipmentCategoryLabels: Readonly<Record<EquipmentCategory, string>> = Object.freeze({
+  body: '카메라 바디',
+  lens: '렌즈',
+  lighting: '조명',
+  audio: '오디오',
+  drone: '드론',
+  other: '기타',
+})
 
 interface EquipmentDisplayMetadataBase {
   readonly locationLabel: string

@@ -10,6 +10,7 @@ import {
 import { getAdminResourcePublishIssues } from '../../../shared/schemas/admin-resource-publish-validator'
 import {
   equipmentCategories,
+  equipmentCategoryLabels,
   type EquipmentCategory,
   type EquipmentResultResource,
   type FacilityResultResource,
@@ -79,6 +80,13 @@ const timestampShadows = reactive({
   consentAt: { local: '', original: null as string | null },
   lastVerifiedAt: { local: '', original: null as string | null },
 })
+const equipmentCategory = computed({
+  get: () => equipmentCategories.find(category => category === editable.metadata.category) ?? '',
+  set: (category: string) => {
+    if (category === '') delete editable.metadata.category
+    else editable.metadata.category = category
+  },
+})
 const cloneMetadata = (value: object): Record<string, unknown> => (
   JSON.parse(JSON.stringify(value)) as Record<string, unknown>
 )
@@ -120,7 +128,8 @@ const metadataForWrite = (): Record<string, unknown> => {
     metadata.consent_at = timestampForWrite(metadata.consent_at, timestampShadows.consentAt)
   }
   if (props.resource.type === 'facility') {
-    metadata.last_verified_at = timestampForWrite(metadata.last_verified_at, timestampShadows.lastVerifiedAt)
+    const timestampKey = 'last_verified_at' in metadata ? 'last_verified_at' : 'lastVerifiedAt'
+    metadata[timestampKey] = timestampForWrite(metadata[timestampKey], timestampShadows.lastVerifiedAt)
     if (Array.isArray(metadata.activities)) {
       metadata.activities = metadata.activities.map(activity => String(activity))
     }
@@ -200,14 +209,14 @@ const cloneResource = (resource: AdminResource) => {
     timestampShadows.consentAt.local = ''
   }
   if (resource.type === 'facility') {
-    const original = typeof resource.metadata.last_verified_at === 'string'
-      ? resource.metadata.last_verified_at
-      : typeof resource.metadata.lastVerifiedAt === 'string'
-        ? resource.metadata.lastVerifiedAt
-        : null
+    const usesSnakeTimestamp = 'last_verified_at' in resource.metadata
+    const original = usesSnakeTimestamp
+      ? typeof resource.metadata.last_verified_at === 'string' ? resource.metadata.last_verified_at : null
+      : typeof resource.metadata.lastVerifiedAt === 'string' ? resource.metadata.lastVerifiedAt : null
     timestampShadows.lastVerifiedAt.original = original
     timestampShadows.lastVerifiedAt.local = toLocalDateTime(original)
-    editable.metadata.last_verified_at = timestampShadows.lastVerifiedAt.local
+    editable.metadata[usesSnakeTimestamp ? 'last_verified_at' : 'lastVerifiedAt']
+      = timestampShadows.lastVerifiedAt.local
   } else {
     timestampShadows.lastVerifiedAt.original = null
     timestampShadows.lastVerifiedAt.local = ''
@@ -271,6 +280,14 @@ const facilityActivities = computed(() => (
     ? editable.metadata.activities.map(activity => String(activity))
     : []
 ))
+const facilityOperationNote = computed(() => {
+  const value = editable.metadata.operation_note ?? editable.metadata.operationNote
+  return typeof value === 'string' ? value : ''
+})
+const facilityLastVerifiedAt = computed(() => {
+  const value = editable.metadata.last_verified_at ?? editable.metadata.lastVerifiedAt
+  return typeof value === 'string' ? value : ''
+})
 
 const localIssues = computed(() => {
   const resource = writePayload()
@@ -335,7 +352,7 @@ const previewResource = computed<ResultResource>(() => {
       type: 'facility',
       displayMetadata: {
         locationLabel: String(editable.metadata.location_label || '학과 시설'),
-        operationNote: String(editable.metadata.operation_note || '운영 정보를 확인해 주세요.'),
+        operationNote: facilityOperationNote.value || '운영 정보를 확인해 주세요.',
       },
     }
   }
@@ -374,6 +391,16 @@ const addTag = () => {
 
 const setMetadataText = (key: string, event: Event) => {
   editable.metadata[key] = (event.target as HTMLInputElement | HTMLTextAreaElement).value
+}
+
+const setFacilityOperationNote = (event: Event) => {
+  const key = 'operation_note' in editable.metadata ? 'operation_note' : 'operationNote'
+  setMetadataText(key, event)
+}
+
+const setFacilityLastVerifiedAt = (event: Event) => {
+  const key = 'last_verified_at' in editable.metadata ? 'last_verified_at' : 'lastVerifiedAt'
+  setMetadataText(key, event)
 }
 
 const removeTag = (index: number) => {
@@ -532,7 +559,12 @@ const onImageChange = (event: Event) => {
           <fieldset v-else-if="resource.type === 'equipment'" class="resource-editor__type-fields">
             <legend>기자재 이용 정보</legend>
             <p class="resource-editor__derived">확인 수량 {{ verifiedInventoryQuantity }}대 · 검증 완료 재고 원본에서 계산되며 여기서 수정하지 않습니다.</p>
-            <label>분류 <input v-model="editable.metadata.category" name="category" maxlength="100"></label>
+            <label>분류
+              <select v-model="equipmentCategory" name="category">
+                <option value="">미분류 (레거시)</option>
+                <option v-for="category in equipmentCategories" :key="category" :value="category">{{ equipmentCategoryLabels[category] }}</option>
+              </select>
+            </label>
             <label>위치
               <select v-model="editable.metadata.locationKey" name="locationKey">
                 <option value="department_equipment_room">기자재실</option>
@@ -554,8 +586,8 @@ const onImageChange = (event: Event) => {
           <fieldset v-else-if="resource.type === 'facility'" class="resource-editor__type-fields">
             <legend>시설 운영 정보</legend>
             <label>위치 <input v-model="editable.metadata.location_label" name="location_label" maxlength="120"></label>
-            <label class="resource-editor__wide">운영·예약 안내 <textarea :value="String(editable.metadata.operation_note ?? '')" name="operation_note" maxlength="1000" @input="setMetadataText('operation_note', $event)" /></label>
-            <label>마지막 검증 <input v-model="editable.metadata.last_verified_at" name="last_verified_at" type="datetime-local"></label>
+            <label class="resource-editor__wide">운영·예약 안내 <textarea :value="facilityOperationNote" name="operation_note" maxlength="1000" @input="setFacilityOperationNote" /></label>
+            <label>마지막 검증 <input :value="facilityLastVerifiedAt" name="last_verified_at" type="datetime-local" @input="setFacilityLastVerifiedAt"></label>
             <div class="resource-editor__activities resource-editor__wide">
               <span>가능한 활동</span>
               <ul>

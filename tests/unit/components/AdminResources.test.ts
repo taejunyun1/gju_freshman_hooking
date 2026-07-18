@@ -578,6 +578,55 @@ describe('administrator resource editor', () => {
     expect(payload.resource.metadata).not.toHaveProperty('confirmedQuantity')
   })
 
+  it('offers only canonical labeled equipment categories in the editor', () => {
+    const wrapper = mount(ResourceEditor, {
+      props: { resource: equipmentResource, inventory: [] },
+      global: { stubs: { CapabilityEvidence: true } },
+    })
+
+    const category = wrapper.get('select[name="category"]')
+    expect(category.findAll('option').map(option => ({
+      label: option.text(),
+      value: option.attributes('value'),
+    }))).toEqual([
+      { value: '', label: '미분류 (레거시)' },
+      { value: 'body', label: '카메라 바디' },
+      { value: 'lens', label: '렌즈' },
+      { value: 'lighting', label: '조명' },
+      { value: 'audio', label: '오디오' },
+      { value: 'drone', label: '드론' },
+      { value: 'other', label: '기타' },
+    ])
+    expect(wrapper.find('input[name="category"]').exists()).toBe(false)
+  })
+
+  it('reads camel-only migrated facility operation and verification metadata in form and preview', () => {
+    const camelFacility = {
+      ...facility,
+      metadata: {
+        location_label: '호심관 2층',
+        activities: ['촬영'],
+        operationNote: '예약 뒤 관리자 확인을 받고 이용합니다.',
+        lastVerifiedAt: '2026-07-14T02:03:04.567+09:00',
+      },
+    } as AdminResource
+    const wrapper = mount(ResourceEditor, {
+      props: { resource: camelFacility, inventory: [] },
+      global: { stubs: { ResourceCard: ResourceCardStub } },
+    })
+
+    expect(wrapper.get('textarea[name="operation_note"]').element).toHaveProperty(
+      'value',
+      '예약 뒤 관리자 확인을 받고 이용합니다.',
+    )
+    expect(wrapper.get('input[name="last_verified_at"]').element).toHaveProperty(
+      'value',
+      toLocalDateTimeValue('2026-07-14T02:03:04.567+09:00'),
+    )
+    expect(wrapper.get('[data-capability-evidence]').text())
+      .toContain('예약 뒤 관리자 확인을 받고 이용합니다.')
+  })
+
   it('renders an anchored three-column editor structure and image constraints before upload', () => {
     const wrapper = mount(ResourceEditor, {
       props: { resource: course, inventory: [] },

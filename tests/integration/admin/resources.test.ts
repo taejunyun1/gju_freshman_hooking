@@ -23,6 +23,7 @@ import {
 } from '../../../server/modules/admin/resources'
 import { AppError } from '../../../server/utils/app-error'
 import { RequestBodyLimitError } from '../../../server/utils/bounded-request-body'
+import { equipmentCategories } from '../../../shared/types/result'
 
 vi.hoisted(() => {
   Object.assign(globalThis, { defineEventHandler: (handler: unknown) => handler })
@@ -377,6 +378,24 @@ describe('administrator resource writes', () => {
         metadata: { ...equipmentWrite().metadata, [quantityKey]: 999 },
       })).toThrowError(new AppError('RESOURCE_INVALID'))
     }
+  })
+
+  it('accepts only the six canonical equipment categories at the admin write boundary', () => {
+    for (const category of equipmentCategories) {
+      expect(parseAdminResourceWrite({
+        ...equipmentWrite(),
+        metadata: { ...equipmentWrite().metadata, category },
+      }).metadata).toMatchObject({ category })
+    }
+    const { category: _category, ...legacyMetadata } = equipmentWrite().metadata
+    expect(parseAdminResourceWrite({
+      ...equipmentWrite(),
+      metadata: legacyMetadata,
+    }).metadata).not.toHaveProperty('category')
+    expect(() => parseAdminResourceWrite({
+      ...equipmentWrite(),
+      metadata: { ...equipmentWrite().metadata, category: 'Body' },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
   })
 
   it('strictly round-trips bounded archive evidence and accepts HTTPS sources only', () => {
