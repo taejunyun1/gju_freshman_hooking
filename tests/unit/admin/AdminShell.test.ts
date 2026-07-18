@@ -84,6 +84,13 @@ describe('administrator shell', () => {
     expect(wrapper.find('img').exists()).toBe(false)
   })
 
+  it('identifies the department as the administrator login operator', async () => {
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과 운영')
+  })
+
   it('verifies the password token with the server and stores only the capped access session', async () => {
     vi.stubGlobal('useRoute', () => ({ query: { redirect: '/admin/counseling' } }))
     adminAuthMocks.signInAdminWithPassword.mockResolvedValueOnce({
@@ -153,6 +160,13 @@ describe('administrator shell', () => {
     expect(wrapper.text()).not.toMatch(/전환율|신청자 수|성공률/u)
   })
 
+  it('identifies the department as the administrator dashboard operator', async () => {
+    const { default: AdminDashboard } = await import('../../../app/pages/admin/index.vue')
+    const wrapper = mount(AdminDashboard)
+
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과의 운영 작업')
+  })
+
   it('shows administrator navigation and the verified session expiry', async () => {
     useAdminSessionStore().setVerifiedSession({
       accessToken: 'short-lived-token',
@@ -172,5 +186,7 @@ describe('administrator shell', () => {
     expect(wrapper.get('nav').text()).toContain('데이터 내보내기')
     expect(wrapper.text()).toContain('세션 만료')
     expect(wrapper.text()).toContain('operator content')
+    expect(wrapper.get('a[href="/admin"]').attributes('aria-label'))
+      .toBe('광주대학교 사진영상미디어학과 PHOTO:NEXT 관리자 홈')
   })
 })

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppState from '../../components/common/AppState.vue'
+import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 </script>
@@ -8,7 +9,7 @@ definePageMeta({ layout: 'admin', middleware: 'admin' })
   <section class="admin-dashboard" aria-labelledby="admin-dashboard-title">
     <p class="admin-dashboard__eyebrow">OPERATIONS / HOME</p>
     <h1 id="admin-dashboard-title">운영 홈</h1>
-    <p class="admin-dashboard__intro">확인할 운영 작업을 선택하세요.</p>
+    <p class="admin-dashboard__intro">{{ DEPARTMENT_NAME }}의 운영 작업을 선택하세요.</p>
     <AppState
       variant="empty"
       message="운영 항목이 아직 없습니다. 복구 요청은 복구 대기열에서 확인하세요."

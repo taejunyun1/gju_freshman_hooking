@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ADMIN_HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import { getAdminSupabaseClient } from '../utils/admin-supabase'
 import { useAdminSessionStore } from '../stores/admin-session'
 
@@ -30,10 +31,10 @@ const logout = async (): Promise<void> => {
       <NuxtLink
         class="admin-shell__brand"
         to="/admin"
-        aria-label="PHOTO:NEXT 관리자 홈"
+        :aria-label="ADMIN_HOME_ARIA_LABEL"
       >
         PHOTO:<span>NEXT</span>
-        <small>OPERATIONS</small>
+        <small>사진영상미디어학과 운영</small>
       </NuxtLink>
 
       <nav aria-label="관리자 메뉴">

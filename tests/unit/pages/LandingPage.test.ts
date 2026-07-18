@@ -54,6 +54,12 @@ describe('landing page', () => {
     expect(source).toContain('min-block-size: var(--touch-target)')
   })
 
+  it('does not reintroduce the retired department name in the current landing entry', () => {
+    const source = readFileSync('app/pages/index.vue', 'utf8')
+
+    expect(source).not.toContain('광주대학교 사진영상학과')
+  })
+
   it('sends one non-blocking landing event with no client-derived metadata', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('$fetch', send)

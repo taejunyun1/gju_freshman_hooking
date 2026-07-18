@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess } from '../../../shared/types/api'
 import AppButton from '../../components/common/AppButton.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
+import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
 import {
   getAdminSupabaseClient,
   signInAdminWithPassword,
@@ -87,12 +88,13 @@ onMounted(async () => {
       </header>
 
       <div class="admin-login__body">
-        <p class="admin-login__eyebrow">ADMIN / PASSWORD ACCESS</p>
+        <p class="admin-login__eyebrow">{{ DEPARTMENT_NAME }} 운영</p>
         <h1 id="admin-login-title">관리자 접근</h1>
         <p class="admin-login__intro">승인된 관리자 이메일과 비밀번호로 운영 화면에 로그인하세요.</p>
 
         <form
           class="admin-login__form"
+          data-auth-mode="ADMIN / PASSWORD ACCESS"
           @submit.prevent="submitLogin"
         >
           <label for="admin-email">
