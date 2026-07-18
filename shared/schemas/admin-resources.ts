@@ -134,9 +134,8 @@ export const facilityAdminResourceMetadataSchema = z.object({
   archive: archiveSourceMetadataSchema.optional(),
 }).strict()
 
-const equipmentMetadataWriteShape = {
+const equipmentMetadataCommonShape = {
   seedKey: cleanText(1, 300).optional(),
-  category: z.enum(equipmentCategories).optional(),
   locationKey: z.enum(['department_equipment_room', 'fantasy_lab']).optional(),
   locationLabel: cleanText(1, 120).optional(),
   accessMode: z.enum(['reservation', 'inquiry']).optional(),
@@ -146,9 +145,15 @@ const equipmentMetadataWriteShape = {
   supportingEvidence: z.boolean().optional(),
 }
 
+const equipmentMetadataWriteShape = {
+  ...equipmentMetadataCommonShape,
+  category: z.enum(equipmentCategories).optional(),
+}
+
 export const equipmentAdminResourceWriteMetadataSchema = z.object(equipmentMetadataWriteShape).strict()
 export const equipmentAdminResourceMetadataSchema = z.object({
-  ...equipmentMetadataWriteShape,
+  ...equipmentMetadataCommonShape,
+  category: cleanText(1, 100).optional(),
   confirmedQuantity: z.number().int().min(0).max(100_000).optional(),
 }).strict()
 

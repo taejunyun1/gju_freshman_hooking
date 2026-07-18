@@ -223,6 +223,25 @@ describe('resource matching', () => {
     expect(equipmentCategoryOf(legacyLensResource)).toBe('lens')
   })
 
+  it('does not promote a noncanonical stored admin category into result scoring evidence', () => {
+    const noncanonical = equipment(23, {
+      metadata: {
+        ...equipment(23).metadata,
+        category: 'Body',
+      } as unknown as EquipmentCandidate['metadata'],
+      tags: [tag('camera')],
+    })
+
+    const ranked = rankResources({
+      interestVector: { camera: 1 },
+      selectedInterests: selected(['camera']),
+      candidates: [noncanonical],
+    })
+
+    expect(ranked.capabilityEvidence).toEqual([])
+    expect(ranked.categoryFits.equipmentFacility).toBe(0)
+  })
+
   it('rejects non-finite or out-of-range student interest scores', () => {
     for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, -0.1, 1.1]) {
       expect(() => rankResources({

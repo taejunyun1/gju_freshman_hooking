@@ -294,6 +294,50 @@ describe('administrator resource list and detail', () => {
     } })
   })
 
+  it('decodes and lists a legacy noncanonical stored equipment category without weakening writes', async () => {
+    const legacyRow = rawResourceRow({
+      type: 'equipment',
+      metadata: {
+        category: 'Body',
+        locationKey: 'department_equipment_room',
+        locationLabel: '기자재실',
+        accessMode: 'inquiry',
+        accessLabel: '문의 전용',
+      },
+    })
+    expect(decodeAdminResourceRow(legacyRow)).toMatchObject({
+      type: 'equipment',
+      metadata: { category: 'Body' },
+    })
+
+    const rows = [legacyRow, rawResourceRow({ id: 41 })]
+    const query = {
+      limit: () => query,
+      order: () => query,
+      select: () => query,
+      then: <Result>(resolve: (value: { data: unknown[], error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({ data: rows, error: null }).then(resolve)
+      ),
+    }
+    const adapter = createSupabaseAdminResourcesDependencies({ from: () => query } as never)
+    await expect(adapter.listResources({ limit: 21 })).resolves.toHaveLength(2)
+
+    expect(() => parseAdminResourceWrite({
+      ...equipmentWrite(),
+      metadata: { ...equipmentWrite().metadata, category: 'Body' },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+
+    for (const metadata of [
+      { category: '' },
+      { category: ' Body' },
+      { category: 'B'.repeat(101) },
+      { category: 'Body', confirmedQuantity: 100_001 },
+    ]) {
+      expect(() => decodeAdminResourceRow(rawResourceRow({ type: 'equipment', metadata })))
+        .toThrow('ADMIN_RESOURCE_STORE_INVALID')
+    }
+  })
+
   it.each([
     { academic_year: 2026, grade_year: 5, term: '1학기', credits: 3, goal: '목표' },
     { academic_year: 2026, grade_year: 1, term: '1학기', credits: '3', goal: '목표' },

@@ -600,6 +600,27 @@ describe('administrator resource editor', () => {
     expect(wrapper.find('input[name="category"]').exists()).toBe(false)
   })
 
+  it('lets an administrator replace a legacy stored equipment category with a canonical option', async () => {
+    const legacyEquipment = {
+      ...equipmentResource,
+      metadata: { ...equipmentResource.metadata, category: 'Body' },
+    } as AdminResource
+    const wrapper = mount(ResourceEditor, {
+      props: { resource: legacyEquipment, inventory: [] },
+      global: { stubs: { CapabilityEvidence: true } },
+    })
+
+    const category = wrapper.get('select[name="category"]')
+    expect(category.element).toHaveProperty('value', '')
+    await category.setValue('body')
+    await wrapper.get('button[data-action="save"]').trigger('click')
+
+    const payload = wrapper.emitted('save')?.at(-1)?.[0] as {
+      resource: Extract<AdminResourceWrite, { type: 'equipment' }>
+    }
+    expect(payload.resource.metadata.category).toBe('body')
+  })
+
   it('reads camel-only migrated facility operation and verification metadata in form and preview', () => {
     const camelFacility = {
       ...facility,
