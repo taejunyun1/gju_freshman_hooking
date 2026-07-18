@@ -102,15 +102,6 @@ export interface RankedResources {
   readonly categoryFits: ResourceCategoryFits
 }
 
-export interface EnvironmentCategoryScores {
-  readonly course?: number
-  readonly equipmentFacility?: number
-  readonly extracurricularProject?: number
-  readonly faculty?: number
-  readonly careerPortfolio?: number
-  readonly support?: number
-}
-
 const allowedTypes = new Set<ResultResource['type']>([
   'course',
   'equipment',
@@ -483,31 +474,4 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
       careerPortfolio: categoryFit(Object.freeze([...career, ...studentWork])),
     }),
   })
-}
-
-const environmentWeights = {
-  course: 0.35,
-  equipmentFacility: 0.20,
-  extracurricularProject: 0.15,
-  faculty: 0.15,
-  careerPortfolio: 0.15,
-} as const
-
-export const computeEnvironmentScore = (scores: EnvironmentCategoryScores): number => {
-  if (scores.support !== undefined
-    && (!Number.isFinite(scores.support) || scores.support < 0 || scores.support > 100)) {
-    throw new Error('Environment category score must be finite and between 0 and 100')
-  }
-
-  let total = 0
-  for (const [category, weight] of Object.entries(environmentWeights) as Array<
-    [keyof typeof environmentWeights, number]
-  >) {
-    const score = scores[category] ?? 0
-    if (!Number.isFinite(score) || score < 0 || score > 100) {
-      throw new Error('Environment category score must be finite and between 0 and 100')
-    }
-    total += score * weight
-  }
-  return roundOneDecimal(total)
 }

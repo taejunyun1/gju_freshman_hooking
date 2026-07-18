@@ -3,6 +3,7 @@ import {
   decodeResultSnapshot,
 } from '../../../shared/schemas/result'
 import type { ResultSnapshot } from '../../../shared/types/result'
+import { withComputedEnvironmentScore } from '../matching/environment-score'
 import {
   buildCareerNarrativeBrief,
   buildDeterministicCareerNarrativeChoice,
@@ -10,14 +11,15 @@ import {
 } from './career-narrative'
 
 export const decodeStoredResultSnapshot = (input: unknown): ResultSnapshot => {
+  let snapshot: ResultSnapshot
   try {
-    return decodeResultSnapshot(input)
+    snapshot = decodeResultSnapshot(input)
   }
   catch (currentError) {
     try {
       const core = decodeLegacyResultSnapshot(input)
       const brief = buildCareerNarrativeBrief(core)
-      return decodeResultSnapshot({
+      snapshot = decodeResultSnapshot({
         ...core,
         careerNarrative: renderCareerNarrative(
           brief,
@@ -30,4 +32,5 @@ export const decodeStoredResultSnapshot = (input: unknown): ResultSnapshot => {
       throw currentError
     }
   }
+  return withComputedEnvironmentScore(snapshot)
 }

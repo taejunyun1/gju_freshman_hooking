@@ -158,6 +158,33 @@ const resourceCandidates = (): ResourceCandidate[] => [
   },
 ]
 
+const fullEnvironmentResourceCandidates = (): ResourceCandidate[] => {
+  const candidates = resourceCandidates()
+  const baseCourse = candidates[0] as Extract<ResourceCandidate, { type: 'course' }>
+  const baseEquipment = candidates[1] as Extract<ResourceCandidate, { type: 'equipment' }>
+  return [
+    ...candidates.map(candidate => candidate.id === baseEquipment.id
+      ? {
+          ...baseEquipment,
+          metadata: { ...baseEquipment.metadata, category: 'body' as const },
+        }
+      : candidate),
+    ...([2, 3, 4] as const).map((gradeYear, index): ResourceCandidate => ({
+      ...baseCourse,
+      id: 108 + index,
+      title: `${gradeYear}학년 사진 실습`,
+      metadata: { ...baseCourse.metadata, gradeYear },
+      tags: [tag((['studio', 'portfolio', 'photography'] as const)[index]!)],
+    })),
+    {
+      ...baseEquipment,
+      id: 111,
+      title: '교환 렌즈 세트',
+      metadata: { ...baseEquipment.metadata, category: 'lens' },
+    },
+  ]
+}
+
 const hiddenContacts = () => ({
   office: 'admin_only' as const,
   phone: 'admin_only' as const,
@@ -299,6 +326,43 @@ const createSubmit = (
 })
 
 describe('assessment completion service', () => {
+  it('stores and reads one evidence-based environment score for current results', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const submitService = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => fullEnvironmentResourceCandidates(),
+      completeAssessment,
+    }))
+
+    await expect(submitService.submitAssessment(envelope(revision), context))
+      .resolves.toEqual({ publicId })
+
+    const savedInput = completeAssessment.mock.calls[0]![0]
+    expect(savedInput.environmentScore).toBe(100)
+    expect(savedInput.resultSnapshot.environmentScore).toBe(100)
+
+    const storedSnapshot = {
+      ...savedInput.resultSnapshot,
+      environmentScore: 27.6,
+    }
+    const storedRow = {
+      assessmentId: 701,
+      publicId,
+      campaignId: 17,
+      completedAt,
+      resultSnapshot: storedSnapshot,
+    }
+    const readService = createAssessmentCompletionService(serviceDependencies({
+      loadOwnedAssessment: async () => storedRow,
+      loadAssessmentHistory: async () => [storedRow],
+    }))
+    const ownedContext = { anonymousId, requestId, sessionToken }
+
+    expect((await readService.getOwnedResult(publicId, ownedContext)).environmentScore).toBe(100)
+    expect((await readService.getAssessmentHistory(ownedContext)).items[0]?.environmentScore).toBe(100)
+    expect(storedSnapshot.environmentScore).toBe(27.6)
+  })
+
   it('validates the exact revision envelope and persists one canonical scoring and matching snapshot', async () => {
     const revision = await createAssessmentCatalogRevision(catalog())
     const dependencies = serviceDependencies()
@@ -332,7 +396,7 @@ describe('assessment completion service', () => {
       campaignId: 17,
       idempotencyKey,
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
-      environmentScore: 92.3,
+      environmentScore: 51.3,
       narrativeGenerationId: generationId,
     })
     expect(persisted.responses).toEqual([
@@ -377,7 +441,7 @@ describe('assessment completion service', () => {
       ],
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
       rankedTracks: ['commercial', 'art_photo', 'video', 'documentary'],
-      environmentScore: 92.3,
+      environmentScore: 51.3,
     })
     expect(snapshot.learningPath.map(({ year, resources }) => [year, resources.map(({ id }) => id)]))
       .toEqual([[1, [101]], [2, []], [3, []], [4, []]])

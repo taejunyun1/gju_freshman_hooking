@@ -97,6 +97,11 @@ const snapshotFixture = (
   })
 }
 
+const storedSnapshotFixture = (): ResultSnapshot => ({
+  ...snapshotFixture(),
+  environmentScore: 10,
+})
+
 const ownedRow = (
   assessmentId = 701,
   publicId = ownedPublicId,
@@ -202,7 +207,7 @@ describe('owned result API', () => {
     const response = await handler(event)
 
     expect(loadOwnedAssessment).toHaveBeenCalledWith({ prospectId: 42, publicId: ownedPublicId })
-    expect(response).toEqual({ data: snapshotFixture(), requestId })
+    expect(response).toEqual({ data: storedSnapshotFixture(), requestId })
     expect(event.status).toBeUndefined()
     expect(event.headers['cache-control']).toBe('private, no-store')
     expect(recordEvent).toHaveBeenCalledOnce()
@@ -313,7 +318,7 @@ describe('owned result API', () => {
     const response = await resultHandler(service)(event)
 
     expect(event.status).toBeUndefined()
-    expect(response).toEqual({ data: snapshotFixture(), requestId })
+    expect(response).toEqual({ data: storedSnapshotFixture(), requestId })
     expect(event.headers['cache-control']).toBe('private, no-store')
   })
 
@@ -404,7 +409,7 @@ describe('GET /api/assessment/history', () => {
     expect(response.data.items[0]).toMatchObject({
       completedAt: '2026-07-15T12:00:00+09:00',
       topTrack: 'commercial',
-      environmentScore: 92.3,
+      environmentScore: 10,
     })
     expect(JSON.stringify(response)).not.toMatch(
       /trackScores|rankedTracks|resources|faculty|reason|062-670-2338|tjyun@gwangju\.ac\.kr|weight|session/u,

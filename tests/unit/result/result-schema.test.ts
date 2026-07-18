@@ -244,6 +244,8 @@ describe('result snapshot decoder', () => {
 
     expect(() => decodeResultSnapshot(legacy)).toThrow()
     const upgraded = decodeStoredResultSnapshot(legacy)
+    expect(legacy.environmentScore).toBe(92.3)
+    expect(upgraded.environmentScore).toBe(100)
     expect(upgraded.careerNarrative.source).toBe('deterministic')
     expect(upgraded.careerNarrative.sentences).toHaveLength(4)
     expect(decodeStoredResultSnapshot(legacy)).toEqual(upgraded)

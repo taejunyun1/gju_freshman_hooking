@@ -3,7 +3,6 @@ import { renderConnectionReason } from '../../../server/modules/matching/reasons
 import { resultResourceSchema } from '../../../shared/schemas/result'
 import { equipmentCategoryOf } from '../../../shared/utils/equipment-category'
 import {
-  computeEnvironmentScore,
   rankResources,
   type ResourceCandidate,
 } from '../../../server/modules/matching/resources'
@@ -615,35 +614,6 @@ describe('resource matching', () => {
     expect(displayedOnly.course.map(item => item.id)).toEqual([101, 102, 103, 104, 105])
     expect(displayedOnly.categoryFits.course).toBe(80)
 
-    expect(computeEnvironmentScore({
-      course: 80,
-      equipmentFacility: 70,
-      extracurricularProject: 60,
-      faculty: 90,
-      careerPortfolio: 50,
-      support: 100,
-    })).toBe(72)
-    expect(computeEnvironmentScore({ course: 100 })).toBe(35)
-    expect(computeEnvironmentScore({
-      course: 80.1,
-      equipmentFacility: 70.2,
-      extracurricularProject: 60.3,
-      faculty: 90.4,
-      careerPortfolio: 50.5,
-    })).toBe(72.3)
-
-    for (const category of [
-      'course',
-      'equipmentFacility',
-      'extracurricularProject',
-      'faculty',
-      'careerPortfolio',
-    ] as const) {
-      for (const invalid of [Number.NaN, Number.POSITIVE_INFINITY, -0.1, 100.1]) {
-        expect(() => computeEnvironmentScore({ [category]: invalid }))
-          .toThrow(/0.*100|finite/iu)
-      }
-    }
   })
 
   it('renders the strongest matched Korean evidence and rejects missing evidence', () => {

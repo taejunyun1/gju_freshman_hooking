@@ -42,10 +42,10 @@ import {
   type SelectedInterestEvidence,
 } from '../matching/reasons'
 import {
-  computeEnvironmentScore,
   rankResources,
   type ResourceCandidate,
 } from '../matching/resources'
+import { computeEnvironmentScore } from '../matching/environment-score'
 import {
   createServerCareerNarrativeResolver,
   type CareerNarrativeResolution,
@@ -698,8 +698,10 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         support: ranked.support.slice(0, 3),
       }
       const environmentScore = computeEnvironmentScore({
-        ...ranked.categoryFits,
-        faculty: facultyRecommendation.facultyFit,
+        facility: resources.facility,
+        equipment: resources.equipment,
+        learningPath,
+        hasPrimaryFaculty: faculty.primary.id > 0,
       })
       const completedAt = (dependencies.now ?? (() => new Date().toISOString()))()
       const resultSnapshotCore: ResultSnapshotCore = {
