@@ -459,8 +459,8 @@ describe('assessment completion service', () => {
       support: [107],
     })
     expect(snapshot.faculty).toMatchObject({
-      primary: { id: 202, role: 'primary' },
-      backup: { id: 201, role: 'backup' },
+      primary: { id: 203, role: 'primary' },
+      backup: { id: 202, role: 'backup' },
       specialists: [{ id: 206, role: 'specialist' }],
     })
     expect(JSON.stringify(snapshot)).not.toContain('SECRET-INVENTORY-CODE')

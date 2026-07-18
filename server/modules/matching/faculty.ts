@@ -53,6 +53,7 @@ export interface RecommendFacultyInput {
   readonly student: FacultyStudentEvidence
   readonly faculty: readonly FacultyRecommendationCandidate[]
   readonly specialistLinks: readonly FacultySpecialistLink[]
+  readonly distributionKey?: number
 }
 
 export interface FacultyRecommendationResult {
@@ -167,6 +168,7 @@ const recommendFacultyInputSchema = z.object({
   student: studentEvidenceSchema,
   faculty: z.array(facultyCandidateSchema),
   specialistLinks: z.array(specialistLinkSchema),
+  distributionKey: safeIdSchema.optional(),
 }).strict()
 
 type ParsedInput = z.infer<typeof recommendFacultyInputSchema>
@@ -263,9 +265,140 @@ interface PrimaryScore {
   readonly candidate: ParsedFaculty
   readonly rawScore: number
   readonly baseScore: number
+  readonly routingFit: number
+  readonly signatureScore: number
+  readonly contextualSignatureScore: number
+  readonly ownsDominantTrack: boolean
 }
 
-const scorePrimary = (student: ParsedStudent, candidate: ParsedFaculty): PrimaryScore => {
+const questionnaireAliases: Readonly<Record<string, string>> = {
+  people: 'social',
+  storytelling: 'photo_story',
+  local_culture: 'local_record',
+  field: 'field_research',
+  oral_history: 'interview',
+  editing: 'video',
+  color_grading: 'video',
+  post_production: 'video',
+  digital_image: 'ai',
+  cinematography: 'narrative',
+  scene: 'narrative',
+  camera: 'video',
+  shortform: 'video',
+  music_video: 'video',
+  showreel: 'video',
+  production: 'video',
+  sequencing: 'photobook',
+  research: 'personal_project',
+}
+
+const departmentOwnershipTags: Readonly<Record<string, ReadonlySet<string>>> = {
+  '조대연': new Set([
+    'social', 'record', 'photo_communication', 'photo_story', 'visual_communication',
+    'public_content', 'documentary',
+  ]),
+  '윤태준': new Set([
+    'art_photo', 'video', 'narrative', 'installation', 'exhibition', 'ai', 'media_art',
+    'photobook', 'personal_project',
+  ]),
+  '김사라': new Set([
+    'local_record', 'archive', 'public_institution', 'cultural_institution',
+    'field_research', 'cultural_heritage', 'institution_collaboration', 'interview',
+    'documentary',
+  ]),
+}
+
+const trackOwnershipTags = new Set(['documentary', 'art_photo', 'commercial', 'video'])
+
+// One full work-group signal (0.4) is enough to establish verified department ownership.
+const signatureClearMinimum = 0.4
+// 0.25 exceeds the full career-group contribution (0.2), preventing a weak secondary lead.
+const signatureLeadMinimum = 0.25
+// A 50-point track gap is half the full 100-point scale and represents an unambiguous track.
+const dominantTrackClearMargin = 50
+// Contextual fit contributes at most 50 points; 40 therefore requires at least 80% evidence fit.
+const contextualClearMinimum = 40
+// A 30-point lead is larger than the entire style (10) and career (20) group contribution.
+const contextualClearMargin = 30
+// Near-fit candidates must be within one quarter of the 100-point scale and retain 60% of top fit.
+const nearFitAbsoluteGap = 25
+const nearFitRelativeFloor = 0.6
+
+const canonicalQuestionnaireKey = (key: string): string => questionnaireAliases[key] ?? key
+
+const candidateEvidenceScores = (
+  student: ParsedStudent,
+  candidate: ParsedFaculty,
+): { expertise: number, signature: number, contextualSignature: number } => {
+  const canonicalSignals = new Map<string, number>()
+
+  for (const [key, signal] of Object.entries(student.interestVector)) {
+    if (signal <= 0) continue
+    const canonicalKey = canonicalQuestionnaireKey(key)
+    canonicalSignals.set(canonicalKey, Math.max(canonicalSignals.get(canonicalKey) ?? 0, signal))
+  }
+
+  const candidateWeights = new Map<string, number>()
+  const contextualWeights = new Map<string, number>()
+  for (const tag of candidate.tags) {
+    const canonicalKey = canonicalQuestionnaireKey(tag.key)
+    candidateWeights.set(canonicalKey, Math.max(candidateWeights.get(canonicalKey) ?? 0, tag.weight))
+    if (tag.category !== 'track') {
+      contextualWeights.set(canonicalKey, Math.max(contextualWeights.get(canonicalKey) ?? 0, tag.weight))
+    }
+  }
+
+  const ownership = departmentOwnershipTags[candidate.name]
+  let matchedSignal = 0
+  let signature = 0
+  let contextualSignature = 0
+  for (const [key, signal] of canonicalSignals) {
+    const contextualStrength = (contextualWeights.get(key) ?? 0) / 3
+    if (contextualStrength > 0) matchedSignal += signal * contextualStrength
+    const ownershipStrength = (candidateWeights.get(key) ?? 0) / 3
+    if (ownership?.has(key) === true && ownershipStrength === 1) {
+      signature += signal
+      if (!trackOwnershipTags.has(key)) contextualSignature += signal
+    }
+  }
+  if (candidate.name === '조대연'
+    && (candidateWeights.get('social') ?? 0) === 3
+    && (candidateWeights.get('photo_story') ?? 0) === 3) {
+    const socialSignal = canonicalSignals.get('social') ?? 0
+    const storySignal = canonicalSignals.get('photo_story') ?? 0
+    if (socialSignal > 0 && storySignal > 0) {
+      const coherence = Math.max(socialSignal, storySignal)
+      signature += coherence
+      contextualSignature += coherence
+    }
+  }
+  const totalSignal = [...canonicalSignals.values()].reduce((sum, signal) => sum + signal, 0)
+  return {
+    expertise: totalSignal === 0 ? 0 : matchedSignal / totalSignal * 100,
+    signature,
+    contextualSignature,
+  }
+}
+
+const dominantTrackEvidence = (
+  student: ParsedStudent,
+): { keys: TrackKey[], margin: number } => {
+  const ranked = trackKeys
+    .map(key => ({ key, score: student.trackScores[key] }))
+    .sort((left, right) => right.score - left.score || compareText(left.key, right.key))
+  const highest = ranked[0]!.score
+  if (highest <= 0) return { keys: [], margin: 0 }
+  return {
+    keys: ranked.filter(track => track.score === highest).map(track => track.key),
+    margin: ranked.length < 2 ? highest : highest - ranked[1]!.score,
+  }
+}
+
+const scorePrimary = (
+  student: ParsedStudent,
+  candidate: ParsedFaculty,
+  dominantTracks: readonly TrackKey[],
+): PrimaryScore => {
   const tags = [...candidate.tags].sort(compareTags)
   const track = categoryMatch(student, tags, 'track')
   const activity = categoryMatch(student, tags, 'activity')
@@ -273,13 +406,103 @@ const scorePrimary = (student: ParsedStudent, candidate: ParsedFaculty): Primary
   const career = categoryMatch(student, tags, 'career')
   const load = Math.max(0, 1 - candidate.openAssignedCount / candidate.weeklyCapacity) * 100
   const baseScore = track * 0.40 + activity * 0.25 + result * 0.15 + career * 0.15
-  return { candidate, baseScore, rawScore: baseScore + load * 0.05 }
+  const evidence = candidateEvidenceScores(student, candidate)
+  const candidateTrackKeys = new Set(tags
+    .filter(tag => tag.category === 'track' && trackKeySet.has(tag.key) && tag.weight > 0)
+    .map(tag => tag.key as TrackKey))
+  const ownsDominantTrack = dominantTracks.some(trackKey => candidateTrackKeys.has(trackKey))
+  const dominantTrackFit = Math.max(0, ...dominantTracks
+    .filter(trackKey => candidateTrackKeys.has(trackKey))
+    .map(trackKey => student.trackScores[trackKey]))
+  return {
+    candidate,
+    baseScore,
+    rawScore: baseScore + load * 0.05,
+    routingFit: dominantTrackFit * 0.45 + evidence.expertise * 0.50,
+    signatureScore: evidence.signature,
+    contextualSignatureScore: evidence.contextualSignature,
+    ownsDominantTrack,
+  }
+}
+
+const comparePrimaryScores = (left: PrimaryScore, right: PrimaryScore): number => (
+  right.routingFit - left.routingFit
+  || right.rawScore - left.rawScore
+  || left.candidate.openAssignedCount - right.candidate.openAssignedCount
+  || right.candidate.priority - left.candidate.priority
+  || left.candidate.id - right.candidate.id
+)
+
+const selectPrimaryScores = (
+  scores: readonly PrimaryScore[],
+  distributionKey: number | undefined,
+  dominantTracks: readonly TrackKey[],
+  dominantTrackMargin: number,
+): { primary: PrimaryScore, backup: PrimaryScore } => {
+  const byFit = [...scores].sort(comparePrimaryScores)
+  const dominantOwners = scores.filter(score => score.ownsDominantTrack)
+  const hasUnownedDominantTrack = dominantTracks.length > 0 && dominantOwners.length === 0
+  const hasClearDominantOwnership = dominantOwners.length > 0
+    && dominantTrackMargin >= dominantTrackClearMargin
+  const signatureCandidates = hasClearDominantOwnership ? [...dominantOwners] : [...scores]
+  const useContextualSignature = dominantTracks.length > 0 && !hasClearDominantOwnership
+  const signatureFor = (score: PrimaryScore): number => useContextualSignature
+    ? score.contextualSignatureScore
+    : score.signatureScore
+  const bySignature = signatureCandidates.sort((left, right) => (
+    signatureFor(right) - signatureFor(left) || comparePrimaryScores(left, right)
+  ))
+  const signatureLead = (bySignature[0] === undefined ? 0 : signatureFor(bySignature[0]))
+    - (bySignature[1] === undefined ? 0 : signatureFor(bySignature[1]))
+  let primary: PrimaryScore
+
+  if (bySignature[0] !== undefined
+    && signatureFor(bySignature[0]) >= signatureClearMinimum
+    && signatureLead >= signatureLeadMinimum) {
+    primary = bySignature[0]
+  }
+  else {
+    if (dominantOwners.length === 1
+      && dominantTracks.length > 0
+      && dominantTrackMargin >= dominantTrackClearMargin) {
+      primary = dominantOwners[0]!
+    }
+    else if (byFit[0]!.routingFit >= contextualClearMinimum
+      && byFit[0]!.routingFit - byFit[1]!.routingFit >= contextualClearMargin) {
+      primary = byFit[0]!
+    }
+    else if (distributionKey !== undefined) {
+      const topFit = byFit[0]!.routingFit
+      const pool = topFit === 0 || hasUnownedDominantTrack
+        ? [...byFit]
+        : byFit.filter(score => score.routingFit > 0
+          && topFit - score.routingFit <= nearFitAbsoluteGap
+          && score.routingFit / topFit >= nearFitRelativeFloor)
+      const stablePool = pool.length > 1
+        ? [...pool].sort((left, right) => left.candidate.id - right.candidate.id)
+        : [byFit[0]!]
+      primary = stablePool[(distributionKey - 1) % stablePool.length]!
+    }
+    else {
+      primary = byFit[0]!
+    }
+  }
+
+  const backup = byFit.find(score => score.candidate.id !== primary.candidate.id)
+  if (!backup) throw new Error('FACULTY_CONTENT_NOT_READY')
+  return { primary, backup }
 }
 
 const strongestGlobalEvidenceKey = (student: ParsedStudent): string | null => {
-  return Object.entries(student.interestVector)
+  const interestKey = Object.entries(student.interestVector)
     .filter(([key, signal]) => signal > 0 && student.selectedLabels[key] !== undefined)
     .sort((left, right) => right[1] - left[1] || compareText(left[0], right[0]))[0]?.[0] ?? null
+  if (interestKey !== null) return interestKey
+  return trackKeys
+    .filter(key => student.trackScores[key] > 0 && student.selectedLabels[key] !== undefined)
+    .sort((left, right) => (
+      student.trackScores[right] - student.trackScores[left] || compareText(left, right)
+    ))[0] ?? null
 }
 
 const strongestFacultyEvidenceKey = (
@@ -404,22 +627,22 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
   assertLinkReferences(input)
   assertLabelEvidence(input.student)
 
+  const dominantTrack = dominantTrackEvidence(input.student)
+  const dominantTracks = dominantTrack.keys
   const primaryScores = input.faculty
     .filter(candidate => candidate.status === 'active'
       && candidate.employmentType === 'full_time'
       && candidate.consultationRole === 'primary'
       && candidate.weeklyCapacity > 0)
-    .map(candidate => scorePrimary(input.student, candidate))
-    .sort((left, right) => (
-      right.rawScore - left.rawScore
-      || left.candidate.openAssignedCount - right.candidate.openAssignedCount
-      || right.candidate.priority - left.candidate.priority
-      || left.candidate.id - right.candidate.id
-    ))
+    .map(candidate => scorePrimary(input.student, candidate, dominantTracks))
 
   if (primaryScores.length < 2) throw new Error('FACULTY_CONTENT_NOT_READY')
-  const chosenPrimary = primaryScores[0]!
-  const chosenBackup = primaryScores[1]!
+  const { primary: chosenPrimary, backup: chosenBackup } = selectPrimaryScores(
+    primaryScores,
+    input.distributionKey,
+    dominantTracks,
+    dominantTrack.margin,
+  )
 
   const eligibleSpecialistIds = new Set(input.specialistLinks
     .filter(link => (link.primaryFacultyId === null

@@ -681,6 +681,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         },
         faculty: facultyCandidates.faculty,
         specialistLinks: facultyCandidates.specialistLinks,
+        distributionKey: session.prospectId,
       })
       const faculty = {
         primary: facultyRecommendation.primary,

@@ -16,7 +16,10 @@ const hasContacts = computed(() => Object.keys(props.person.publicContacts).leng
   >
     <div class="faculty-card__heading">
       <h4>{{ person.name }} {{ person.title }}</h4>
-      <span>{{ person.expertise }}</span>
+      <div class="faculty-card__expertise-group">
+        <span class="faculty-card__expertise-label">전문분야</span>
+        <p class="faculty-card__expertise">{{ person.expertise }}</p>
+      </div>
     </div>
     <p class="faculty-card__reason">{{ person.reason }}</p>
     <address
@@ -68,11 +71,36 @@ const hasContacts = computed(() => Object.keys(props.person.publicContacts).leng
   overflow-wrap: anywhere;
 }
 
-.faculty-card__heading span,
 .faculty-card__reason {
   color: color-mix(in srgb, var(--color-ink) 69%, transparent);
   font-size: 0.8125rem;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.faculty-card__expertise-group {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+}
+
+.faculty-card__expertise-label {
+  color: var(--color-sequence);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.faculty-card__expertise {
+  min-width: 0;
+  margin: 0;
+  color: color-mix(in srgb, var(--color-ink) 88%, transparent);
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.55;
   overflow-wrap: anywhere;
   word-break: keep-all;
 }
