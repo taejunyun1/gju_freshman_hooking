@@ -38,7 +38,9 @@ const parseSession = (input: unknown): EncryptedStudentSession | null => {
   ) throw new Error('IDENTITY_STORE_INVALID')
   const nameCiphertext = bytesFromHex(row.nameCiphertext)
   const nameIv = bytesFromHex(row.nameIv)
-  if (nameCiphertext.byteLength < 16 || nameIv.byteLength !== 12) throw new Error('IDENTITY_STORE_INVALID')
+  if (nameCiphertext.byteLength < 16 || nameCiphertext.byteLength > 128 || nameIv.byteLength !== 12) {
+    throw new Error('IDENTITY_STORE_INVALID')
+  }
   return {
     prospectId: row.prospectId,
     expiresAt: row.expiresAt,

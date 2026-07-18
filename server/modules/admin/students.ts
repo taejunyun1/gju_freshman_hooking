@@ -178,7 +178,11 @@ const storedStudentSchema = z.object({
   status: z.enum(['active', 'inactive', 'deleted']),
   lastActiveAt: timestampSchema,
   createdAt: timestampSchema,
-}).strict()
+}).strict().superRefine((student, context) => {
+  if (student.nickname.startsWith('roster:') && (student.nameCiphertext === undefined || student.nameIv === undefined)) {
+    context.addIssue({ code: 'custom', message: 'roster placeholder requires an encrypted name' })
+  }
+})
 
 export type StoredAdminStudent = z.infer<typeof storedStudentSchema>
 

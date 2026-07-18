@@ -564,4 +564,21 @@ describe('administrator student store DTO', () => {
       iv: student.nameIv,
     })
   })
+
+  it.each([
+    ['missing encrypted name', {}],
+    ['missing encrypted-name IV', { nameCiphertext: new Uint8Array(16).fill(3) }],
+    ['missing encrypted-name ciphertext', { nameIv: new Uint8Array(12).fill(4) }],
+  ])('fails closed without exposing a roster placeholder when %s', async (_scenario, encryptedName) => {
+    const service = createAdminStudentsService(dependencies({
+      listStudents: vi.fn(async () => [storedStudent({ nickname: rosterPlaceholder, ...encryptedName })]),
+    }))
+
+    const outcome = await service.list({ limit: 20 })
+      .then(result => JSON.stringify(result))
+      .catch(error => String(error))
+
+    expect(outcome).toContain('ADMIN_STUDENT_STORE_INVALID')
+    expect(outcome).not.toContain(rosterPlaceholder)
+  })
 })

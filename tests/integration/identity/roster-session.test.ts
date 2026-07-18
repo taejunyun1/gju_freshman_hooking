@@ -79,6 +79,27 @@ describe('roster student session adapter', () => {
     expect(rpc).toHaveBeenCalledTimes(1)
   })
 
+  it('closes a roster session with an oversized encrypted name ciphertext', async () => {
+    const { createRosterSessionService } = await import('../../../server/modules/identity/student-session')
+    const rpc = vi.fn(async () => ({
+      data: {
+        kind: 'active',
+        prospectId: 42,
+        nameCiphertext: '00'.repeat(129),
+        nameIv: '00'.repeat(12),
+        expiresAt: '2026-07-17T12:00:00.000Z',
+      },
+      error: null,
+    }))
+    const service = createRosterSessionService({
+      rpc,
+      decryptName: async () => 'should-not-be-called',
+    })
+
+    await expect(service.getStudentSession('opaque-session-token')).rejects.toThrow('IDENTITY_STORE_INVALID')
+    expect(rpc).toHaveBeenCalledTimes(1)
+  })
+
   it('revokes a session through the roster revoke RPC', async () => {
     const { createRosterSessionService } = await import('../../../server/modules/identity/student-session')
     const rpc = vi.fn(async (name: string) => {
