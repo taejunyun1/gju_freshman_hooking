@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DOCUMENT_BRAND } from '../shared/constants/department-brand'
+import { DOCUMENT_BRAND } from '#shared/constants/department-brand'
 
 useHead({
   title: DOCUMENT_BRAND,
