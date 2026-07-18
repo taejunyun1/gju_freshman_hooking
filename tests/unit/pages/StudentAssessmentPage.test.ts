@@ -80,6 +80,7 @@ describe('student assessment page', () => {
     expect(fetch.mock.calls[0]).toEqual(['/api/student/session'])
     expect(fetch.mock.calls[1]).toEqual(['/api/assessment/options'])
     expect(wrapper.text()).toContain('고요한프레임27님')
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과 · 관심사 연결')
     expect(wrapper.text()).toContain('01 / 04')
     expect(wrapper.text()).toContain('무엇을 해보고 싶나요?')
     expect(wrapper.text()).toContain('사진 촬영하기')

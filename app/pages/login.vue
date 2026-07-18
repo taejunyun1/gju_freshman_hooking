@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import type { ApiSuccess } from '../../shared/types/api'
 
 const hydrated = ref(false)
@@ -36,7 +37,7 @@ const submitLogin = async (): Promise<void> => {
       <NuxtLink
         class="login-page__brand"
         to="/"
-        aria-label="PHOTO:NEXT 홈"
+        :aria-label="HOME_ARIA_LABEL"
       >
         PHOTO:<span>NEXT</span>
       </NuxtLink>
@@ -56,9 +57,9 @@ const submitLogin = async (): Promise<void> => {
         <span class="login-page__rail-dot--active" />
       </div>
       <div>
-        <p class="login-page__eyebrow">RETURN TO YOUR SEQUENCE</p>
+        <p data-department-brand class="login-page__eyebrow">{{ DEPARTMENT_SERVICE_BRAND }}</p>
         <h1 id="login-title">이어 보던 경로로<br>돌아갈게요</h1>
-        <p class="login-page__intro">처음에 받은 휴대전화 번호와 임시 비밀번호를 입력해 주세요.</p>
+        <p class="login-page__intro">광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 임시 비밀번호를 입력해 주세요.</p>
 
         <form
           class="login-form"

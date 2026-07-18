@@ -18,7 +18,10 @@ describe('landing page', () => {
       global: { stubs: { NuxtLink: NuxtLinkStub } },
     })
 
-    expect(wrapper.get('h1').text()).toBe('하고 싶은 사진·영상 작업이 학과의 수업과 어떻게 이어지는지 확인해보세요')
+    expect(wrapper.get('[data-department-brand]').text()).toBe('광주대학교 사진영상미디어학과 · PHOTO:NEXT')
+    expect(wrapper.get('h1').text()).toBe(
+      '하고 싶은 사진·영상, 광주대학교 사진영상미디어학과에서 어떻게 시작할 수 있는지 확인해보세요.',
+    )
     expect(wrapper.findAll('[data-stage]').map(stage => stage.text())).toEqual([
       '관심 선택',
       '4년 학습경로',
@@ -45,7 +48,7 @@ describe('landing page', () => {
     const source = readFileSync('app/pages/index.vue', 'utf8')
     const brand = wrapper.get('a[href="/"]')
 
-    expect(brand.attributes('aria-label')).toBe('PHOTO:NEXT 홈')
+    expect(brand.attributes('aria-label')).toBe('광주대학교 사진영상미디어학과 PHOTO:NEXT 홈')
     expect(brand.classes()).toContain('landing__brand')
     expect(source).toContain('min-inline-size: var(--touch-target)')
     expect(source).toContain('min-block-size: var(--touch-target)')

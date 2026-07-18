@@ -21,6 +21,9 @@ describe('student account pages', () => {
     const { default: LoginPage } = await import('../../../app/pages/login.vue')
     const wrapper = mount(LoginPage, { global: { stubs: { NuxtLink: true } } })
 
+    expect(wrapper.get('[data-department-brand]').text()).toBe('광주대학교 사진영상미디어학과 · PHOTO:NEXT')
+    expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 임시 비밀번호')
+
     await wrapper.find('input[name="phone"]').setValue('01012345678')
     await wrapper.find('input[name="password"]').setValue('5678AB')
     await wrapper.find('form').trigger('submit')

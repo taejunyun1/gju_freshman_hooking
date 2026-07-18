@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import type { ApiSuccess, StudentSession } from '../../shared/types/api'
 import type { QuestionGroup } from '../../shared/types/domain'
 import AssessmentProgress from '../components/assessment/AssessmentProgress.vue'
@@ -126,11 +127,11 @@ onMounted(loadSession)
         <NuxtLink
           class="assessment-page__brand"
           to="/"
-          aria-label="PHOTO:NEXT 홈"
+          :aria-label="HOME_ARIA_LABEL"
         >
           PHOTO:<span>NEXT</span>
         </NuxtLink>
-        <span class="assessment-page__timecode">ASSESSMENT / CONTACT 04</span>
+        <span class="assessment-page__timecode">광주대학교 사진영상미디어학과 · 관심사 연결</span>
       </div>
     </header>
 

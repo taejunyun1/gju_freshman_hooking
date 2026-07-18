@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 
 onMounted(() => {
   void $fetch('/api/events', {
@@ -15,7 +16,7 @@ onMounted(() => {
       <NuxtLink
         class="landing__brand"
         to="/"
-        aria-label="PHOTO:NEXT 홈"
+        :aria-label="HOME_ARIA_LABEL"
       >
         PHOTO:<span>NEXT</span>
       </NuxtLink>
@@ -24,10 +25,10 @@ onMounted(() => {
 
     <main>
       <section class="landing__hero">
-        <p class="landing__eyebrow">광주대학교 사진영상학과 · LEARNING PATH EDITOR</p>
-        <h1>하고 싶은 사진·영상 작업이 학과의 수업과 어떻게 이어지는지 확인해보세요</h1>
+        <p data-department-brand class="landing__eyebrow">{{ DEPARTMENT_SERVICE_BRAND }}</p>
+        <h1>하고 싶은 사진·영상, 광주대학교 사진영상미디어학과에서 어떻게 시작할 수 있는지 확인해보세요.</h1>
         <p class="landing__intro">
-          유형이나 점수보다, 선택한 관심사가 실제 교과와 프로젝트를 거쳐 어떤 작품과 진로가 되는지 먼저 보여드립니다.
+          선택한 관심사가 학과의 교과과정과 프로젝트·비교과, 교수진을 거쳐 어떤 작업과 진로로 이어지는지 보여드립니다.
         </p>
         <NuxtLink
           class="landing__cta"
