@@ -69,11 +69,16 @@ test.beforeAll(() => {
   expect(installCommercialMatchingFixture()).toEqual(expectedCommercialMatchingFixtureSummary)
 })
 
-for (const path of ['/', '/login', '/admin/login']) {
-  test(`${path} keeps the Blue Photo Note contract on desktop and mobile`, async ({ page }) => {
+for (const [path, fullName] of [
+  ['/', '하고 싶은 사진·영상, 광주대학교 사진영상미디어학과에서 어떻게 시작할 수 있는지 확인해보세요.'],
+  ['/login', '광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 임시 비밀번호를 입력해 주세요.'],
+  ['/admin/login', '광주대학교 사진영상미디어학과 운영'],
+] as const) {
+  test(`${path} keeps the Blue Photo Note contract and full department name on desktop and mobile`, async ({ page }) => {
     for (const viewport of [desktop, mobile]) {
       await page.setViewportSize(viewport)
       await page.goto(path)
+      await expect(page.getByText(fullName, { exact: true })).toBeVisible()
       await assertVisualContract(page)
     }
   })
