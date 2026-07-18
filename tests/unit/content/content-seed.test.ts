@@ -244,7 +244,7 @@ describe('verified department content seed', () => {
     const expectedHashes = {
       'supabase/seed/curriculum-2026.json': '832a19636a0a24703903b0f2f769146879eb17231cb3edab81a5717dc8f00324',
       'supabase/seed/equipment-inventory-2026-07-14.json': 'efbef180c706b7412ab0ea6f51a920e698c3ec00c159d7449818dfaad60728eb',
-      'supabase/seed/facilities-2026.json': 'e89bddf2101d0a15ab43f3ce4dbf688f29dbebeb71fdc95f5fc3128c9df9acc8',
+      'supabase/seed/facilities-2026.json': '3b1fa7e941b88b0558a7decb4203082fdf5332adc3dbefdfcfdaf3cf0674e48c',
       'supabase/seed/faculty-2026.json': '6d1fad7509cf88559e2101b96263fb62fe7f618a5f5e034f86acc9a0b6aeeb00',
     }
 
@@ -380,12 +380,15 @@ describe('verified department content seed', () => {
     expect(facilities.every(resource => resource.status === 'draft'
       && resource.visibility === 'public')).toBe(true)
     expect(facilities.map(resource => resource.metadata.operationNote)).toEqual([
-      '학과 확인 필요',
-      '학과 확인 필요',
-      '약품·장비·안전교육·운영 시간 확인 필요',
-      '컴퓨터 수량·사양·설치 소프트웨어·운영 시간 확인 필요',
+      '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.',
+      '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.',
+      '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.',
+      '2020년형 iMac 및 RTX 4080급 그래픽카드 탑재 워크스테이션이 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.',
     ])
-    expect(facilities.every(resource => resource.metadata.operationNote.includes('필요'))).toBe(true)
+    expect(facilities.every(resource => resource.metadata.lastVerifiedAt
+      === '2026-07-18T16:28:30+09:00')).toBe(true)
+    expect(facilities.every(resource => resource.metadata.location_label
+      === '사진영상미디어학과')).toBe(true)
     expect(facilities.find(resource => resource.metadata.facilityKey === 'studio_a_horizon')
       ?.metadata.activities).toEqual(['호리존을 활용한 인물·패션·제품·광고·영상 촬영'])
     expect(facilities.find(resource => resource.metadata.facilityKey === 'computer_lab')
@@ -420,7 +423,7 @@ describe('verified department content seed', () => {
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:455036fccc0e36e320b1717861e52e037a33cefb0493079a06956c76b1c78ec9',
+      'sha256:ffe1638a4680a07452ac685d13f2c4cedf2dc51912650ed4e8fbbdf676831ee2',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')

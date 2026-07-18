@@ -171,13 +171,13 @@ describe('result master sequence', () => {
     expect(wrapper.findAll('[data-selection-graphic]')).not.toHaveLength(0)
   })
 
-  it('shows two capability items initially and at most four with correct disclosure ARIA', async () => {
+  it('shows featured capability items initially and at most four with correct disclosure ARIA', async () => {
     const wrapper = await mountTimeline()
     const button = wrapper.get('[data-testid="capability-more"]')
     const controlledId = button.attributes('aria-controls')
 
-    expect(wrapper.findAll('[data-capability-evidence]')).toHaveLength(2)
-    expect(button.text()).toBe('이 제작을 가능하게 하는 기반 더보기')
+    expect(wrapper.findAll('[data-capability-evidence]')).toHaveLength(3)
+    expect(button.text()).toBe('학과 기반 더보기')
     expect(button.attributes('aria-expanded')).toBe('false')
     expect(controlledId).toBeTruthy()
     expect(wrapper.get(`#${controlledId}`).exists()).toBe(true)
@@ -188,7 +188,7 @@ describe('result master sequence', () => {
     expect(wrapper.findAll('[data-capability-evidence]')).toHaveLength(4)
   })
 
-  it('collapses the strongest capability evidence after combining facilities and equipment', async () => {
+  it('features one facility, body, and lens in that order before remaining evidence', async () => {
     const raw = JSON.parse(JSON.stringify(makeResultSnapshot())) as unknown as {
       resources: {
         equipment: Array<{ affinity: number }>
@@ -201,9 +201,13 @@ describe('result master sequence', () => {
     const wrapper = await mountTimeline(raw as unknown as ResultSnapshot)
     const collapsed = wrapper.findAll('[data-capability-evidence]')
 
-    expect(collapsed).toHaveLength(2)
+    expect(collapsed).toHaveLength(3)
+    expect(collapsed.map(item => item.attributes('data-capability-kind')))
+      .toEqual(['facility', 'body', 'lens'])
     expect(collapsed[0]!.text()).toContain('스튜디오 A(호리존)')
-    expect(collapsed[1]!.text()).toContain('APUTURE 600X')
+    expect(collapsed[1]!.text()).toContain('소니 FX3 Body')
+    expect(collapsed[2]!.text()).toContain('소니 FE 24-70mm F2.8 Lens')
+    expect(wrapper.get('[data-testid="capability-more"]').text()).toBe('학과 기반 더보기')
   })
 
   it('allowlists capability display fields and sends the exact resource-open event', async () => {

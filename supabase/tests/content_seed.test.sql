@@ -58,9 +58,12 @@ select is(
 );
 select is(
   (select count(*)::integer from public.resources
-   where type = 'facility' and metadata ->> 'operationNote' like '%필요%'),
+   where type = 'facility'
+     and metadata ->> 'seedKey' not like 'archive:%'
+     and metadata ->> 'lastVerifiedAt' = '2026-07-18T16:28:30+09:00'
+     and metadata ->> 'operationNote' like '%실제 이용은 학과에 문의해야 합니다.%'),
   4,
-  'all facility operation notes preserve verification needs'
+  'all four department facilities preserve the confirmed timestamp and inquiry note'
 );
 
 select is((select count(*)::integer from public.faculty), 6, 'six faculty profiles are seeded');

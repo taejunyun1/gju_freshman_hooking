@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderConnectionReason } from '../../../server/modules/matching/reasons'
 import { resultResourceSchema } from '../../../shared/schemas/result'
+import { equipmentCategoryOf } from '../../../shared/utils/equipment-category'
 import {
   computeEnvironmentScore,
   rankResources,
@@ -144,6 +145,13 @@ describe('resource matching', () => {
       metadata: { locationLabel: '판타지랩' } as unknown as EquipmentCandidate['metadata'],
       tags: [tag('documentary')],
     })
+    const invalidEquipmentCategory = equipment(23, {
+      metadata: {
+        ...equipment(23).metadata,
+        category: 'camera-secret',
+      } as unknown as EquipmentCandidate['metadata'],
+      tags: [tag('documentary')],
+    })
     const invalidFacility = facility(14, {
       metadata: { locationLabel: '학과' } as unknown as FacilityCandidate['metadata'],
       tags: [tag('documentary')],
@@ -178,6 +186,7 @@ describe('resource matching', () => {
         invalidMetadata,
         invalidType,
         invalidEquipment,
+        invalidEquipmentCategory,
         invalidFacility,
         invalidStudentWork,
       ],
@@ -186,6 +195,33 @@ describe('resource matching', () => {
     expect(ranked.course.map(item => item.id)).toEqual([1])
     expect(ranked.capabilityEvidence).toEqual([])
     expect(ranked.studentWork).toEqual([])
+  })
+
+  it('preserves verified equipment categories and classifies legacy snapshots compatibly', () => {
+    const ranked = rankResources({
+      interestVector: { camera: 1, lens: 0.8 },
+      selectedInterests: selected(['camera', 'lens']),
+      candidates: [
+        equipment(2, {
+          metadata: { ...equipment(2).metadata, category: 'body' },
+          tags: [tag('camera')],
+        }),
+        equipment(3, { tags: [tag('lens')] }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => item.id === 2)?.displayMetadata)
+      .toMatchObject({ category: 'body' })
+    const legacyCameraResource = ranked.capabilityEvidence.find(item => item.id === 2)!
+    const legacyLensResource = ranked.capabilityEvidence.find(item => item.id === 3)!
+    expect(equipmentCategoryOf({
+      ...legacyCameraResource,
+      displayMetadata: {
+        ...legacyCameraResource.displayMetadata,
+        category: undefined,
+      },
+    })).toBe('body')
+    expect(equipmentCategoryOf(legacyLensResource)).toBe('lens')
   })
 
   it('rejects non-finite or out-of-range student interest scores', () => {
@@ -278,7 +314,7 @@ describe('resource matching', () => {
     })
 
     expect(ranked.course.map(item => item.id)).toEqual([1])
-    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([2, 3])
+    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([3, 2])
     expect(ranked.studentWork.map(item => item.id)).toEqual([4])
     const displayed = [
       ...ranked.course,
@@ -373,9 +409,64 @@ describe('resource matching', () => {
         facility(14, { tags: [tag('portrait')] }),
       ],
     })
-    expect(combinedCapability.capabilityEvidence.map(item => item.id)).toEqual([11, 12, 14])
+    expect(combinedCapability.capabilityEvidence.map(item => item.id)).toEqual([12, 14, 11, 13])
     expect(combinedCapability.capabilityEvidence
-      .filter(item => item.primaryTag === 'documentary')).toHaveLength(2)
+      .filter(item => item.primaryTag === 'documentary')).toHaveLength(3)
+  })
+
+  it('selects two facilities, one body, and one lens before higher-affinity other equipment', () => {
+    const ranked = rankResources({
+      interestVector: {
+        facility_a: 1,
+        facility_b: 0.9,
+        body: 0.8,
+        lens: 0.7,
+        lighting: 0.95,
+      },
+      selectedInterests: selected(['facility_a', 'facility_b', 'body', 'lens', 'lighting']),
+      candidates: [
+        facility(40, { tags: [tag('facility_a')] }),
+        facility(41, { tags: [tag('facility_b')] }),
+        equipment(42, {
+          metadata: { ...equipment(42).metadata, category: 'body' },
+          tags: [tag('body')],
+        }),
+        equipment(43, {
+          metadata: { ...equipment(43).metadata, category: 'lens' },
+          tags: [tag('lens')],
+        }),
+        equipment(44, {
+          metadata: { ...equipment(44).metadata, category: 'lighting' },
+          tags: [tag('lighting')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([40, 41, 42, 43])
+  })
+
+  it('fills unused capability slots with the strongest unselected equipment', () => {
+    const ranked = rankResources({
+      interestVector: { facility: 1, body: 0.8, lighting: 0.95, audio: 0.7 },
+      selectedInterests: selected(['facility', 'body', 'lighting', 'audio']),
+      candidates: [
+        facility(50, { tags: [tag('facility')] }),
+        equipment(51, {
+          metadata: { ...equipment(51).metadata, category: 'body' },
+          tags: [tag('body')],
+        }),
+        equipment(52, {
+          metadata: { ...equipment(52).metadata, category: 'lighting' },
+          tags: [tag('lighting')],
+        }),
+        equipment(53, {
+          metadata: { ...equipment(53).metadata, category: 'audio' },
+          tags: [tag('audio')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([50, 51, 52, 53])
   })
 
   it('combines capability and project pools, applies every cap, and preserves evidence', () => {
@@ -428,20 +519,21 @@ describe('resource matching', () => {
     expect(ranked.capabilityEvidence).toHaveLength(4)
     expect(ranked.capabilityEvidence.slice(0, 2)).toHaveLength(2)
     expect(ranked.capabilityEvidence.map(item => item.type)).toEqual([
-      'equipment',
+      'facility',
       'facility',
       'equipment',
-      'facility',
+      'equipment',
     ])
-    expect(ranked.capabilityEvidence[0]?.displayMetadata).toEqual({
+    expect(ranked.capabilityEvidence.find(item => item.id === 1)?.displayMetadata).toEqual({
       locationLabel: '판타지랩',
       confirmedQuantity: 2,
       reservationUrl: 'https://gjureserve.co.kr',
       accessMode: 'inquiry',
       accessLabel: '문의 전용',
     })
-    expect(JSON.stringify(ranked.capabilityEvidence[0])).not.toContain('SECRET-01')
-    expect(ranked.capabilityEvidence[1]?.displayMetadata).toEqual({
+    expect(JSON.stringify(ranked.capabilityEvidence.find(item => item.id === 1)))
+      .not.toContain('SECRET-01')
+    expect(ranked.capabilityEvidence.find(item => item.id === 2)?.displayMetadata).toEqual({
       locationLabel: '학과',
       operationNote: '학과 확인 필요',
     })

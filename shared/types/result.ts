@@ -20,10 +20,14 @@ export interface CourseDisplayMetadata {
   readonly credits: number
 }
 
+export const equipmentCategories = ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const
+export type EquipmentCategory = typeof equipmentCategories[number]
+
 interface EquipmentDisplayMetadataBase {
   readonly locationLabel: string
   readonly confirmedQuantity: number
   readonly reservationUrl: 'https://gjureserve.co.kr'
+  readonly category?: EquipmentCategory
 }
 
 export type EquipmentDisplayMetadata = Readonly<EquipmentDisplayMetadataBase & (

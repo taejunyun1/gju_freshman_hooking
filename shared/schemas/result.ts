@@ -7,6 +7,7 @@ import {
   trackKeys,
 } from '../types/domain'
 import type { CareerNarrative } from '../types/career-narrative'
+import { equipmentCategories } from '../types/result'
 import type { ResultSnapshot, ResultSnapshotCore } from '../types/result'
 
 export const resultSnapshotMaxBytes = 262_144
@@ -134,6 +135,7 @@ const equipmentDisplayMetadataBaseShape = {
   locationLabel: boundedText(1, 120),
   confirmedQuantity: z.number().int().min(1).max(999),
   reservationUrl: z.literal('https://gjureserve.co.kr'),
+  category: z.enum(equipmentCategories).optional(),
 }
 
 const equipmentDisplayMetadataSchema = z.discriminatedUnion('accessMode', [

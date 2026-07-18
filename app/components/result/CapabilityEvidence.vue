@@ -4,6 +4,7 @@ import type {
   EquipmentResultResource,
   FacilityResultResource,
 } from '../../../shared/types/result'
+import { equipmentCategoryOf } from '../../../shared/utils/equipment-category'
 import ConnectionReason from './ConnectionReason.vue'
 
 const props = withDefaults(defineProps<{
@@ -17,17 +18,36 @@ type CapabilityResource = EquipmentResultResource | FacilityResultResource
 
 const expanded = ref(false)
 const evidenceId = `capability-evidence-${props.resultPublicId}`
-const allEvidence = computed<readonly CapabilityResource[]>(() => [
+const rankedEvidence = computed<readonly CapabilityResource[]>(() => [
   ...props.equipment,
   ...props.facility,
 ].sort((left, right) => (
   right.affinity - left.affinity
   || right.sourceDate.localeCompare(left.sourceDate)
   || left.id - right.id
-)).slice(0, 4))
-const visibleEvidence = computed(() => expanded.value
-  ? allEvidence.value
-  : allEvidence.value.slice(0, 2))
+)))
+const facilities = computed(() => rankedEvidence.value.filter(resource => resource.type === 'facility'))
+const bodies = computed(() => rankedEvidence.value.filter(
+  (resource): resource is EquipmentResultResource => (
+    resource.type === 'equipment' && equipmentCategoryOf(resource) === 'body'
+  ),
+))
+const lenses = computed(() => rankedEvidence.value.filter(
+  (resource): resource is EquipmentResultResource => (
+    resource.type === 'equipment' && equipmentCategoryOf(resource) === 'lens'
+  ),
+))
+const featured = computed<readonly CapabilityResource[]>(() => [
+  facilities.value[0],
+  bodies.value[0],
+  lenses.value[0],
+].filter((item): item is CapabilityResource => item !== undefined))
+const remaining = computed(() => {
+  const featuredKeys = new Set(featured.value.map(resource => `${resource.type}-${resource.id}`))
+  return rankedEvidence.value.filter(resource => !featuredKeys.has(`${resource.type}-${resource.id}`))
+})
+const allEvidence = computed(() => [...featured.value, ...remaining.value].slice(0, 4))
+const visibleEvidence = computed(() => expanded.value ? allEvidence.value : featured.value)
 
 const recordResourceOpen = (resource: EquipmentResultResource): void => {
   if (!props.telemetryEnabled) return
@@ -55,6 +75,7 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
         class="capability__item"
         :class="`capability__item--${resource.type}`"
         data-capability-evidence
+        :data-capability-kind="resource.type === 'facility' ? 'facility' : equipmentCategoryOf(resource)"
       >
         <div class="capability__header">
           <span>{{ resource.type === 'equipment' ? 'EQUIPMENT' : 'FACILITY' }}</span>
@@ -118,7 +139,7 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
     </div>
 
     <button
-      v-if="allEvidence.length > 2"
+      v-if="allEvidence.length > featured.length"
       class="capability__more"
       data-testid="capability-more"
       type="button"
@@ -126,7 +147,7 @@ const recordResourceOpen = (resource: EquipmentResultResource): void => {
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
-      {{ expanded ? '제작 기반 근거 접기' : '이 제작을 가능하게 하는 기반 더보기' }}
+      {{ expanded ? '학과 기반 접기' : '학과 기반 더보기' }}
     </button>
   </div>
 </template>

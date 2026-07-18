@@ -6,8 +6,12 @@ import { z, ZodError } from 'zod'
 
 const SOURCE_DATE = '2026-07-14'
 const RESERVATION_URL = 'https://gjureserve.co.kr'
+const FACILITY_VERIFIED_AT = '2026-07-18T16:28:30+09:00'
+const FACILITY_LOCATION_LABEL = '사진영상미디어학과'
+const FACILITY_OPERATION_NOTE = '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
+const COMPUTER_LAB_OPERATION_NOTE = '2020년형 iMac 및 RTX 4080급 그래픽카드 탑재 워크스테이션이 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:455036fccc0e36e320b1717861e52e037a33cefb0493079a06956c76b1c78ec9'
+const EXPECTED_CONTENT_REVISION = 'sha256:ffe1638a4680a07452ac685d13f2c4cedf2dc51912650ed4e8fbbdf676831ee2'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -179,7 +183,7 @@ const facilityRecordSchema = z.object({
   status: draftSchema,
   visibility: z.literal('public'),
   sourceDate: sourceDateSchema,
-  lastVerifiedAt: z.null(),
+  lastVerifiedAt: z.literal(FACILITY_VERIFIED_AT),
 }).strict()
 
 const uniqueTrackEvidenceSchema = z.array(trackKeySchema).min(1).max(4)
@@ -468,6 +472,13 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
 
   const facilities = parseSection('facilities', facilityRecordSchema.array(), input.facilities)
   assertExactOrder('facilities', facilities.map(facility => facility.facilityKey), expectedFacilityKeys)
+  if (facilities.some(facility => facility.operationNote !== (
+    facility.facilityKey === 'computer_lab'
+      ? COMPUTER_LAB_OPERATION_NOTE
+      : FACILITY_OPERATION_NOTE
+  ))) {
+    throw new Error('facility operation notes differ from the verified manifest')
+  }
   const courseTitles = new Set(curriculum.map(course => course.title))
   if (facilities.some(facility => facility.exampleCourses.some(title => !courseTitles.has(title)))) {
     throw new Error('facilities seed contains a broken course reference')
@@ -724,6 +735,7 @@ export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedConte
         seedKey,
         facilityKey: facility.facilityKey,
         facilityType: facility.facilityType,
+        location_label: FACILITY_LOCATION_LABEL,
         activities: [facility.coreActivity],
         exampleCourses: facility.exampleCourses,
         operationNote: facility.operationNote,

@@ -222,6 +222,22 @@ const makeDenseKoreanSnapshot = (fillLength: number) => {
 }
 
 describe('result snapshot decoder', () => {
+  it('accepts every public equipment category, rejects unknown values, and preserves old snapshots', () => {
+    for (const category of ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const) {
+      const snapshot = clone(makeValidSnapshot())
+      snapshot.resources.equipment[0]!.displayMetadata.category = category
+      expect(() => decodeResultSnapshot(snapshot)).not.toThrow()
+    }
+
+    const invalid = clone(makeValidSnapshot())
+    invalid.resources.equipment[0]!.displayMetadata.category = 'camera-secret' as 'body'
+    expect(() => decodeResultSnapshot(invalid)).toThrow()
+
+    const legacy = clone(makeValidSnapshot())
+    expect(legacy.resources.equipment[0]!.displayMetadata).not.toHaveProperty('category')
+    expect(() => decodeResultSnapshot(legacy)).not.toThrow()
+  })
+
   it('upgrades a valid legacy stored snapshot in memory without weakening new writes', () => {
     const current = makeResultSnapshot()
     const { careerNarrative: _removed, ...legacy } = current

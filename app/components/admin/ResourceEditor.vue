@@ -8,10 +8,12 @@ import {
   type AdminResourceWrite,
 } from '../../../shared/schemas/admin-resources'
 import { getAdminResourcePublishIssues } from '../../../shared/schemas/admin-resource-publish-validator'
-import type {
-  EquipmentResultResource,
-  FacilityResultResource,
-  ResultResource,
+import {
+  equipmentCategories,
+  type EquipmentCategory,
+  type EquipmentResultResource,
+  type FacilityResultResource,
+  type ResultResource,
 } from '../../../shared/types/result'
 import CapabilityEvidence from '../result/CapabilityEvidence.vue'
 import ResourceCard from '../result/ResourceCard.vue'
@@ -311,6 +313,7 @@ const previewResource = computed<ResultResource>(() => {
     const metadataAccessMode = editable.metadata.accessMode === 'reservation' ? 'reservation' : 'inquiry'
     const accessMode = first?.accessMode ?? metadataAccessMode
     const metadataLocation = String(editable.metadata.locationLabel || '사진영상미디어학과 기자재실')
+    const category = equipmentCategories.find(item => item === editable.metadata.category)
     return {
       ...common,
       type: 'equipment',
@@ -322,6 +325,7 @@ const previewResource = computed<ResultResource>(() => {
         reservationUrl: 'https://gjureserve.co.kr',
         accessMode,
         accessLabel: accessMode === 'reservation' ? '예약 가능' : '문의 전용',
+        ...(category === undefined ? {} : { category: category as EquipmentCategory }),
       },
     } as ResultResource
   }

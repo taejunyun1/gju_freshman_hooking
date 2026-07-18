@@ -884,6 +884,7 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
         reservationUrl: valueAt(metadata, 'reservationUrl', 'reservation_url'),
         accessMode: valueAt(metadata, 'accessMode', 'access_mode'),
         accessLabel: valueAt(metadata, 'accessLabel', 'access_label'),
+        category: metadata.category,
       },
     } as ResourceCandidate
     case 'facility': return {

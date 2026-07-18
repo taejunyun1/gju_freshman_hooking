@@ -61,6 +61,7 @@ const equipmentResource: AdminResource = {
   type: 'equipment',
   title: '중형 카메라',
   metadata: {
+    category: 'body',
     confirmedQuantity: 0,
     locationKey: 'department_equipment_room',
     locationLabel: '사진영상미디어학과 기자재실',

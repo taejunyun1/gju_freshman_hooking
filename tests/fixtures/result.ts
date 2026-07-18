@@ -34,6 +34,7 @@ const equipment = (
   title: string,
   quantity: number,
   accessMode: 'reservation' | 'inquiry',
+  category: 'body' | 'lens',
 ) => ({
   id,
   type: 'equipment' as const,
@@ -51,6 +52,7 @@ const equipment = (
     reservationUrl: 'https://gjureserve.co.kr' as const,
     accessMode,
     accessLabel: accessMode === 'reservation' ? '예약 가능' as const : '문의 전용' as const,
+    category,
   },
 })
 
@@ -120,8 +122,8 @@ const snapshotInput = () => ({
   resources: {
     course: [...courses],
     equipment: [
-      equipment(201, 'APUTURE 600X', 2, 'reservation'),
-      equipment(202, '프로포토 B10', 1, 'inquiry'),
+      equipment(201, '소니 FX3 Body', 2, 'reservation', 'body'),
+      equipment(202, '소니 FE 24-70mm F2.8 Lens', 1, 'inquiry', 'lens'),
     ],
     facility: [
       facility(203, '스튜디오 A(호리존)', '호심관 스튜디오 A'),

@@ -1,16 +1,19 @@
 import { z } from 'zod'
 import { resultResourceSchema } from '../../../shared/schemas/result'
-import type {
-  CareerResultResource,
-  CourseResultResource,
-  EmptyDisplayMetadata,
-  EquipmentResultResource,
-  ExtracurricularResultResource,
-  FacilityResultResource,
-  ProjectResultResource,
-  ResultResource,
-  StudentWorkResultResource,
-  SupportResultResource,
+import { equipmentCategoryOf } from '../../../shared/utils/equipment-category'
+import {
+  equipmentCategories,
+  type CareerResultResource,
+  type CourseResultResource,
+  type EmptyDisplayMetadata,
+  type EquipmentCategory,
+  type EquipmentResultResource,
+  type ExtracurricularResultResource,
+  type FacilityResultResource,
+  type ProjectResultResource,
+  type ResultResource,
+  type StudentWorkResultResource,
+  type SupportResultResource,
 } from '../../../shared/types/result'
 import {
   renderConnectionReason,
@@ -34,6 +37,7 @@ interface EquipmentCandidateMetadata {
   readonly reservationUrl: 'https://gjureserve.co.kr'
   readonly accessMode: 'reservation' | 'inquiry'
   readonly accessLabel: '예약 가능' | '문의 전용'
+  readonly category?: EquipmentCategory
   readonly [key: string]: unknown
 }
 
@@ -119,6 +123,7 @@ const allowedTypes = new Set<ResultResource['type']>([
 ])
 const tagKeyPattern = /^[a-z][a-z0-9_]{0,63}$/u
 const verifiedAtSchema = z.iso.datetime({ offset: true }).max(32)
+const equipmentCategorySet = new Set<unknown>(equipmentCategories)
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -177,6 +182,7 @@ const hasEquipmentMetadata = (metadata: Record<string, unknown>): boolean => (
   && metadata.confirmedQuantity >= 1
   && metadata.confirmedQuantity <= 999
   && metadata.reservationUrl === 'https://gjureserve.co.kr'
+  && (metadata.category === undefined || equipmentCategorySet.has(metadata.category))
   && ((metadata.accessMode === 'reservation' && metadata.accessLabel === '예약 가능')
     || (metadata.accessMode === 'inquiry' && metadata.accessLabel === '문의 전용'))
 )
@@ -335,6 +341,9 @@ const toResultResource = (
         reservationUrl: candidate.metadata.reservationUrl,
         accessMode: candidate.metadata.accessMode,
         accessLabel: candidate.metadata.accessLabel,
+        ...(candidate.metadata.category === undefined
+          ? {}
+          : { category: candidate.metadata.category }),
       }),
     }) as EquipmentResultResource)
     case 'facility': return canonicalResult(Object.freeze({
@@ -408,6 +417,24 @@ const resultsOf = <Result extends ResultResource>(
   candidates: readonly RankedCandidate[],
 ): readonly Result[] => Object.freeze(candidates.map(candidate => candidate.result as Result))
 
+const selectCapabilityEvidence = (
+  ranked: readonly RankedCandidate[],
+): readonly RankedCandidate[] => {
+  const facilities = ranked.filter(item => item.candidate.type === 'facility').slice(0, 2)
+  const equipment = ranked.filter(
+    (item): item is RankedCandidate & { result: EquipmentResultResource } => (
+      item.candidate.type === 'equipment' && item.result.type === 'equipment'
+    ),
+  )
+  const body = equipment.find(item => equipmentCategoryOf(item.result) === 'body')
+  const lens = equipment.find(item => equipmentCategoryOf(item.result) === 'lens')
+  const selected = [...facilities, body, lens]
+    .filter((item): item is RankedCandidate => item !== undefined)
+  const selectedIds = new Set(selected.map(item => item.candidate.id))
+  const filler = equipment.filter(item => !selectedIds.has(item.candidate.id))
+  return Object.freeze([...selected, ...filler].slice(0, 4))
+}
+
 export const rankResources = (input: RankResourcesInput): RankedResources => {
   assertInterestVector(input.interestVector)
   assertSelectedInterests(input.selectedInterests)
@@ -432,9 +459,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .sort(compareRankedCandidates)
 
   const course = selectDiverse(ranked.filter(item => item.candidate.type === 'course'), 5)
-  const capabilityEvidence = selectDiverse(ranked.filter(item => (
-    item.candidate.type === 'equipment' || item.candidate.type === 'facility'
-  )), 4)
+  const capabilityEvidence = selectCapabilityEvidence(ranked)
   const extracurricularProject = selectDiverse(ranked.filter(item => (
     item.candidate.type === 'extracurricular' || item.candidate.type === 'project'
   )), 3)
