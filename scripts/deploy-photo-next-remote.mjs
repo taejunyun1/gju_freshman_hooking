@@ -121,7 +121,7 @@ const printPlan = () => {
   console.log(`- DB: ${plan.supabaseDbPush.slice(1).join(' ')}`)
   console.log(`- private-free 빌드: ${plan.build[0]} build`)
   console.log(`- 빌드 후 full-env/artifact 검증: ${plan.verifyEnvironment[1]}`)
-  console.log('- 배포: staging 후 production, 각각 deploy --secrets-file')
+  console.log('- 배포: staging 후 관리자/콘텐츠 gate, 이후 production deploy --secrets-file')
   console.log('- provider-off: Worker OpenAI secret 이름을 삭제·재검증하고 config 외 plaintext var를 배포로 제거')
   console.log(`- 관리자: ${ADMIN_EMAIL}`)
   console.log(`- 재개 상태: ${STATE_PATH} (0600)`)
@@ -989,7 +989,7 @@ const deployEnvironment = (
     return
   }
 
-  console.log(`${environment === 'staging' ? '4' : '5'}/6 Cloudflare ${environment} 배포`)
+  console.log(`${environment === 'staging' ? '4' : '6'}/6 Cloudflare ${environment} 배포`)
   const secretsFile = writeTemporarySecrets(environment, state)
   try {
     const args = environment === 'staging'
@@ -1033,9 +1033,30 @@ const findAdminUser = async (client, email) => {
   fail('Supabase 관리자 사용자 검색 범위를 초과했습니다.')
 }
 
+const isActivationCount = value => Number.isInteger(value) && value >= 0
+
+const upsertAdminAndActivateContent = async (serviceClient, userId) => {
+  const { error: upsertError } = await serviceClient
+    .from('admin_users')
+    .upsert({ id: userId, role: 'admin', is_active: true }, { onConflict: 'id' })
+  if (upsertError) fail('admin_users 권한 행 구성에 실패했습니다.')
+
+  const { data: activation, error: activationError } = await serviceClient
+    .rpc('activate_verified_2026_content')
+  if (activationError
+    || activation === null
+    || typeof activation !== 'object'
+    || !['updated', 'already_activated'].includes(activation.status)
+    || !isActivationCount(activation.facultyPublished)
+    || !isActivationCount(activation.resourcesPublished)
+    || !isActivationCount(activation.validationErrors)) {
+    fail('검증된 2026 콘텐츠 운영 발행에 실패했습니다.')
+  }
+}
+
 const configureAdmin = async state => {
   if (state.admin.configured) return
-  console.log('6/6 관리자 계정 구성 및 로그인 검증')
+  console.log('5/6 관리자 계정 구성, 콘텐츠 활성화 및 로그인 검증')
   const { createClient } = await import('@supabase/supabase-js')
   const clientOptions = {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -1065,22 +1086,7 @@ const configureAdmin = async state => {
     userId = data.user.id
   }
 
-  const { error: upsertError } = await serviceClient
-    .from('admin_users')
-    .upsert({ id: userId, role: 'admin', is_active: true }, { onConflict: 'id' })
-  if (upsertError) fail('admin_users 권한 행 구성에 실패했습니다.')
-
-  const { data: activation, error: activationError } = await serviceClient
-    .rpc('activate_verified_2026_content')
-  if (activationError
-    || activation === null
-    || typeof activation !== 'object'
-    || !['updated', 'already_activated'].includes(activation.status)
-    || !Number.isInteger(activation.facultyPublished)
-    || !Number.isInteger(activation.resourcesPublished)
-    || !Number.isInteger(activation.validationErrors)) {
-    fail('검증된 2026 콘텐츠 운영 발행에 실패했습니다.')
-  }
+  await upsertAdminAndActivateContent(serviceClient, userId)
 
   const publicClient = createClient(
     SUPABASE_URL,
@@ -1204,7 +1210,123 @@ const rejectsSafely = operation => {
   }
 }
 
-const runSelfCheck = () => {
+const selfCheckVerifiedContentActivation = async () => {
+  const userId = '26000000-0000-4000-8000-000000000026'
+  const secretMarker = 'activation-self-check-secret'
+  const activationResult = status => ({
+    status,
+    facultyPublished: 6,
+    resourcesPublished: 41,
+    validationErrors: 3,
+  })
+  const fakeClient = ({
+    activation = activationResult('updated'),
+    activationError = null,
+    upsertError = null,
+  } = {}) => {
+    const calls = []
+    return {
+      calls,
+      client: {
+        from: (table) => {
+          assert(table === 'admin_users', 'activation self-check가 예상하지 못한 table을 사용했습니다.')
+          return {
+            upsert: async (values, options) => {
+              calls.push({ operation: 'upsert', values, options })
+              return { error: upsertError }
+            },
+          }
+        },
+        rpc: async (name) => {
+          calls.push({ operation: 'activate', name })
+          return { data: activation, error: activationError }
+        },
+      },
+    }
+  }
+  const assertCallContract = (calls) => {
+    assert(
+      calls.map(call => call.operation).join(',') === 'upsert,activate',
+      'admin upsert 이후 activation이 정확히 한 번 호출되지 않았습니다.',
+    )
+    assert(
+      calls[0].values.id === userId
+        && calls[0].values.role === 'admin'
+        && calls[0].values.is_active === true
+        && calls[0].options.onConflict === 'id',
+      'admin_users upsert payload가 잘못되었습니다.',
+    )
+    assert(
+      calls[1].name === 'activate_verified_2026_content',
+      '검증 콘텐츠 activation RPC 이름이 잘못되었습니다.',
+    )
+  }
+  const captureSafeMessage = async (operation) => {
+    let caught = null
+    try {
+      await operation()
+    }
+    catch (error) {
+      caught = error
+    }
+    assert(caught instanceof SafeDeploymentError, 'activation 실패가 safe deployment error로 닫히지 않았습니다.')
+    return caught.message
+  }
+
+  for (const status of ['updated', 'already_activated']) {
+    const check = fakeClient({ activation: activationResult(status) })
+    await upsertAdminAndActivateContent(check.client, userId)
+    assertCallContract(check.calls)
+  }
+
+  const rpcFailure = fakeClient({
+    activation: { payload: secretMarker },
+    activationError: { message: secretMarker },
+  })
+  const rpcFailureMessage = await captureSafeMessage(
+    () => upsertAdminAndActivateContent(rpcFailure.client, userId),
+  )
+  assertCallContract(rpcFailure.calls)
+  assert(
+    rpcFailureMessage === '검증된 2026 콘텐츠 운영 발행에 실패했습니다.'
+      && !rpcFailureMessage.includes(secretMarker),
+    'activation RPC 오류가 secret 또는 payload를 노출했습니다.',
+  )
+
+  const malformed = fakeClient({
+    activation: {
+      status: 'updated',
+      facultyPublished: -1,
+      resourcesPublished: 41,
+      validationErrors: 3,
+      payload: secretMarker,
+    },
+  })
+  const malformedMessage = await captureSafeMessage(
+    () => upsertAdminAndActivateContent(malformed.client, userId),
+  )
+  assertCallContract(malformed.calls)
+  assert(
+    malformedMessage === '검증된 2026 콘텐츠 운영 발행에 실패했습니다.'
+      && !malformedMessage.includes(secretMarker),
+    'malformed activation 응답이 fail-closed 또는 secret-safe가 아닙니다.',
+  )
+
+  const upsertFailure = fakeClient({ upsertError: { message: secretMarker } })
+  const upsertFailureMessage = await captureSafeMessage(
+    () => upsertAdminAndActivateContent(upsertFailure.client, userId),
+  )
+  assert(
+    upsertFailure.calls.map(call => call.operation).join(',') === 'upsert'
+      && upsertFailureMessage === 'admin_users 권한 행 구성에 실패했습니다.'
+      && !upsertFailureMessage.includes(secretMarker),
+    'admin upsert 실패 후 activation 차단 또는 secret-safe 오류 계약이 깨졌습니다.',
+  )
+
+  console.log('Verified content activation self-check passed (network calls: 0, remote writes: 0).')
+}
+
+const runSelfCheck = async () => {
   const modern = parseSupabaseApiKeys(JSON.stringify({
     data: [
       { name: 'publishable', api_key: 'sb_publishable_example' },
@@ -1805,6 +1927,7 @@ const runSelfCheck = () => {
   assert(renameFailed, 'atomic secret write failure self-check가 실패를 재현하지 못했습니다.')
   assert(leakedNames.length === 0, 'atomic secret write 실패 후 임시 secret 파일이 남았습니다.')
 
+  await selfCheckVerifiedContentActivation()
   console.log('Remote deployment runner self-check passed (network calls: 0, remote writes: 0).')
 }
 
@@ -1829,8 +1952,8 @@ const runDeployment = async () => {
     pushDatabase(state)
     verifyAndBuild(state)
     deployEnvironment('staging', state)
-    deployEnvironment('production', state)
     await configureAdmin(state)
+    deployEnvironment('production', state)
     await smokeDeployments(state)
     writeResultAndRemoveState(state)
 
@@ -1874,7 +1997,7 @@ const main = async () => {
   const [mode, ...extra] = process.argv.slice(2)
   assert(extra.length === 0, '배포 러너는 추가 인자를 허용하지 않습니다.')
   if (mode === '--self-check') {
-    runSelfCheck()
+    await runSelfCheck()
     return
   }
   if (mode === '--plan') {

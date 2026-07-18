@@ -258,6 +258,22 @@ describe('deployment and E2E safety contracts', () => {
     expect(result.stdout).toContain(
       'Fresh staging Worker deployment branch self-check passed.',
     )
+    expect(result.stdout).toContain(
+      'Verified content activation self-check passed (network calls: 0, remote writes: 0).',
+    )
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain('activation-self-check-secret')
+  })
+
+  it('gates production Worker deployment on verified content activation', () => {
+    const runner = readFileSync('scripts/deploy-photo-next-remote.mjs', 'utf8')
+    const deployment = runner.slice(runner.indexOf('const runDeployment = async () =>'))
+    const staging = deployment.indexOf("deployEnvironment('staging', state)")
+    const activation = deployment.indexOf('await configureAdmin(state)')
+    const production = deployment.indexOf("deployEnvironment('production', state)")
+
+    expect(staging).toBeGreaterThanOrEqual(0)
+    expect(activation).toBeGreaterThan(staging)
+    expect(production).toBeGreaterThan(activation)
   })
 
   it('tracks a release-only runner that preserves existing Worker secrets and fails closed', () => {
