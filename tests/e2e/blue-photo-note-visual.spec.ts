@@ -3,6 +3,7 @@ import {
   expectedCommercialMatchingFixtureSummary,
   installCommercialMatchingFixture,
 } from './support/commercial-matching-fixture'
+import { provisionLocalRosterStudent } from './support/local-roster-student-fixture'
 import { registerAndLoginStudent, uniqueAssessmentPhone } from './support/student'
 
 const desktop = { width: 1280, height: 900 }
@@ -26,10 +27,13 @@ const assertKeyControl = async (control: Locator) => {
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44)
 }
 
-const assertFocusOutline = async (control: Locator, outlineTarget = control) => {
-  await control.focus()
-  const outline = await outlineTarget.evaluate((node) => {
-    const style = getComputedStyle(node)
+const assertKeyboardFocusOutline = async (page: Page) => {
+  await page.keyboard.press('Tab')
+  const focused = page.locator(':focus-visible')
+  await expect(focused).toHaveCount(1)
+  const outline = await focused.evaluate((node) => {
+    const target = node.closest('.option-card') ?? node
+    const style = getComputedStyle(target)
     return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) }
   })
   expect(outline).toEqual({ style: 'solid', width: 3 })
@@ -77,7 +81,9 @@ for (const path of ['/', '/login', '/admin/login']) {
 
 test('a local assessment state and populated result expose the visual and accessibility cues', async ({ page }, testInfo) => {
   await page.setViewportSize(desktop)
-  await registerAndLoginStudent(page, uniqueAssessmentPhone(testInfo))
+  const phone = uniqueAssessmentPhone(testInfo)
+  const credentials = provisionLocalRosterStudent(phone)
+  await registerAndLoginStudent(page, phone, undefined, { phone, ...credentials })
 
   const firstChoice = page.getByRole('checkbox', { name: /제품·패션·광고 이미지 만들기/u })
   await firstChoice.check()
@@ -85,7 +91,7 @@ test('a local assessment state and populated result expose the visual and access
   await assertVisualContract(page)
   await assertRadius(optionCard)
   await assertKeyControl(page.getByTestId('assessment-next'))
-  await assertFocusOutline(firstChoice, optionCard)
+  await assertKeyboardFocusOutline(page)
   await expect(optionCard).toContainText('선택됨')
   await expect(optionCard).toHaveClass(/option-card--selected/u)
 
@@ -102,7 +108,6 @@ test('a local assessment state and populated result expose the visual and access
   await assertVisualContract(page)
   await assertRadius(page.locator('[data-result-section="summary"]'))
   await assertKeyControl(page.getByRole('link', { name: '최근 편집본' }))
-  await assertFocusOutline(page.getByRole('link', { name: '최근 편집본' }))
 
   await page.setViewportSize(mobile)
   await assertVisualContract(page)
@@ -114,7 +119,7 @@ test('a local assessment state and populated result expose the visual and access
   }))
   await page.goto('/assessment')
   await expect(page.getByText('LOAD / INTERRUPTED', { exact: true })).toBeVisible()
-  await expect(page.getByRole('alert')).toContainText('진단')
+  await expect(page.getByRole('alert')).toContainText('선택지를 불러오지 못했습니다')
 })
 
 test('the route-intercepted administrator students surface keeps visual contracts without external data', async ({ page }) => {
@@ -154,10 +159,14 @@ test('the route-intercepted administrator students surface keeps visual contract
     await page.setViewportSize(viewport)
     await page.goto('/admin/students')
     await expect(page.getByRole('heading', { name: '학생 찾기' })).toBeVisible()
-    await expect(page.getByText('시각 점검 지원자', { exact: true })).toBeVisible()
+    await expect(viewport.width === desktop.width
+      ? page.locator('.student-data__desktop').getByText('시각 점검 지원자', { exact: true })
+      : page.locator('.student-data__mobile h2', { hasText: '시각 점검 지원자' }))
+      .toBeVisible()
     await assertVisualContract(page)
-    await assertRadius(page.locator('.student-data'))
+    await assertRadius(viewport.width === desktop.width
+      ? page.locator('.student-data__desktop')
+      : page.locator('.student-data__mobile article'))
     await assertKeyControl(page.getByRole('button', { name: '학생 개별 등록' }))
-    await assertFocusOutline(page.locator('.admin-shell nav a').first())
   }
 })

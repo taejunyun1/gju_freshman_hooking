@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { defineConfig, devices } from '@playwright/test'
 
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1'
@@ -13,6 +13,10 @@ const readStatusValue = (status: SupabaseStatus, ...names: string[]): string => 
   }
   throw new Error('Local Supabase status is missing a required runtime field.')
 }
+
+const e2eSecret = (label: string): string => createHash('sha256')
+  .update(`photo-next-e2e-${label}-v1`)
+  .digest('base64url')
 
 const localRuntimeEnvironment = (): Record<string, string> => {
   let status: SupabaseStatus
@@ -33,6 +37,15 @@ const localRuntimeEnvironment = (): Record<string, string> => {
     throw new Error('E2E tests only support the local Supabase stack.')
   }
 
+  const e2eSecrets = {
+    NUXT_NAME_HMAC_KEY: e2eSecret('name-hmac'),
+    NUXT_PASSWORD_PEPPER: e2eSecret('password-pepper'),
+    NUXT_PASSWORD_PEPPER_VERSION: '1',
+    NUXT_PHONE_ENCRYPTION_KEY: e2eSecret('phone-encryption'),
+    NUXT_PHONE_HMAC_KEY: e2eSecret('phone-hmac'),
+  }
+  Object.assign(process.env, e2eSecrets)
+
   return {
     OPENAI_API_KEY: '',
     OPENAI_CAREER_NARRATIVE_DAILY_CAP: '500',
@@ -41,11 +54,9 @@ const localRuntimeEnvironment = (): Record<string, string> => {
     OPENAI_CAREER_NARRATIVE_PROSPECT_CAP: '5',
     OPENAI_CAREER_NARRATIVE_TIMEOUT_MS: '5000',
     OPENAI_SAFETY_HMAC_KEY: '',
-    NUXT_PHONE_ENCRYPTION_KEY: randomBytes(32).toString('base64url'),
-    NUXT_PHONE_HMAC_KEY: randomBytes(32).toString('base64url'),
+    ...e2eSecrets,
     NUXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: readStatusValue(status, 'PUBLISHABLE_KEY', 'ANON_KEY'),
     NUXT_PUBLIC_SUPABASE_URL: supabaseUrl,
-    NUXT_PASSWORD_PEPPER: randomBytes(32).toString('base64url'),
     NUXT_SUPABASE_SECRET_KEY: readStatusValue(status, 'SECRET_KEY', 'SERVICE_ROLE_KEY'),
   }
 }

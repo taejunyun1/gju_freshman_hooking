@@ -6,6 +6,7 @@ type RegisteredStudent = {
 }
 
 type OnRegistered = (student: RegisteredStudent) => Promise<void>
+type LocalCredentials = { phone: string, password: string, nickname?: string }
 
 const fallbackPasswordForPhone = (phone: string): string => `${phone.replace(/\D/gu, '').slice(-4)}AA`
 
@@ -13,10 +14,11 @@ export const registerAndLoginStudent = async (
   page: Page,
   phone: string,
   onRegistered?: OnRegistered,
+  localCredentials?: LocalCredentials,
 ): Promise<RegisteredStudent> => {
-  const rosterPhone = process.env.PHOTO_NEXT_E2E_STUDENT_PHONE ?? phone
-  const rosterPassword = process.env.PHOTO_NEXT_E2E_STUDENT_PASSWORD ?? fallbackPasswordForPhone(rosterPhone)
-  const nickname = process.env.PHOTO_NEXT_E2E_STUDENT_NAME ?? '지원자'
+  const rosterPhone = localCredentials?.phone ?? process.env.PHOTO_NEXT_E2E_STUDENT_PHONE ?? phone
+  const rosterPassword = localCredentials?.password ?? process.env.PHOTO_NEXT_E2E_STUDENT_PASSWORD ?? fallbackPasswordForPhone(rosterPhone)
+  const nickname = localCredentials?.nickname ?? process.env.PHOTO_NEXT_E2E_STUDENT_NAME ?? '지원자'
 
   await onRegistered?.({ nickname })
   await page.goto('/login')
@@ -27,7 +29,8 @@ export const registerAndLoginStudent = async (
     return new URL(response.url()).pathname === '/api/student/login'
   })
   await page.getByRole('button', { name: '내 경로 이어 보기' }).click()
-  expect((await loginResponsePromise).ok()).toBe(true)
+  const loginResponse = await loginResponsePromise
+  expect(loginResponse.status(), await loginResponse.text()).toBe(200)
 
   await expect(page).toHaveURL('/assessment')
   return { nickname }
