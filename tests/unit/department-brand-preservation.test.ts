@@ -31,6 +31,13 @@ describe('department brand preservation', () => {
   it('does not use the retired department name in current UI entries', () => {
     const currentUiEntries = [
       'app/pages/index.vue',
+      'app/pages/login.vue',
+      'app/pages/assessment.vue',
+      'app/pages/history.vue',
+      'app/pages/counseling.vue',
+      'app/pages/result/[publicId].vue',
+      'app/components/result/ResultTimeline.vue',
+      'app/components/counseling/CounselingForm.vue',
       'app/pages/admin/login.vue',
       'app/layouts/admin.vue',
       'app/pages/admin/index.vue',

@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import type { ApiSuccess } from '../../../shared/types/api'
 import AppButton from '../../components/common/AppButton.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
-import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
+import { DEPARTMENT_NAME, HOME_ARIA_LABEL } from '../../../shared/constants/department-brand'
 import {
   getAdminSupabaseClient,
   signInAdminWithPassword,
@@ -83,7 +83,7 @@ onMounted(async () => {
       aria-labelledby="admin-login-title"
     >
       <header class="admin-login__header">
-        <NuxtLink to="/" aria-label="PHOTO:NEXT 홈">PHOTO:<span>NEXT</span></NuxtLink>
+        <NuxtLink to="/" :aria-label="HOME_ARIA_LABEL">PHOTO:<span>NEXT</span></NuxtLink>
         <span>SECURE OPERATIONS</span>
       </header>
 

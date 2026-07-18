@@ -25,11 +25,13 @@ Workers Paid와 Supabase 유료 플랜은 이 규모에서 요청 수를 위한 
 base dynamic requests = 200 students × 25 requests = 5,000/day (5% of Workers Free)
 retry/refresh stress = 5,000 × 3 = 15,000/day (15% of Workers Free)
 one max-size result snapshot = 200 × 256 KiB = 50 MiB
-three retained max-size results = 200 × 3 × 256 KiB = 150 MiB
-extreme result egress = 200 × 3 × 256 KiB = 150 MiB, before small API responses
+three retained max-size results (stored) = 200 × 3 × 256 KiB = 150 MiB
+result egress planning reserve = 150 MiB × 4 reads per retained result = 600 MiB
+other Supabase API egress planning reserve = 200 × 5 MiB/student = 1,000 MiB
+conservative Supabase egress planning reserve = 600 MiB + 1,000 MiB = 1,600 MiB ≈ 1.56 GiB
 ```
 
-결과 응답 행, 이벤트, 세션, 상담, 감사 행, 인덱스 및 TOAST 오버헤드까지 넣은 한 코호트 보수적 DB envelope은 약 **205 MiB**다. 이는 500 MB Free DB 안에 여유가 있지만, 장기 보관 코호트를 무한히 누적해도 된다는 뜻은 아니다.
+위 egress 값은 실측 사용량이 아니라, 보관한 최대 크기 결과를 각각 4회씩 읽는 경우와 학생당 5 MiB의 기타 API 응답을 예약한 **보수적 계획 여유분**이다. 약 **1.56 GiB**로 문서화된 5 GB Free egress 안에 든다. 결과 응답 행, 이벤트, 세션, 상담, 감사 행, 인덱스 및 TOAST 오버헤드까지 넣은 한 코호트 보수적 DB envelope은 약 **205 MiB**다. 이는 500 MB Free DB 안에 여유가 있지만, 장기 보관 코호트를 무한히 누적해도 된다는 뜻은 아니다.
 
 남은 위험은 집계량이 아닌 호출 단위다. **10 ms Worker CPU는 200명에 곱하는 값이 아니다.** 인증, SSR, 매칭, 명단 preview/apply endpoint의 `exceededCpu`를 배포 로그로 점검한다. Supabase 응답을 기다리는 시간은 Worker CPU 시간이 아니다. 한 번의 200행 명단 import가 Free CPU를 넘는다면, queue나 chunk-state 구조를 새로 만들지 말고 그 import/캠페인 월에 Workers Paid를 우선 사용한다. 전체 교체 import를 임의로 나누면 누락된 지원자가 비활성화될 수 있으므로 chunking은 나중의 별도 설계 선택이다.
 

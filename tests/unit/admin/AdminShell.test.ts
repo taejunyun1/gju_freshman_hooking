@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAdminSessionStore } from '../../../app/stores/admin-session'
+import { HOME_ARIA_LABEL } from '../../../shared/constants/department-brand'
 
 const adminAuthMocks = vi.hoisted(() => ({
   getAdminSupabaseClient: vi.fn(() => ({ auth: { signOut: vi.fn() } })),
@@ -89,6 +90,14 @@ describe('administrator shell', () => {
     const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
 
     expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과 운영')
+  })
+
+  it('labels the administrator login home link with the shared department brand', async () => {
+    const { default: AdminLoginPage } = await import('../../../app/pages/admin/login.vue')
+    const wrapper = mount(AdminLoginPage, { global: { stubs: { NuxtLink: NuxtLinkStub } } })
+
+    expect(HOME_ARIA_LABEL).toBe('광주대학교 사진영상미디어학과 PHOTO:NEXT 홈')
+    expect(wrapper.get('a[href="/"]').attributes('aria-label')).toBe(HOME_ARIA_LABEL)
   })
 
   it('verifies the password token with the server and stores only the capped access session', async () => {
