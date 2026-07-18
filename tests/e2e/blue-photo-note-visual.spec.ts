@@ -65,8 +65,15 @@ const selectCommercialPath = async (page: Page): Promise<void> => {
 
 test.describe.configure({ mode: 'serial' })
 
+let commercialMatchingFixture: ReturnType<typeof installCommercialMatchingFixture> | undefined
+
 test.beforeAll(() => {
-  expect(installCommercialMatchingFixture()).toEqual(expectedCommercialMatchingFixtureSummary)
+  commercialMatchingFixture = installCommercialMatchingFixture()
+  expect(commercialMatchingFixture.summary).toEqual(expectedCommercialMatchingFixtureSummary)
+})
+
+test.afterAll(() => {
+  commercialMatchingFixture?.cleanup()
 })
 
 for (const [path, fullName] of [

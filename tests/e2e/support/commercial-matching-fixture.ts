@@ -13,6 +13,32 @@ export type CommercialMatchingFixtureSummary = {
   verifiedPublishableFacilities: number
 }
 
+export type CommercialMatchingFixture = {
+  cleanup: () => void
+  summary: CommercialMatchingFixtureSummary
+}
+
+type CommercialMatchingFixtureHooks = {
+  afterMutation?: () => void
+}
+
+type CommercialMatchingFixtureSnapshot = {
+  faculty: Array<{
+    id: number
+    last_verified_at: string | null
+    status: string
+    updated_at: string
+    weekly_capacity: number
+  }>
+  resources: Array<{
+    id: number
+    metadata: Record<string, unknown>
+    priority: number
+    status: string
+    updated_at: string
+  }>
+}
+
 export const expectedCommercialMatchingFixtureSummary: CommercialMatchingFixtureSummary = {
   activeFaculty: 6,
   adminOnlyContactFields: 24,
@@ -45,6 +71,148 @@ if (!projectId) {
 }
 
 const databaseContainer = `supabase_db_${projectId}`
+
+const runDatabaseSql = (input: string): string => execFileSync(
+  'docker',
+  [
+    'exec',
+    '-i',
+    databaseContainer,
+    'psql',
+    '-X',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-v',
+    'VERBOSITY=verbose',
+    '-U',
+    'postgres',
+    '-d',
+    'postgres',
+    '-Atq',
+  ],
+  { encoding: 'utf8', input },
+)
+
+const snapshotSql = String.raw`
+select jsonb_build_object(
+  'resources', coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', id,
+      'status', status,
+      'priority', priority,
+      'metadata', metadata,
+      'updated_at', updated_at
+    ) order by id)
+    from public.resources
+    where (
+      status in ('active', 'next_year_confirmed')
+      and title <> all (array[
+        '커머셜 포토그라피 기초 워크숍',
+        '커머셜 포토그라피 심화 워크숍',
+        '커머셜 포토그라피 세미나',
+        '커머셜 포토그라피 랩',
+        '사진영상학개론',
+        '프로포토 B10',
+        'APUTURE 600X 바이컬러 조명',
+        '스튜디오 A(호리존)',
+        '소니 FX3 Body',
+        '소니 FE 28-70mm F3.5-5.6 Lens',
+        '컴퓨터실'
+      ]::text[])
+    ) or (
+      title = any (array[
+        '커머셜 포토그라피 기초 워크숍',
+        '커머셜 포토그라피 심화 워크숍',
+        '커머셜 포토그라피 세미나',
+        '커머셜 포토그라피 랩',
+        '사진영상학개론',
+        '프로포토 B10',
+        'APUTURE 600X 바이컬러 조명',
+        '스튜디오 A(호리존)',
+        '소니 FX3 Body',
+        '소니 FE 28-70mm F3.5-5.6 Lens',
+        '컴퓨터실'
+      ]::text[])
+      and visibility = 'public'
+    )
+  ), '[]'::jsonb),
+  'faculty', coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', id,
+      'status', status,
+      'weekly_capacity', weekly_capacity,
+      'last_verified_at', last_verified_at,
+      'updated_at', updated_at
+    ) order by id)
+    from public.faculty
+  ), '[]'::jsonb)
+);
+`
+
+const captureMutableState = (): CommercialMatchingFixtureSnapshot => {
+  const snapshot = runDatabaseSql(snapshotSql).trim()
+  if (!snapshot.startsWith('{')) {
+    throw new Error('로컬 E2E fixture 설치 전 상태를 저장할 수 없습니다.')
+  }
+  return JSON.parse(snapshot) as CommercialMatchingFixtureSnapshot
+}
+
+const restoreMutableState = (snapshot: CommercialMatchingFixtureSnapshot): void => {
+  const encodedSnapshot = Buffer.from(JSON.stringify(snapshot), 'utf8').toString('base64')
+  runDatabaseSql(String.raw`
+begin;
+with snapshot as (
+  select pg_catalog.convert_from(
+    pg_catalog.decode('${encodedSnapshot}', 'base64'),
+    'utf8'
+  )::jsonb as value
+), prior_resources as (
+  select state.*
+  from snapshot
+  cross join lateral jsonb_to_recordset(snapshot.value->'resources') as state(
+    id bigint,
+    status text,
+    priority smallint,
+    metadata jsonb,
+    updated_at timestamptz
+  )
+)
+update public.resources resource
+set
+  status = prior.status,
+  priority = prior.priority,
+  metadata = prior.metadata,
+  updated_at = prior.updated_at
+from prior_resources prior
+where resource.id = prior.id;
+
+with snapshot as (
+  select pg_catalog.convert_from(
+    pg_catalog.decode('${encodedSnapshot}', 'base64'),
+    'utf8'
+  )::jsonb as value
+), prior_faculty as (
+  select state.*
+  from snapshot
+  cross join lateral jsonb_to_recordset(snapshot.value->'faculty') as state(
+    id bigint,
+    status text,
+    weekly_capacity smallint,
+    last_verified_at timestamptz,
+    updated_at timestamptz
+  )
+)
+update public.faculty faculty
+set
+  status = prior.status,
+  weekly_capacity = prior.weekly_capacity,
+  last_verified_at = prior.last_verified_at,
+  updated_at = prior.updated_at
+from prior_faculty prior
+where faculty.id = prior.id;
+commit;
+`)
+}
 
 const fixtureSql = String.raw`
 begin;
@@ -382,37 +550,47 @@ const assertLocalRuntime = () => {
   }
 }
 
-export const installCommercialMatchingFixture = (): CommercialMatchingFixtureSummary => {
+export const installCommercialMatchingFixture = (
+  hooks: CommercialMatchingFixtureHooks = {},
+): CommercialMatchingFixture => {
   assertLocalRuntime()
-  const output = execFileSync(
-    'docker',
-    [
-      'exec',
-      '-i',
-      databaseContainer,
-      'psql',
-      '-X',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-v',
-      'VERBOSITY=verbose',
-      '-U',
-      'postgres',
-      '-d',
-      'postgres',
-      '-Atq',
-    ],
-    { encoding: 'utf8', input: fixtureSql },
-  )
+  const snapshot = captureMutableState()
 
-  const summaryLine = output
-    .trim()
-    .split('\n')
-    .findLast(line => line.startsWith('{'))
+  try {
+    const output = runDatabaseSql(fixtureSql)
+    hooks.afterMutation?.()
 
-  if (!summaryLine) {
-    throw new Error('로컬 E2E fixture 설치 결과를 확인할 수 없습니다.')
+    const summaryLine = output
+      .trim()
+      .split('\n')
+      .findLast(line => line.startsWith('{'))
+
+    if (!summaryLine) {
+      throw new Error('로컬 E2E fixture 설치 결과를 확인할 수 없습니다.')
+    }
+
+    let cleaned = false
+    return {
+      cleanup: () => {
+        if (cleaned) return
+        assertLocalRuntime()
+        restoreMutableState(snapshot)
+        cleaned = true
+      },
+      summary: JSON.parse(summaryLine) as CommercialMatchingFixtureSummary,
+    }
   }
-
-  return JSON.parse(summaryLine) as CommercialMatchingFixtureSummary
+  catch (error) {
+    try {
+      restoreMutableState(snapshot)
+    }
+    catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        '로컬 E2E fixture 설치 실패 후 이전 상태 복원에도 실패했습니다.',
+        { cause: cleanupError },
+      )
+    }
+    throw error
+  }
 }

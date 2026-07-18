@@ -17,9 +17,16 @@ const selections = {
 
 test.use({ screenshot: 'off', trace: 'off', video: 'off' })
 
+let commercialMatchingFixture: ReturnType<typeof installCommercialMatchingFixture> | undefined
+
 test.beforeAll(() => {
-  expect(installCommercialMatchingFixture())
+  commercialMatchingFixture = installCommercialMatchingFixture()
+  expect(commercialMatchingFixture.summary)
     .toEqual(expectedCommercialMatchingFixtureSummary)
+})
+
+test.afterAll(() => {
+  commercialMatchingFixture?.cleanup()
 })
 
 const selectCommercialPath = async (page: Page): Promise<void> => {

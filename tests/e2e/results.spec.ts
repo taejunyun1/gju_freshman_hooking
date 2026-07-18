@@ -150,9 +150,16 @@ const withLocalStudent = async (
 
 test.describe.configure({ mode: 'serial' })
 
+let commercialMatchingFixture: ReturnType<typeof installCommercialMatchingFixture> | undefined
+
 test.beforeAll(() => {
-  expect(installCommercialMatchingFixture())
+  commercialMatchingFixture = installCommercialMatchingFixture()
+  expect(commercialMatchingFixture.summary)
     .toEqual(expectedCommercialMatchingFixtureSummary)
+})
+
+test.afterAll(() => {
+  commercialMatchingFixture?.cleanup()
 })
 
 test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이어진다', async ({ page }, testInfo) => withLocalStudent(page, testInfo, async () => {

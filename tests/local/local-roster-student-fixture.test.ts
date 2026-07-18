@@ -51,7 +51,9 @@ describe('local roster student fixture lifecycle', () => {
   let ownsCurrentCycle = false
 
   beforeAll(() => {
+    process.env.NUXT_NAME_HMAC_KEY = secret('name-hmac')
     process.env.NUXT_PHONE_HMAC_KEY = secret('phone-hmac')
+    process.env.NUXT_PHONE_ENCRYPTION_KEY = secret('phone-encryption')
     process.env.NUXT_PASSWORD_PEPPER = secret('password-pepper')
     process.env.NUXT_PASSWORD_PEPPER_VERSION = '1'
   })
