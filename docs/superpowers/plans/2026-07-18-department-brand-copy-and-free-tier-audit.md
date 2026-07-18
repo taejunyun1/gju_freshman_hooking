@@ -329,7 +329,7 @@ const url = 'https://photo-next-mvp-staging.taejunyun.workers.dev/api/assessment
 The document verdict must distinguish:
 
 - Capacity: 200 annual participants fit comfortably if the burst probe passes.
-- Security: keep current HMAC+bcrypt/RLS/session design; after `202607180024_roster_login_free_tier_hardening.sql`, document the authoritative 800-global / 400-IP attempts per 10 minutes and five-failure / 30-minute credential lock. Do not replace these controls with plaintext, weaker hashes, a client-only check, or extra per-login network calls.
+- Security: keep current HMAC+bcrypt/RLS/session design; after `202607180024_roster_login_free_tier_hardening.sql`, document the four-shard 1,024-global / 512-IP bounds per 10 minutes and five-failure / 30-minute credential lock. Do not replace these controls with plaintext, weaker hashes, a client-only check, or extra per-login network calls.
 - Reliability: restore/warm the free Supabase project 48 hours before the event, run health/login/options smoke tests, and create an encrypted off-platform logical backup before roster apply and after the campaign because Free lacks guaranteed non-pause availability and managed downloadable backups. Include a restore-test checklist; do not claim a backup exists unless it was actually created and restored.
 - Upgrade trigger: move to paid service only if Worker `exceededCpu` appears repeatedly, DB approaches 400MB, egress approaches 4GB, or guaranteed no-pause availability/backups become required.
 
