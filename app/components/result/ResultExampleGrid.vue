@@ -43,7 +43,7 @@ const examples = computed(() => resultExamplesFor(props.track, props.kind))
 
 .result-example-grid__items {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.65rem;
 }
 
@@ -90,7 +90,9 @@ const examples = computed(() => resultExamplesFor(props.track, props.kind))
   line-height: 1.5;
 }
 
-@media (max-width: 40rem) {
-  .result-example-grid__items { grid-template-columns: 1fr; }
+@media (min-width: 45rem) {
+  .result-example-grid__items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 </style>

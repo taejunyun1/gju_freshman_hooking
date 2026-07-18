@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { createHmac, randomUUID } from 'node:crypto'
+import { createCipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
 const config = readFileSync('supabase/config.toml', 'utf8')
@@ -48,7 +48,7 @@ const requireLocalRuntime = (): void => {
   if (running !== 'true') throw new Error('허용된 로컬 Supabase DB 컨테이너가 실행 중이 아닙니다.')
 }
 
-const secret = (name: 'NUXT_PHONE_HMAC_KEY' | 'NUXT_PASSWORD_PEPPER'): Buffer => {
+const secret = (name: 'NUXT_NAME_HMAC_KEY' | 'NUXT_PASSWORD_PEPPER' | 'NUXT_PHONE_ENCRYPTION_KEY' | 'NUXT_PHONE_HMAC_KEY'): Buffer => {
   const value = process.env[name]
   if (!value) throw new Error(`E2E ${name}이 준비되지 않았습니다.`)
   const decoded = Buffer.from(value, 'base64url')
@@ -59,6 +59,21 @@ const secret = (name: 'NUXT_PHONE_HMAC_KEY' | 'NUXT_PASSWORD_PEPPER'): Buffer =>
 const digest = (domain: string, value: string, key: Buffer): string => createHmac('sha256', key)
   .update(`${domain}\0${value}`, 'utf8')
   .digest('hex')
+
+const protectApplicantName = (name: string): { ciphertext: string, hmac: string, iv: string } => {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', secret('NUXT_PHONE_ENCRYPTION_KEY'), iv)
+  const ciphertext = Buffer.concat([
+    cipher.update(name, 'utf8'),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ])
+  return {
+    ciphertext: ciphertext.toString('hex'),
+    hmac: digest('name-compare-v1', name, secret('NUXT_NAME_HMAC_KEY')),
+    iv: iv.toString('hex'),
+  }
+}
 
 const passwordForPhone = (phone: string): string => `${phone.slice(-4)}AA`
 
@@ -81,6 +96,8 @@ export const provisionLocalRosterStudent = (
   const phoneHmac = digest('phone-lookup-v1', phone, secret('NUXT_PHONE_HMAC_KEY'))
   const passwordDigest = digest('password-verify-v1', password, secret('NUXT_PASSWORD_PEPPER'))
   const nickname = `visual-e2e-${phoneHmac.slice(0, 20)}`
+  const applicantName = '로컬 시각 QA 지원자'
+  const protectedName = protectApplicantName(applicantName)
   const currentCycle = runDatabaseSql(String.raw`
 select id::text || '|' || password_key_version::text
 from public.admission_cycles
@@ -127,13 +144,18 @@ commit;
 begin;
 with inserted_prospect as (
   insert into public.prospects(
-    nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage, region, admission_cycle_id, is_test
+    nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage, region, admission_cycle_id,
+    name_hmac, name_ciphertext, name_iv, is_test
   ) values (
     '${nickname}',
     pg_catalog.decode('${phoneHmac}', 'hex'),
     pg_catalog.decode(repeat('00', 16), 'hex'),
     pg_catalog.decode(repeat('00', 12), 'hex'),
-    '로컬 시각 QA 고교', 'high3', 'other', '${cycleId}'::uuid, true
+    '로컬 시각 QA 고교', 'high3', 'other', '${cycleId}'::uuid,
+    pg_catalog.decode('${protectedName.hmac}', 'hex'),
+    pg_catalog.decode('${protectedName.ciphertext}', 'hex'),
+    pg_catalog.decode('${protectedName.iv}', 'hex'),
+    true
   )
   returning id
 )

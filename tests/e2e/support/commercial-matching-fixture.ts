@@ -19,18 +19,22 @@ export const expectedCommercialMatchingFixtureSummary: CommercialMatchingFixture
   nonVerifiedPublishableEquipmentItems: 0,
   positiveFullTimePrimaries: 3,
   positiveOtherFaculty: 0,
-  publishableResources: 7,
+  publishableResources: 11,
   publishableTitles: [
     'APUTURE 600X 바이컬러 조명',
+    '사진영상학개론',
+    '소니 FE 28-70mm F3.5-5.6 Lens',
+    '소니 FX3 Body',
     '스튜디오 A(호리존)',
     '커머셜 포토그라피 기초 워크숍',
     '커머셜 포토그라피 랩',
     '커머셜 포토그라피 세미나',
     '커머셜 포토그라피 심화 워크숍',
+    '컴퓨터실',
     '프로포토 B10',
   ],
-  verifiedPublishableEquipmentItems: 5,
-  verifiedPublishableFacilities: 1,
+  verifiedPublishableEquipmentItems: 7,
+  verifiedPublishableFacilities: 2,
 }
 
 const config = readFileSync('supabase/config.toml', 'utf8')
@@ -59,14 +63,18 @@ begin
     '커머셜 포토그라피 심화 워크숍',
     '커머셜 포토그라피 세미나',
     '커머셜 포토그라피 랩',
+    '사진영상학개론',
     '프로포토 B10',
     'APUTURE 600X 바이컬러 조명',
-    '스튜디오 A(호리존)'
+    '스튜디오 A(호리존)',
+    '소니 FX3 Body',
+    '소니 FE 28-70mm F3.5-5.6 Lens',
+    '컴퓨터실'
   ]::text[])
   and visibility = 'public';
 
-  if target_resource_count <> 7 then
-    raise exception 'expected exactly 7 public commercial fixture resources, found %', target_resource_count;
+  if target_resource_count <> 11 then
+    raise exception 'expected exactly 11 public result fixture resources, found %', target_resource_count;
   end if;
 
   select count(*)
@@ -106,9 +114,13 @@ and title <> all (array[
   '커머셜 포토그라피 심화 워크숍',
   '커머셜 포토그라피 세미나',
   '커머셜 포토그라피 랩',
+  '사진영상학개론',
   '프로포토 B10',
   'APUTURE 600X 바이컬러 조명',
-  '스튜디오 A(호리존)'
+  '스튜디오 A(호리존)',
+  '소니 FX3 Body',
+  '소니 FE 28-70mm F3.5-5.6 Lens',
+  '컴퓨터실'
 ]::text[]);
 
 update public.resources
@@ -117,11 +129,15 @@ set
   priority = case title
     when '커머셜 포토그라피 기초 워크숍' then 100
     when '커머셜 포토그라피 심화 워크숍' then 90
-    when '커머셜 포토그라피 세미나' then 80
+    when '커머셜 포토그라피 세미나' then 95
     when '커머셜 포토그라피 랩' then 70
+    when '사진영상학개론' then 60
     when '스튜디오 A(호리존)' then 100
     when '프로포토 B10' then 90
     when 'APUTURE 600X 바이컬러 조명' then 80
+    when '컴퓨터실' then 100
+    when '소니 FX3 Body' then 90
+    when '소니 FE 28-70mm F3.5-5.6 Lens' then 80
     else priority
   end,
   metadata = case
@@ -129,6 +145,9 @@ set
       'locationLabel', '사진영상학과 스튜디오 A(호리존)',
       'operationNote', '학과 관리자가 운영 상태를 확인했습니다.',
       'lastVerifiedAt', '2026-07-14T09:00:00+09:00'
+    )
+    when title = '컴퓨터실' then metadata || jsonb_build_object(
+      'locationLabel', '사진영상미디어학과 컴퓨터실'
     )
     else metadata
   end,
@@ -138,9 +157,13 @@ where title = any (array[
   '커머셜 포토그라피 심화 워크숍',
   '커머셜 포토그라피 세미나',
   '커머셜 포토그라피 랩',
+  '사진영상학개론',
   '프로포토 B10',
   'APUTURE 600X 바이컬러 조명',
-  '스튜디오 A(호리존)'
+  '스튜디오 A(호리존)',
+  '소니 FX3 Body',
+  '소니 FE 28-70mm F3.5-5.6 Lens',
+  '컴퓨터실'
 ]::text[])
 and visibility = 'public';
 
@@ -174,8 +197,8 @@ begin
   select count(*) into count_value
   from public.resources
   where status in ('active', 'next_year_confirmed');
-  if count_value <> 7 then
-    raise exception 'expected exactly 7 publishable resources, found %', count_value;
+  if count_value <> 11 then
+    raise exception 'expected exactly 11 publishable resources, found %', count_value;
   end if;
 
   select count(*) into count_value
@@ -186,11 +209,15 @@ begin
     '커머셜 포토그라피 심화 워크숍',
     '커머셜 포토그라피 세미나',
     '커머셜 포토그라피 랩',
+    '사진영상학개론',
     '프로포토 B10',
     'APUTURE 600X 바이컬러 조명',
-    '스튜디오 A(호리존)'
+    '스튜디오 A(호리존)',
+    '소니 FX3 Body',
+    '소니 FE 28-70mm F3.5-5.6 Lens',
+    '컴퓨터실'
   ]::text[]);
-  if count_value <> 7 then
+  if count_value <> 11 then
     raise exception 'publishable resource allowlist mismatch';
   end if;
 
@@ -235,12 +262,12 @@ begin
   from public.resources
   where status in ('active', 'next_year_confirmed')
   and type = 'facility'
-  and title = '스튜디오 A(호리존)'
-  and metadata->>'locationLabel' = '사진영상학과 스튜디오 A(호리존)'
+  and title = any (array['스튜디오 A(호리존)', '컴퓨터실']::text[])
+  and metadata->>'locationLabel' is not null
   and nullif(metadata->>'lastVerifiedAt', '') is not null
-  and metadata->>'operationNote' = '학과 관리자가 운영 상태를 확인했습니다.';
-  if count_value <> 1 then
-    raise exception 'Studio A must have verified operational metadata';
+  and nullif(metadata->>'operationNote', '') is not null;
+  if count_value <> 2 then
+    raise exception 'result facilities must have verified operational metadata';
   end if;
 
   select count(*) into count_value
@@ -249,8 +276,8 @@ begin
   where r.status in ('active', 'next_year_confirmed')
   and r.type = 'equipment'
   and ri.data_quality_status = 'verified';
-  if count_value <> 5 then
-    raise exception 'expected 5 verified publishable equipment inventory items, found %', count_value;
+  if count_value <> 7 then
+    raise exception 'expected 7 verified publishable equipment inventory items, found %', count_value;
   end if;
 
   select count(*) into count_value
@@ -313,8 +340,8 @@ select jsonb_build_object(
     from public.resources
     where status in ('active', 'next_year_confirmed')
     and type = 'facility'
-    and title = '스튜디오 A(호리존)'
-    and metadata->>'locationLabel' = '사진영상학과 스튜디오 A(호리존)'
+    and title = any (array['스튜디오 A(호리존)', '컴퓨터실']::text[])
+    and metadata->>'locationLabel' is not null
     and nullif(metadata->>'lastVerifiedAt', '') is not null
   ),
   'publishableTitles', (
