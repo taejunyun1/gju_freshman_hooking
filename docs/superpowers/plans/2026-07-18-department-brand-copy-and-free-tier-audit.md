@@ -308,7 +308,7 @@ three retained max-size results = 200 × 3 × 256 KiB = 150 MiB
 extreme result egress = 200 × 3 × 256 KiB = 150 MiB, before small API responses
 ```
 
-Document that typical snapshots and responses are much smaller. State the remaining per-request risk separately: the 10ms Worker CPU limit is not multiplied by 200, and authentication/SSR/matching endpoints must be checked for `exceededCpu`; waiting for Supabase does not count as Worker CPU.
+Document that typical snapshots and responses are much smaller. Also record a conservative one-cohort database envelope of about 205 MiB when response rows, events, sessions, counseling, audit rows, indexes, and TOAST overhead are included. State the remaining per-request risk separately: the 10ms Worker CPU limit is not multiplied by 200, and authentication/SSR/matching/roster endpoints must be checked for `exceededCpu`; waiting for Supabase does not count as Worker CPU.
 
 - [ ] **Step 3: Add production-safe browser assertions and a read-only burst probe**
 
@@ -329,9 +329,11 @@ const url = 'https://photo-next-mvp-staging.taejunyun.workers.dev/api/assessment
 The document verdict must distinguish:
 
 - Capacity: 200 annual participants fit comfortably if the burst probe passes.
-- Security: keep current HMAC+bcrypt/RLS/rate-limit/session design; do not replace it with plaintext or weaker hashes.
-- Reliability: restore/warm the free Supabase project 48 hours before the event, run health/login/options smoke tests, and export the roster before and results after the event because Free lacks guaranteed non-pause availability and downloadable backups.
+- Security: keep current HMAC+bcrypt/RLS/session design; after `202607180024_roster_login_free_tier_hardening.sql`, document the authoritative 800-global / 400-IP attempts per 10 minutes and five-failure / 30-minute credential lock. Do not replace these controls with plaintext, weaker hashes, a client-only check, or extra per-login network calls.
+- Reliability: restore/warm the free Supabase project 48 hours before the event, run health/login/options smoke tests, and create an encrypted off-platform logical backup before roster apply and after the campaign because Free lacks guaranteed non-pause availability and managed downloadable backups. Include a restore-test checklist; do not claim a backup exists unless it was actually created and restored.
 - Upgrade trigger: move to paid service only if Worker `exceededCpu` appears repeatedly, DB approaches 400MB, egress approaches 4GB, or guaranteed no-pause availability/backups become required.
+
+State clearly that paid plans are optional reliability fallbacks for this 200-person scale, not a request-count requirement. If the one-shot 200-row roster import alone exceeds Workers Free CPU, prefer Workers Paid for the import/campaign month over inventing queue or chunk-state infrastructure; chunking is only a later alternative because partial full-replacement imports could inactivate omitted applicants.
 
 - [ ] **Step 5: Commit Task 5**
 
