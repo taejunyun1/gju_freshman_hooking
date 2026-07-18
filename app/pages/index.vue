@@ -266,7 +266,6 @@ onMounted(() => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: var(--shadow-raised);
 }
 
 .sequence__ruler {

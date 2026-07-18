@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
 .campaigns-page button { cursor: pointer; font-family: var(--font-display); font-weight: 700; }
 .campaigns-page button:disabled { cursor: wait; opacity: 0.62; }
 .campaigns-page :is(input, select, button, a, [tabindex]):focus-visible { outline: 3px solid var(--color-sequence); outline-offset: 2px; }
-.campaigns-page__maker { min-width: 0; display: grid; gap: 1rem; border-top: 0.3rem solid var(--color-primary); border-radius: var(--radius-panel); background: var(--color-surface); padding: clamp(1rem, 3vw, 1.5rem); box-shadow: var(--shadow-raised); }
+.campaigns-page__maker { min-width: 0; display: grid; gap: 1rem; border-top: 0.3rem solid var(--color-primary); border-radius: var(--radius-panel); background: var(--color-surface); padding: clamp(1rem, 3vw, 1.5rem); }
 .campaigns-page__maker-intro { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 3fr); gap: 1rem; }
 .campaigns-page__maker-intro h2 { margin: 0; font-family: var(--font-display); font-size: 1.35rem; }
 .campaigns-page__maker-intro p:last-child { margin: 0.35rem 0 0; color: color-mix(in srgb, var(--color-ink) 68%, transparent); }

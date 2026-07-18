@@ -152,7 +152,6 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: var(--shadow-raised);
 }
 
 .admin-login__header {

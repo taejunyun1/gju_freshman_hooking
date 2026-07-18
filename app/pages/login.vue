@@ -162,7 +162,6 @@ const submitLogin = async (): Promise<void> => {
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
-  box-shadow: var(--shadow-raised);
   padding: clamp(1.25rem, 5vw, 2.25rem);
 }
 

@@ -95,6 +95,35 @@ describe('Blue Photo Note visual contract', () => {
     expect(read('app/components/result/CapabilityEvidence.vue')).toContain('border-radius: var(--radius-card)')
   })
 
+  it('reserves raised shadows for selected, hovered, and dialog surfaces', () => {
+    const normalSurfaces = [
+      ['app/pages/index.vue', '.sequence__frame'],
+      ['app/pages/login.vue', '.login-page__frame'],
+      ['app/pages/assessment.vue', '.assessment-page__state-panel'],
+      ['app/pages/admin/login.vue', '.admin-login__panel'],
+      ['app/pages/admin/campaigns.vue', '.campaigns-page__maker'],
+      ['app/pages/admin/faculty/index.vue', '.faculty-list__filters'],
+      ['app/pages/admin/resources/index.vue', '.resources-list__filters'],
+    ]
+
+    for (const [path, selector] of normalSurfaces) {
+      const source = read(path)
+      const rules = source.split(selector).slice(1)
+      expect(rules).not.toHaveLength(0)
+      for (const rule of rules) {
+        const declarationStart = rule.indexOf('{')
+        const declarationEnd = rule.indexOf('}', declarationStart)
+        expect(rule.slice(declarationStart + 1, declarationEnd)).not.toContain('box-shadow: var(--shadow-raised)')
+      }
+    }
+  })
+
+  it('describes the project lane as containing projects only', () => {
+    const learningPath = read('app/components/result/LearningPath.vue')
+    expect(learningPath).toContain('특정 학년을 임의로 지정하지 않은 학과 프로젝트입니다.')
+    expect(learningPath).not.toContain('학과 프로젝트와 비교과 활동입니다.')
+  })
+
   it('uses the blue system in the administrator shell and shared panels', () => {
     expect(read('app/layouts/admin.vue')).toContain('background: var(--color-primary-strong)')
     expect(read('app/layouts/admin.vue')).toContain('border-radius: var(--radius-control)')

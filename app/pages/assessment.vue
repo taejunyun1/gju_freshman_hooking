@@ -486,7 +486,6 @@ onMounted(loadSession)
   margin-top: 4rem;
   border-top: 0.25rem solid var(--color-primary);
   border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-raised);
 }
 
 .assessment-page__state-panel--error { border-top-color: var(--color-error); }

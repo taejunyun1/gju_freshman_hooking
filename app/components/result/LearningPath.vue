@@ -75,7 +75,7 @@ const yearTitles = {
       <div class="learning-path__project-heading">
         <p>SECONDARY LANE</p>
         <h3 id="project-lane-title">연결 프로젝트</h3>
-        <span>특정 학년을 임의로 지정하지 않은 학과 프로젝트와 비교과 활동입니다.</span>
+        <span>특정 학년을 임의로 지정하지 않은 학과 프로젝트입니다.</span>
       </div>
       <div
         v-if="projects.length + extracurricular.length > 0"

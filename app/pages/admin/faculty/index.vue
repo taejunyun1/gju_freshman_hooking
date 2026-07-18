@@ -480,7 +480,6 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: 1rem;
-  box-shadow: var(--shadow-raised);
 }
 
 .faculty-list__filters fieldset {
