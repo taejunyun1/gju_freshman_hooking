@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(37);
 
 select isnt(
   pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'),
@@ -147,7 +147,7 @@ select is(
     where p.nickname = 'free-tier-lock-race'
   ),
   2,
-  'row locking serializes concurrent credential failure updates'
+  'different-shard concurrent failures retain both updates without limiter serialization'
 );
 select extensions.dblink_disconnect('roster_login_lock_a');
 select extensions.dblink_disconnect('roster_login_lock_b');
@@ -186,7 +186,7 @@ select prospect_id from credential;
 
 insert into public.rate_limit_buckets(key_hash, route, window_started_at, count, expires_at)
 select extensions.digest('roster-login-global:1', 'sha256'), 'roster-login-global',
-  to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600), 200,
+  to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600), 256,
   to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600) + interval '10 minutes';
 create temporary table roster_login_global_result as
 select public.login_roster_student_v1(
@@ -195,12 +195,12 @@ select public.login_roster_student_v1(
 ) result;
 select is((select result from roster_login_global_result), '{"kind":"failed"}'::jsonb, 'a full global bucket returns generic failure');
 select is((select count(*) from public.student_sessions), 0::bigint, 'a full global bucket creates no session');
-select is((select count from public.rate_limit_buckets where key_hash = extensions.digest('roster-login-global:1', 'sha256') and route = 'roster-login-global'), 201, 'the shard-one global bucket is atomically consumed at the 200 boundary');
+select is((select count from public.rate_limit_buckets where key_hash = extensions.digest('roster-login-global:1', 'sha256') and route = 'roster-login-global'), 257, 'the shard-one global bucket is atomically consumed at the 256 boundary');
 
 delete from public.rate_limit_buckets where route in ('roster-login-global', 'roster-login-ip');
 insert into public.rate_limit_buckets(key_hash, route, window_started_at, count, expires_at)
 select extensions.digest(encode(decode(repeat('c1',32),'hex'), 'hex') || ':2', 'sha256'), 'roster-login-ip',
-  to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600), 100,
+  to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600), 128,
   to_timestamp(floor(extract(epoch from clock_timestamp()) / 600) * 600) + interval '10 minutes';
 create temporary table roster_login_ip_result as
 select public.login_roster_student_v1(
@@ -208,7 +208,7 @@ select public.login_roster_student_v1(
   decode(repeat('c1',32),'hex'), decode(repeat('d2',32),'hex'), clock_timestamp() + interval '1 hour'
 ) result;
 select is((select result from roster_login_ip_result), '{"kind":"failed"}'::jsonb, 'a full IP bucket returns generic failure');
-select is((select count from public.rate_limit_buckets where key_hash = extensions.digest(encode(decode(repeat('c1',32),'hex'), 'hex') || ':2', 'sha256') and route = 'roster-login-ip'), 101, 'the shard-two IP bucket is atomically consumed at the 100 boundary');
+select is((select count from public.rate_limit_buckets where key_hash = extensions.digest(encode(decode(repeat('c1',32),'hex'), 'hex') || ':2', 'sha256') and route = 'roster-login-ip'), 129, 'the shard-two IP bucket is atomically consumed at the 128 boundary');
 select is((select count(*) from public.student_sessions), 0::bigint, 'a full IP bucket creates no session');
 select is((select count from public.rate_limit_buckets where key_hash = extensions.digest('roster-login-global:2', 'sha256') and route = 'roster-login-global'), 1, 'the shard-two global bucket is consumed before the IP bucket');
 
@@ -243,6 +243,11 @@ select ok(
   'roster login derives one of four rate-limit shards from the Worker token hash'
 );
 select ok(
+  position('256, interval ''10 minutes''' in pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'))) > 0
+  and position('128, interval ''10 minutes''' in pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'))) > 0,
+  'roster login uses 256 global and 128 IP attempts per shard'
+);
+select ok(
   position('roster-login-global' in pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'))) < position('roster-login-ip' in pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)'))),
   'the global limiter precedes the IP limiter in the authoritative RPC'
 );
@@ -262,8 +267,8 @@ select ok(
   'the fixed dummy uses the valid 60-character $2a$10$ pgcrypto bcrypt path'
 );
 select ok(
-  position('for update' in lower(pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)')))) > 0,
-  'roster login locks the eligible credential row before changing failure state'
+  position('for update of c' in lower(pg_get_functiondef(pg_catalog.to_regprocedure('public.login_roster_student_v1(bytea,bytea,integer,bytea,integer,bytea,bytea,timestamptz)')))) > 0,
+  'roster login contains the exact FOR UPDATE OF c credential-lock contract'
 );
 
 select * from finish();

@@ -45,13 +45,13 @@ begin
   v_rate_shard := pg_catalog.get_byte(p_token_hash, 0) % 4;
 
   if not public.consume_rate_limit(
-    'roster-login-global:' || v_rate_shard, 'roster-login-global', 200, interval '10 minutes'
+    'roster-login-global:' || v_rate_shard, 'roster-login-global', 256, interval '10 minutes'
   ) then
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
 
   if not public.consume_rate_limit(
-    pg_catalog.encode(p_ip_hmac, 'hex') || ':' || v_rate_shard, 'roster-login-ip', 100, interval '10 minutes'
+    pg_catalog.encode(p_ip_hmac, 'hex') || ':' || v_rate_shard, 'roster-login-ip', 128, interval '10 minutes'
   ) then
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
