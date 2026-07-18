@@ -10,6 +10,7 @@ import FacultyRecommendation from './FacultyRecommendation.vue'
 import InterestClip from './InterestClip.vue'
 import LearningPath from './LearningPath.vue'
 import ResourceCard from './ResourceCard.vue'
+import ResultExampleGrid from './ResultExampleGrid.vue'
 import TrackScore from './TrackScore.vue'
 
 const props = defineProps<{
@@ -101,7 +102,10 @@ const hasOutcomes = computed(() => (
         <h2 id="faculty-title">이 학습경로를 함께 살펴볼 교수진</h2>
       </header>
       <slot name="faculty">
-        <FacultyRecommendation :faculty="snapshot.faculty" />
+        <FacultyRecommendation
+          :faculty="snapshot.faculty"
+          :track="snapshot.rankedTracks[0]"
+        />
       </slot>
       <p class="result-timeline__faculty-note">
         추천은 학생의 관심 분야를 바탕으로 한 상담 시작점이며, 실제 담당 교수가 확정된 상태를 뜻하지 않습니다.
@@ -132,6 +136,7 @@ const hasOutcomes = computed(() => (
       >
         <div class="result-timeline__outcome-lane">
           <h3>작품·포트폴리오</h3>
+          <ResultExampleGrid :track="snapshot.rankedTracks[0]" kind="portfolio" />
           <ResourceCard
             v-for="resource in snapshot.resources.student_work"
             :key="resource.id"

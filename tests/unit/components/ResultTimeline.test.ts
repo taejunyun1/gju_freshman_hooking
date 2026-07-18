@@ -151,6 +151,16 @@ describe('result master sequence', () => {
     expect(wrapper.find('ol[data-learning-years] [data-capability-evidence]').exists()).toBe(false)
   })
 
+  it('shows interest-based examples for specialty and portfolio paths', async () => {
+    const wrapper = await mountTimeline()
+
+    expect(wrapper.findAll('[data-result-example-kind="specialty"] [data-result-example]')).toHaveLength(3)
+    expect(wrapper.findAll('[data-result-example-kind="portfolio"] [data-result-example]')).toHaveLength(3)
+    expect(wrapper.get('[data-result-example-kind="portfolio"]').text()).toContain('관심사 기반 예시')
+    expect(wrapper.get('[data-result-example-kind="portfolio"]').text()).toContain('제품 광고 이미지')
+    expect(wrapper.findAll('[data-selection-graphic]')).not.toHaveLength(0)
+  })
+
   it('shows two capability items initially and at most four with correct disclosure ARIA', async () => {
     const wrapper = await mountTimeline()
     const button = wrapper.get('[data-testid="capability-more"]')

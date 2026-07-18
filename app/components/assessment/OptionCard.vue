@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PublicAssessmentOption } from '../../../shared/types/api'
+import SelectionGraphic from '../visual/SelectionGraphic.vue'
 
 const props = defineProps<{
   option: PublicAssessmentOption
@@ -18,18 +19,11 @@ const onChange = (): void => emit('toggle', props.option.key)
     class="option-card"
     :class="{ 'option-card--selected': selected }"
   >
-    <span
-      class="option-card__frame"
-      :class="`option-card__frame--${option.visualKey}`"
-      aria-hidden="true"
-    >
-      <span class="option-card__frame-code">{{ option.key.split('.')[1] }}</span>
-      <span class="option-card__frame-art" />
-      <span
-        v-if="selected"
-        class="option-card__grease-mark"
-      >✓</span>
-    </span>
+    <SelectionGraphic
+      :visual-key="option.visualKey"
+      :code="option.key.split('.')[1] ?? option.key"
+      :selected="selected"
+    />
     <span class="option-card__copy">
       <strong>{{ option.label }}</strong>
       <small v-if="option.description">{{ option.description }}</small>
@@ -73,183 +67,6 @@ const onChange = (): void => emit('toggle', props.option.key)
   border: 2px solid var(--color-primary);
   background: var(--color-primary-soft);
   box-shadow: var(--shadow-raised);
-}
-
-.option-card__frame {
-  position: relative;
-  min-height: 6.75rem;
-  overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
-  background: var(--color-primary-soft);
-}
-
-.option-card__frame::before,
-.option-card__frame::after,
-.option-card__frame-art::before,
-.option-card__frame-art::after {
-  position: absolute;
-  display: block;
-  content: '';
-}
-
-.option-card__frame-code {
-  position: absolute;
-  z-index: 2;
-  top: 0.5rem;
-  left: 0.5rem;
-  max-width: calc(100% - 1rem);
-  overflow: hidden;
-  color: var(--color-muted);
-  font-family: var(--font-mono);
-  font-size: 0.5625rem;
-  letter-spacing: 0.06em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.option-card__frame--photo_frame::before,
-.option-card__frame--studio_still::before {
-  inset: 1.8rem 1.25rem 0.9rem;
-  border: 1px solid var(--color-primary);
-}
-
-.option-card__frame--photo_frame::after,
-.option-card__frame--studio_still::after {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--color-primary);
-  border-radius: 50%;
-  background: var(--color-surface);
-  inset: 2.45rem auto auto calc(50% - 1.125rem);
-}
-
-.option-card__frame--video_frame::before,
-.option-card__frame--music_cuts::before {
-  inset: 1.8rem 0.75rem 0.75rem;
-  border-block: 0.45rem dotted var(--color-primary);
-}
-
-.option-card__frame--video_frame::after,
-.option-card__frame--music_cuts::after {
-  inset: 2.7rem 1.25rem 1.65rem;
-  border: 1px solid var(--color-primary);
-}
-
-.option-card__frame--music_cuts .option-card__frame-art::before {
-  width: 2.5rem;
-  height: 1px;
-  top: 3.7rem;
-  left: calc(50% - 1.25rem);
-  background: var(--color-primary);
-  box-shadow: 0 -0.65rem 0 var(--color-primary), 0 0.65rem 0 var(--color-primary);
-  transform: rotate(-12deg);
-}
-
-.option-card__frame--edit_timeline::before {
-  inset: 2rem 0.75rem 0.75rem;
-  border-block: 1px solid color-mix(in srgb, var(--color-primary) 42%, transparent);
-  box-shadow: inset 0 1.25rem 0 -1.2rem var(--color-primary), inset 0 -1.25rem 0 -1.2rem var(--color-primary);
-}
-
-.option-card__frame--edit_timeline::after {
-  width: 2px;
-  inset: 1.65rem auto 0.6rem 62%;
-  background: var(--color-primary);
-  box-shadow: -2.8rem 1.7rem 0 0.35rem var(--color-primary), 1.25rem 3.1rem 0 0.35rem var(--color-primary);
-}
-
-.option-card__frame--interview_strip::before {
-  inset: 1.8rem 0.75rem 0.75rem;
-  border: 1px solid var(--color-primary);
-  background: var(--color-surface);
-}
-
-.option-card__frame--interview_strip .option-card__frame-art::before {
-  width: 1.6rem;
-  height: 2.7rem;
-  top: 2.45rem;
-  left: 1.2rem;
-  border: 1px solid var(--color-primary);
-  box-shadow: 2rem 0 0 -1px var(--color-surface), 2rem 0 0 0 var(--color-primary), 4rem 0 0 -1px var(--color-surface), 4rem 0 0 0 var(--color-primary);
-}
-
-.option-card__frame--location_board::before,
-.option-card__frame--project_board::before,
-.option-card__frame--contact_sheet::before {
-  inset: 1.8rem 0.75rem 0.75rem;
-  border: 1px solid var(--color-primary);
-  background: var(--color-surface);
-}
-
-.option-card__frame--location_board .option-card__frame-art::before {
-  width: 2.4rem;
-  height: 2.4rem;
-  top: 2.7rem;
-  left: calc(50% - 1.2rem);
-  border: 1px solid var(--color-primary);
-  transform: rotate(45deg);
-}
-
-.option-card__frame--project_board .option-card__frame-art::before,
-.option-card__frame--contact_sheet .option-card__frame-art::before {
-  width: 1.75rem;
-  height: 1.25rem;
-  top: 2.55rem;
-  left: 1.2rem;
-  border: 1px solid var(--color-primary);
-  box-shadow: 2.15rem 0 0 -1px var(--color-surface), 2.15rem 0 0 0 var(--color-primary), 4.3rem 0 0 -1px var(--color-surface), 4.3rem 0 0 0 var(--color-primary), 0 1.65rem 0 -1px var(--color-surface), 0 1.65rem 0 0 var(--color-primary), 2.15rem 1.65rem 0 -1px var(--color-surface), 2.15rem 1.65rem 0 0 var(--color-primary);
-}
-
-.option-card__frame--project_board .option-card__frame-art::after {
-  width: 3.5rem;
-  height: 1px;
-  right: 1.2rem;
-  bottom: 1.5rem;
-  background: var(--color-primary);
-}
-
-.option-card__frame--gallery_grid::before {
-  inset: 1.8rem 0.75rem 0.75rem;
-  border: 1px solid var(--color-primary);
-  background: var(--color-surface);
-}
-
-.option-card__frame--gallery_grid .option-card__frame-art::before {
-  width: 2.1rem;
-  height: 1.55rem;
-  top: 2.45rem;
-  left: 1.2rem;
-  border: 1px solid var(--color-primary);
-  box-shadow: 2.65rem 0 0 -1px var(--color-surface), 2.65rem 0 0 0 var(--color-primary), 1.3rem 2rem 0 -1px var(--color-surface), 1.3rem 2rem 0 0 var(--color-primary);
-}
-
-.option-card__frame--photobook_spread::before {
-  inset: 1.8rem 0.75rem 0.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-primary);
-}
-
-.option-card__frame--photobook_spread .option-card__frame-art::before {
-  width: 1px;
-  top: 1.8rem;
-  bottom: 0.75rem;
-  left: 50%;
-  background: var(--color-primary);
-}
-
-.option-card__grease-mark {
-  position: absolute;
-  z-index: 3;
-  right: 0.55rem;
-  bottom: 0.25rem;
-  color: var(--color-primary);
-  font-family: var(--font-display);
-  font-size: 3.5rem;
-  font-weight: 900;
-  line-height: 1;
-  text-shadow: 2px 2px 0 var(--color-surface), -1px -1px 0 var(--color-surface);
-  transform: rotate(-8deg);
 }
 
 .option-card__copy {

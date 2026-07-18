@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { ResultFaculty } from '../../../shared/types/result'
+import type { TrackKey } from '../../../shared/types/domain'
 import FacultyCard from './FacultyCard.vue'
+import ResultExampleGrid from './ResultExampleGrid.vue'
 
 defineProps<{
   faculty: ResultFaculty
+  track: TrackKey
 }>()
 
 </script>
@@ -32,10 +35,7 @@ defineProps<{
           :person="person"
         />
       </div>
-      <p
-        v-else
-        class="faculty-recommendation__empty"
-      >확인된 학과 데이터를 준비 중입니다</p>
+      <ResultExampleGrid :track="track" kind="specialty" />
     </section>
   </div>
 </template>
@@ -76,11 +76,7 @@ defineProps<{
 .faculty-recommendation__specialist-list {
   display: grid;
   gap: 1rem;
-}
-
-.faculty-recommendation__empty {
-  margin: 0;
-  color: color-mix(in srgb, var(--color-ink) 63%, transparent);
+  margin-bottom: 1rem;
 }
 
 @media (min-width: 1024px) {

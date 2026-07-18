@@ -157,7 +157,10 @@ onBeforeRouteUpdate((to) => {
         />
       </template>
       <template #faculty>
-        <FacultyRecommendation :faculty="snapshot.faculty" />
+        <FacultyRecommendation
+          :faculty="snapshot.faculty"
+          :track="snapshot.rankedTracks[0]"
+        />
       </template>
       <template #career-narrative>
         <CareerNarrative
