@@ -130,10 +130,7 @@ const hasOutcomes = computed(() => (
         <span>수업과 프로젝트에서 익힌 역량이 작품과 진로로 어떻게 이어지는지 보여드립니다.</span>
       </header>
 
-      <div
-        v-if="hasOutcomes"
-        class="result-timeline__outcomes"
-      >
+      <div class="result-timeline__outcomes">
         <div class="result-timeline__outcome-lane">
           <h3>작품·포트폴리오</h3>
           <ResultExampleGrid :track="snapshot.rankedTracks[0]" kind="portfolio" />
@@ -148,6 +145,7 @@ const hasOutcomes = computed(() => (
             class="result-timeline__empty"
           >확인된 학과 데이터를 준비 중입니다</p>
         </div>
+        <template v-if="hasOutcomes">
         <div class="result-timeline__outcome-lane">
           <h3>연결 진로</h3>
           <ResourceCard
@@ -187,11 +185,8 @@ const hasOutcomes = computed(() => (
             variant="support"
           />
         </aside>
+        </template>
       </div>
-      <p
-        v-else
-        class="result-timeline__empty"
-      >확인된 학과 데이터를 준비 중입니다</p>
     </section>
 
     <section

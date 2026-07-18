@@ -118,6 +118,16 @@ describe('result master sequence', () => {
     expect(wrapper.text()).not.toMatch(/추천 수업 없음|임시 추천/u)
   })
 
+  it('keeps three portfolio examples visible when verified outcome resources are empty', async () => {
+    const wrapper = await mountTimeline(makeEmptyResultSnapshot())
+    const outcomes = wrapper.get('[data-result-section="outcomes"]')
+
+    expect(outcomes.findAll('[data-result-example-kind="portfolio"] [data-result-example]')).toHaveLength(3)
+    expect(outcomes.get('[data-result-example-kind="portfolio"]').text()).toContain('관심사 기반 예시')
+    expect(outcomes.get('[data-result-example-kind="portfolio"]').text()).toContain('제품 광고 이미지')
+    expect(outcomes.text()).toContain('확인된 학과 데이터를 준비 중입니다')
+  })
+
   it('shows course metadata and reasons while keeping projects in a separate undated lane', async () => {
     const wrapper = await mountTimeline()
     const firstCourse = wrapper.get('[data-course-resource="101"]')
