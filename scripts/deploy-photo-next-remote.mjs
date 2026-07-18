@@ -1070,6 +1070,18 @@ const configureAdmin = async state => {
     .upsert({ id: userId, role: 'admin', is_active: true }, { onConflict: 'id' })
   if (upsertError) fail('admin_users 권한 행 구성에 실패했습니다.')
 
+  const { data: activation, error: activationError } = await serviceClient
+    .rpc('activate_verified_2026_content')
+  if (activationError
+    || activation === null
+    || typeof activation !== 'object'
+    || !['updated', 'already_activated'].includes(activation.status)
+    || !Number.isInteger(activation.facultyPublished)
+    || !Number.isInteger(activation.resourcesPublished)
+    || !Number.isInteger(activation.validationErrors)) {
+    fail('검증된 2026 콘텐츠 운영 발행에 실패했습니다.')
+  }
+
   const publicClient = createClient(
     SUPABASE_URL,
     state.supabaseKeys.publishable,
