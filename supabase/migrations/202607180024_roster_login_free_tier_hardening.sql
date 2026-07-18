@@ -24,8 +24,9 @@ declare
   v_password_key_version integer;
   v_failed_attempts smallint;
   v_locked_until timestamptz;
+  v_rate_shard integer;
   v_digest bytea := p_current_digest;
-  v_bcrypt_hash text := '$2b$10$CwTycUXWue0Thq9StjUM0uJ8oKe6eT3fYqOGl7bYJd2N0HC8oQ0iW';
+  v_bcrypt_hash text := '$2a$10$o7JqKHhe/plhLc9TKesE3./nRKCpqgQLO3uChM4EEe35p3V60KgOu';
   v_password_matches boolean;
 begin
   if pg_catalog.octet_length(p_phone_hmac) <> 32
@@ -41,14 +42,16 @@ begin
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
 
+  v_rate_shard := pg_catalog.get_byte(p_token_hash, 0) % 4;
+
   if not public.consume_rate_limit(
-    'roster-login-global', 'roster-login-global', 800, interval '10 minutes'
+    'roster-login-global:' || v_rate_shard, 'roster-login-global', 200, interval '10 minutes'
   ) then
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
 
   if not public.consume_rate_limit(
-    pg_catalog.encode(p_ip_hmac, 'hex'), 'roster-login-ip', 400, interval '10 minutes'
+    pg_catalog.encode(p_ip_hmac, 'hex') || ':' || v_rate_shard, 'roster-login-ip', 100, interval '10 minutes'
   ) then
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
@@ -90,7 +93,7 @@ begin
     pg_catalog.encode(v_digest, 'hex'), v_bcrypt_hash
   ) = v_bcrypt_hash;
 
-  if not found or v_password_bcrypt is null or v_bcrypt_hash = '$2b$10$CwTycUXWue0Thq9StjUM0uJ8oKe6eT3fYqOGl7bYJd2N0HC8oQ0iW' or not v_password_matches then
+  if not found or v_password_bcrypt is null or v_bcrypt_hash = '$2a$10$o7JqKHhe/plhLc9TKesE3./nRKCpqgQLO3uChM4EEe35p3V60KgOu' or not v_password_matches then
     if found and (v_locked_until is null or v_locked_until <= v_now) then
       update public.student_credentials
       set failed_attempts = failed_attempts + 1,
