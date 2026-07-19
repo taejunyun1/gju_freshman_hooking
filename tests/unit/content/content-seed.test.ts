@@ -430,6 +430,7 @@ describe('verified department content seed', () => {
     expect(firstSql).toContain('pg_advisory_xact_lock')
     expect(firstSql).toContain('lock table public.resources')
     expect(firstSql).toContain('content seed target tables are not empty')
+    expect(firstSql).toContain("not like 'project_catalog:%'")
     expect(firstSql).toContain('commit;')
     expect(firstSql).not.toMatch(/grant\s+(insert|update|delete)/iu)
 

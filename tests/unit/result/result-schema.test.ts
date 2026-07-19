@@ -520,6 +520,20 @@ describe('result snapshot decoder', () => {
       .map(id => resource(id, 'project')) as never
     expect(() => decodeResultSnapshot(tooManyProjects)).toThrow()
 
+    const tooManyCurrentProjects = clone(makeValidSnapshot())
+    tooManyCurrentProjects.resources.project = [20, 21, 22, 23].map(id => ({
+      ...resource(id, 'project'),
+      displayMetadata: { displayTier: 'current' as const, projectYear: 2026 },
+    })) as never
+    expect(() => decodeResultSnapshot(tooManyCurrentProjects)).toThrow()
+
+    const tooManyAccumulatedExperiences = clone(makeValidSnapshot())
+    tooManyAccumulatedExperiences.resources.project = [20, 21, 22, 23].map(id => ({
+      ...resource(id, 'project'),
+      displayMetadata: { displayTier: 'experience' as const, projectYear: 2025 },
+    })) as never
+    expect(() => decodeResultSnapshot(tooManyAccumulatedExperiences)).toThrow()
+
     const tooManyCareers = clone(makeValidSnapshot())
     tooManyCareers.resources.career = [30, 31, 32, 33, 34].map(id => resource(id, 'career'))
     expect(() => decodeResultSnapshot(tooManyCareers)).toThrow()

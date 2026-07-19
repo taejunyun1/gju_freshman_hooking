@@ -100,6 +100,7 @@ describe('result master sequence', () => {
       '4Y 캡스톤·포트폴리오',
     ])
     expect(source).toMatch(/@media\s*\(min-width:\s*1024px\)/u)
+    expect(source).toMatch(/\.learning-path__experience\s*\{\s*grid-column:\s*1\s*\/\s*-1/u)
   })
 
   it('keeps empty years explicit instead of inventing recommendations', async () => {
@@ -129,7 +130,31 @@ describe('result master sequence', () => {
   })
 
   it('shows course metadata and prioritizes 2026 projects ahead of accumulated experience', async () => {
-    const wrapper = await mountTimeline()
+    const raw = JSON.parse(JSON.stringify(makeResultSnapshot())) as unknown as {
+      resources: {
+        project: Array<{
+          id: number
+          title: string
+          connectionReason: string
+          displayMetadata: Record<string, unknown>
+        }>
+      }
+    }
+    const currentProject = raw.resources.project[0]!
+    raw.resources.project.push({
+      ...currentProject,
+      id: 303,
+      title: '2025 제주 수중드론·360VR 촬영 워크숍',
+      connectionReason: '선택한 ‘제품·패션·광고 이미지 만들기’ 관심이 2025 제주 수중드론·360VR 촬영 워크숍에서 실제 제작 결과물로 이어집니다.',
+      displayMetadata: {
+        displayTier: 'experience',
+        projectYear: 2025,
+        periodLabel: '2025년 여름',
+        statusLabel: '운영 완료',
+        programGroup: '이전 운영 경험',
+      },
+    })
+    const wrapper = await mountTimeline(raw as unknown as ResultSnapshot)
     const firstCourse = wrapper.get('[data-course-resource="101"]')
     const project = wrapper.get('[data-project-resource="302"]')
     const learningPath = wrapper.get('[data-result-section="learning-path"]')
@@ -140,6 +165,8 @@ describe('result master sequence', () => {
     expect(firstCourse.text()).toContain('선택한 ‘제품·패션·광고 이미지 만들기’ 관심이 기초사진실기')
     expect(firstCourse.get('time').attributes('datetime')).toBe('2026-07-14')
     expect(learningPath.get('[data-project-lane]').text()).toContain('2026 진행·예정 프로그램')
+    expect(learningPath.get('[data-project-experience]').text()).toContain('학과가 축적한 경험')
+    expect(learningPath.get('[data-project-experience]').text()).toContain('2025 제주 수중드론·360VR 촬영 워크숍')
     expect(project.text()).toContain('지역 브랜드 캠페인 프로젝트')
     expect(project.text()).toContain('2026년 2학기')
     expect(project.text()).toContain('예정')

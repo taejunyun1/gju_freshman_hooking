@@ -385,6 +385,10 @@ const yearTitles = {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .learning-path__experience {
+    grid-column: 1 / -1;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

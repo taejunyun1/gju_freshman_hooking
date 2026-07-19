@@ -993,8 +993,16 @@ lock table public.resources, public.resource_tags, public.equipment_inventory_it
 
 do $seed_guard$
 begin
-  if exists (select 1 from public.resources)
-    or exists (select 1 from public.resource_tags)
+  if exists (
+      select 1 from public.resources resource
+      where coalesce(resource.metadata ->> 'seedKey', '') not like 'project_catalog:%'
+    )
+    or exists (
+      select 1
+      from public.resource_tags tag
+      join public.resources resource on resource.id = tag.resource_id
+      where coalesce(resource.metadata ->> 'seedKey', '') not like 'project_catalog:%'
+    )
     or exists (select 1 from public.equipment_inventory_items)
     or exists (select 1 from public.faculty)
     or exists (select 1 from public.faculty_tags)

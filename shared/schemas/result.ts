@@ -267,6 +267,32 @@ export const resultResourcesSchema = z.object({
     })
   }
 
+  const currentProjectCount = resources.project.filter(project => (
+    project.displayMetadata.displayTier === 'current'
+    && project.displayMetadata.projectYear === 2026
+  )).length
+  if (currentProjectCount > 3) {
+    context.addIssue({
+      code: 'too_big',
+      maximum: 3,
+      origin: 'array',
+      inclusive: true,
+      message: '2026 진행·예정 프로젝트는 최대 3개입니다.',
+      path: ['project'],
+    })
+  }
+
+  if (resources.project.length - currentProjectCount > 3) {
+    context.addIssue({
+      code: 'too_big',
+      maximum: 3,
+      origin: 'array',
+      inclusive: true,
+      message: '학과가 축적한 경험 프로젝트는 최대 3개입니다.',
+      path: ['project'],
+    })
+  }
+
   const allResources = [
     ...resources.course,
     ...resources.equipment,
