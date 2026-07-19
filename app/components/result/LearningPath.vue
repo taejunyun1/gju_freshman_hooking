@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type {
   ExtracurricularResultResource,
   LearningPathYear,
@@ -6,11 +7,18 @@ import type {
 } from '../../../shared/types/result'
 import ResourceCard from './ResourceCard.vue'
 
-defineProps<{
+const props = defineProps<{
   years: readonly [LearningPathYear, LearningPathYear, LearningPathYear, LearningPathYear]
   projects: readonly ProjectResultResource[]
   extracurricular: readonly ExtracurricularResultResource[]
 }>()
+
+const currentProjects = computed(() => props.projects.filter(project => (
+  project.displayMetadata.displayTier === 'current'
+  && project.displayMetadata.projectYear === 2026
+)))
+const accumulatedExperiences = computed(() => props.projects.filter(project => !currentProjects.value
+  .some(current => current.id === project.id)))
 
 const yearTitles = {
   1: '1Y 기초',
@@ -73,24 +81,19 @@ const yearTitles = {
       aria-labelledby="project-lane-title"
     >
       <div class="learning-path__project-heading">
-        <p>SECONDARY LANE</p>
-        <h3 id="project-lane-title">연결 프로젝트</h3>
-        <span>특정 학년을 임의로 지정하지 않은 학과 프로젝트입니다.</span>
+        <p>CURRENT PROGRAMS / 2026</p>
+        <h3 id="project-lane-title">2026 진행·예정 프로그램</h3>
+        <span>선택한 관심사와 직접 맞닿는 올해의 프로젝트를 우선 보여드립니다.</span>
       </div>
       <div
-        v-if="projects.length + extracurricular.length > 0"
+        v-if="currentProjects.length > 0"
         class="learning-path__projects"
+        data-current-projects
       >
         <ResourceCard
-          v-for="project in projects"
+          v-for="project in currentProjects"
           :key="`project-${project.id}`"
           :resource="project"
-          variant="project"
-        />
-        <ResourceCard
-          v-for="activity in extracurricular"
-          :key="`extra-${activity.id}`"
-          :resource="activity"
           variant="project"
         />
       </div>
@@ -98,8 +101,46 @@ const yearTitles = {
         v-else
         class="learning-path__empty"
       >
-        확인된 학과 데이터를 준비 중입니다
+        현재 학년도 프로젝트는 학과 운영 확인 후 안내합니다
       </p>
+
+      <div
+        v-if="accumulatedExperiences.length > 0"
+        class="learning-path__experience"
+        data-project-experience
+      >
+        <div class="learning-path__experience-heading">
+          <p>ACCUMULATED EXPERIENCE</p>
+          <h4>학과가 축적한 경험</h4>
+          <span>최근 운영 사례와 이전 프로젝트를 짧게 살펴보세요.</span>
+        </div>
+        <div class="learning-path__projects learning-path__projects--experience">
+          <ResourceCard
+            v-for="project in accumulatedExperiences"
+            :key="`experience-${project.id}`"
+            :resource="project"
+            variant="project-experience"
+          />
+        </div>
+      </div>
+
+      <div
+        v-if="extracurricular.length > 0"
+        class="learning-path__experience"
+      >
+        <div class="learning-path__experience-heading">
+          <p>STUDENT ACTIVITIES</p>
+          <h4>비교과·학생 활동</h4>
+        </div>
+        <div class="learning-path__projects learning-path__projects--experience">
+        <ResourceCard
+          v-for="activity in extracurricular"
+          :key="`extra-${activity.id}`"
+          :resource="activity"
+          variant="project-experience"
+        />
+        </div>
+      </div>
     </aside>
   </div>
 </template>
@@ -263,6 +304,40 @@ const yearTitles = {
   gap: 0.65rem;
 }
 
+.learning-path__experience {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.2rem;
+}
+
+.learning-path__experience-heading {
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 15%, transparent);
+  padding-top: 0.85rem;
+}
+
+.learning-path__experience-heading p {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-resource) 78%, var(--color-ink));
+  font-family: var(--font-mono);
+  font-size: 0.525rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.learning-path__experience-heading h4 {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-display);
+  font-size: 0.925rem;
+}
+
+.learning-path__experience-heading span {
+  display: block;
+  margin-top: 0.25rem;
+  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  font-size: 0.725rem;
+  line-height: 1.5;
+}
+
 @keyframes master-playhead {
   from { left: 3.1rem; }
   to { left: calc(100% - 3.1rem); }
@@ -304,6 +379,10 @@ const yearTitles = {
 
   .learning-path__projects {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .learning-path__projects--experience {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
 }

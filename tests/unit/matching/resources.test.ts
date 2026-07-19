@@ -129,6 +129,52 @@ describe('resource matching', () => {
     expect(weighted.course[0]?.affinity).toBe(75)
   })
 
+  it('keeps three current projects ahead of three accumulated experiences', () => {
+    const currentProjects = [1, 2, 3].map((id) => ({
+      ...emptyMetadataCandidate(id, 'project', `current_${id}`),
+      priority: 100 - id,
+      metadata: {
+        displayTier: 'current',
+        projectYear: 2026,
+        periodLabel: '2026년 2학기',
+        statusLabel: '예정',
+        programGroup: 'K-컬처 오픈랩',
+      },
+    }) as ResourceCandidate)
+    const experiences = [4, 5, 6].map((id) => ({
+      ...emptyMetadataCandidate(id, 'project', `experience_${id}`),
+      priority: 100 - id,
+      metadata: {
+        displayTier: 'experience',
+        projectYear: 2025,
+        periodLabel: '2025년 운영 사례',
+        statusLabel: '완료',
+      },
+    }) as ResourceCandidate)
+
+    const ranked = rankResources({
+      interestVector: Object.fromEntries(
+        [...currentProjects, ...experiences].flatMap(candidate => candidate.tags.map(item => [item.key, 1])),
+      ),
+      selectedInterests: selected([
+        ...currentProjects,
+        ...experiences,
+      ].flatMap(candidate => candidate.tags.map(item => item.key))),
+      candidates: [...currentProjects, ...experiences],
+    })
+
+    const projects = ranked.extracurricularProject.filter(resource => resource.type === 'project')
+    expect(projects.map(resource => resource.id)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(projects[0]?.displayMetadata).toEqual({
+      displayTier: 'current',
+      projectYear: 2026,
+      periodLabel: '2026년 2학기',
+      statusLabel: '예정',
+      programGroup: 'K-컬처 오픈랩',
+    })
+    expect(projects.every(resource => resultResourceSchema.safeParse(resource).success)).toBe(true)
+  })
+
   it('uses no inactive, private, unrelated, or malformed candidate as filler', () => {
     const valid = course(1, { tags: [tag('documentary')] })
     const invalidWeightHigh = course(6, { tags: [tag('documentary', 4)] }) as ResourceCandidate
@@ -555,7 +601,14 @@ describe('resource matching', () => {
       locationLabel: '학과',
       operationNote: '학과 확인 필요',
     })
-    expect(ranked.extracurricularProject).toHaveLength(3)
+    expect(ranked.extracurricularProject).toHaveLength(5)
+    expect(ranked.extracurricularProject.map(item => item.type)).toEqual([
+      'project',
+      'project',
+      'extracurricular',
+      'extracurricular',
+      'extracurricular',
+    ])
     expect(ranked.studentWork).toHaveLength(3)
     expect(ranked.studentWork[0]?.displayMetadata).toEqual({
       imagePath: 'works/1.jpg',

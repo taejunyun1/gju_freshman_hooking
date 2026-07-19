@@ -163,6 +163,30 @@ const studentWorkDisplayMetadataSchema = z.object({
 
 const emptyDisplayMetadataSchema = z.object({}).strict()
 
+const projectDisplayMetadataSchema = z.object({
+  displayTier: z.enum(['current', 'experience']).optional(),
+  projectYear: z.number().int().min(2000).max(2100).optional(),
+  periodLabel: boundedText(1, 80).optional(),
+  statusLabel: boundedText(1, 40).optional(),
+  programGroup: boundedText(1, 120).optional(),
+}).strict().superRefine((metadata, context) => {
+  const hasTier = metadata.displayTier !== undefined
+  const hasYear = metadata.projectYear !== undefined
+  if (hasTier !== hasYear) {
+    context.addIssue({
+      code: 'custom',
+      message: '프로젝트 노출 단계와 사업연도는 함께 제공되어야 합니다.',
+    })
+  }
+  if (metadata.displayTier === 'current' && metadata.projectYear !== 2026) {
+    context.addIssue({
+      code: 'custom',
+      message: '현재 우선 프로젝트는 2026 사업연도여야 합니다.',
+      path: ['projectYear'],
+    })
+  }
+})
+
 export const courseResultResourceSchema = z.object({
   ...resultResourceBaseShape,
   type: z.literal('course'),
@@ -190,7 +214,7 @@ export const extracurricularResultResourceSchema = z.object({
 export const projectResultResourceSchema = z.object({
   ...resultResourceBaseShape,
   type: z.literal('project'),
-  displayMetadata: emptyDisplayMetadataSchema,
+  displayMetadata: projectDisplayMetadataSchema,
 }).strict().superRefine(renderedReasonCheck)
 
 export const studentWorkResultResourceSchema = z.object({
@@ -227,7 +251,7 @@ export const resultResourcesSchema = z.object({
   equipment: z.array(equipmentResultResourceSchema).max(4),
   facility: z.array(facilityResultResourceSchema).max(4),
   extracurricular: z.array(extracurricularResultResourceSchema).max(3),
-  project: z.array(projectResultResourceSchema).max(3),
+  project: z.array(projectResultResourceSchema).max(6),
   student_work: z.array(studentWorkResultResourceSchema).max(3),
   career: z.array(careerResultResourceSchema).max(4),
   support: z.array(supportResultResourceSchema).max(3),

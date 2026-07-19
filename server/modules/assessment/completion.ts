@@ -907,8 +907,18 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
         imageAlt: valueAt(metadata, 'imageAlt', 'image_alt'),
       },
     } as ResourceCandidate
+    case 'project': return {
+      ...base,
+      type: 'project',
+      metadata: {
+        displayTier: valueAt(metadata, 'displayTier', 'display_tier'),
+        projectYear: valueAt(metadata, 'projectYear', 'project_year'),
+        periodLabel: valueAt(metadata, 'periodLabel', 'period_label'),
+        statusLabel: valueAt(metadata, 'statusLabel', 'status_label'),
+        programGroup: valueAt(metadata, 'programGroup', 'program_group'),
+      },
+    } as ResourceCandidate
     case 'extracurricular':
-    case 'project':
     case 'career':
     case 'support': return { ...base, type: input.type, metadata: {} } as ResourceCandidate
     default: throw new Error('RESOURCE_STORE_INVALID')

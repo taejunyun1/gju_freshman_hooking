@@ -509,11 +509,16 @@ describe('result snapshot decoder', () => {
     tooManyPhysicalResources.resources.facility = [13, 14].map(id => resource(id, 'facility'))
     expect(() => decodeResultSnapshot(tooManyPhysicalResources)).toThrow()
 
-    for (const type of ['extracurricular', 'project', 'student_work'] as const) {
+    for (const type of ['extracurricular', 'student_work'] as const) {
       const snapshot = clone(makeValidSnapshot())
       snapshot.resources[type] = [20, 21, 22, 23].map(id => resource(id, type)) as never
       expect(() => decodeResultSnapshot(snapshot)).toThrow()
     }
+
+    const tooManyProjects = clone(makeValidSnapshot())
+    tooManyProjects.resources.project = [20, 21, 22, 23, 24, 25, 26]
+      .map(id => resource(id, 'project')) as never
+    expect(() => decodeResultSnapshot(tooManyProjects)).toThrow()
 
     const tooManyCareers = clone(makeValidSnapshot())
     tooManyCareers.resources.career = [30, 31, 32, 33, 34].map(id => resource(id, 'career'))

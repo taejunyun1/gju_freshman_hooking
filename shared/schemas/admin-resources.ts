@@ -86,6 +86,35 @@ const archiveActivityAdminResourceMetadataSchema = z.object({
   periodLabel: nullableCleanText(100),
 }).strict()
 
+const projectCatalogMetadataSchema = z.object({
+  seedKey: cleanText(1, 300),
+  catalogKey: cleanText(1, 100),
+  projectYear: z.number().int().min(2000).max(2100),
+  displayTier: z.enum(['current', 'experience']),
+  displayKind: z.enum(['메인프로젝트', '최근사례', '짧은경험']),
+  periodLabel: cleanText(1, 100),
+  statusLabel: cleanText(1, 100),
+  programGroup: cleanText(1, 200),
+  semester: nullableCleanText(100).optional(),
+  category: cleanText(1, 100),
+  activities: cleanText(1, 1000),
+  outcomes: cleanText(1, 1000),
+  locations: cleanText(1, 300),
+  faculty: z.array(cleanText(1, 100)).min(1).max(10),
+  sourcePageTitle: cleanText(1, 200),
+  sourceUrl: archiveHttpsUrlSchema.optional(),
+  sourceCheckedAt: z.iso.date(),
+  verificationNote: cleanText(1, 1000),
+}).strict().superRefine((metadata, context) => {
+  if ((metadata.displayTier === 'current') !== (metadata.projectYear === 2026)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['displayTier'],
+      message: '2026 사업만 현재 우선 프로젝트로 표시할 수 있습니다.',
+    })
+  }
+})
+
 const graduationYearCandidateSchema = z.object({
   year: z.number().int().min(1994).max(2100),
   sourceUrl: archiveHttpsUrlSchema,
@@ -162,6 +191,11 @@ const archiveActivityOrEmptyMetadataSchema = z.union([
   emptyMetadataSchema,
   archiveActivityAdminResourceMetadataSchema,
 ])
+const projectActivityMetadataSchema = z.union([
+  emptyMetadataSchema,
+  archiveActivityAdminResourceMetadataSchema,
+  projectCatalogMetadataSchema,
+])
 const archiveCareerOrEmptyMetadataSchema = z.union([
   emptyMetadataSchema,
   archiveCareerAdminResourceMetadataSchema,
@@ -216,7 +250,7 @@ export const adminResourceWriteSchema = z.discriminatedUnion('type', [
   z.object({ ...commonWriteShape, type: z.literal('facility'), metadata: facilityAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('student_work'), metadata: studentWorkAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('extracurricular'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
-  z.object({ ...commonWriteShape, type: z.literal('project'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonWriteShape, type: z.literal('project'), metadata: projectActivityMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('career'), metadata: archiveCareerOrEmptyMetadataSchema }).strict(),
   z.object({ ...commonWriteShape, type: z.literal('support'), metadata: emptyMetadataSchema }).strict(),
 ]).superRefine((resource, context) => {
@@ -294,7 +328,7 @@ export const adminResourceSchema = z.discriminatedUnion('type', [
   z.object({ ...commonResourceShape, type: z.literal('facility'), metadata: facilityAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('student_work'), metadata: studentWorkAdminResourceMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('extracurricular'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
-  z.object({ ...commonResourceShape, type: z.literal('project'), metadata: archiveActivityOrEmptyMetadataSchema }).strict(),
+  z.object({ ...commonResourceShape, type: z.literal('project'), metadata: projectActivityMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('career'), metadata: archiveCareerOrEmptyMetadataSchema }).strict(),
   z.object({ ...commonResourceShape, type: z.literal('support'), metadata: emptyMetadataSchema }).strict(),
 ]).superRefine((resource, context) => {

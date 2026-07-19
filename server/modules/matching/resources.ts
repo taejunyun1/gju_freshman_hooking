@@ -10,6 +10,7 @@ import {
   type EquipmentResultResource,
   type ExtracurricularResultResource,
   type FacilityResultResource,
+  type ProjectDisplayMetadata,
   type ProjectResultResource,
   type ResultResource,
   type StudentWorkResultResource,
@@ -286,6 +287,20 @@ const roundOneDecimal = (value: number): number => Math.round((value + Number.EP
 
 const emptyDisplayMetadata = (): EmptyDisplayMetadata => Object.freeze({})
 
+const projectDisplayMetadata = (
+  metadata: Readonly<Record<string, unknown>>,
+): ProjectDisplayMetadata => Object.freeze({
+  ...(metadata.displayTier === 'current' || metadata.displayTier === 'experience'
+    ? { displayTier: metadata.displayTier }
+    : {}),
+  ...(typeof metadata.projectYear === 'number' && Number.isInteger(metadata.projectYear)
+    ? { projectYear: metadata.projectYear }
+    : {}),
+  ...(isNonEmptyString(metadata.periodLabel) ? { periodLabel: metadata.periodLabel } : {}),
+  ...(isNonEmptyString(metadata.statusLabel) ? { statusLabel: metadata.statusLabel } : {}),
+  ...(isNonEmptyString(metadata.programGroup) ? { programGroup: metadata.programGroup } : {}),
+})
+
 const canonicalResult = (result: ResultResource): ResultResource | null => (
   resultResourceSchema.safeParse(result).success ? result : null
 )
@@ -353,8 +368,12 @@ const toResultResource = (
         imageAlt: candidate.metadata.imageAlt,
       }),
     }))
+    case 'project': return canonicalResult(Object.freeze({
+      ...base,
+      type: candidate.type,
+      displayMetadata: projectDisplayMetadata(candidate.metadata),
+    }))
     case 'extracurricular':
-    case 'project':
     case 'career':
     case 'support': return canonicalResult(Object.freeze({
       ...base,
@@ -426,6 +445,12 @@ const selectCapabilityEvidence = (
   return Object.freeze([...selected, ...filler].slice(0, 4))
 }
 
+const isCurrentProject = (candidate: RankedCandidate): boolean => (
+  candidate.candidate.type === 'project'
+  && candidate.candidate.metadata.displayTier === 'current'
+  && candidate.candidate.metadata.projectYear === 2026
+)
+
 export const rankResources = (input: RankResourcesInput): RankedResources => {
   assertInterestVector(input.interestVector)
   assertSelectedInterests(input.selectedInterests)
@@ -451,9 +476,19 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
 
   const course = selectDiverse(ranked.filter(item => item.candidate.type === 'course'), 5)
   const capabilityEvidence = selectCapabilityEvidence(ranked)
-  const extracurricularProject = selectDiverse(ranked.filter(item => (
-    item.candidate.type === 'extracurricular' || item.candidate.type === 'project'
+  const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
+  const experienceProjects = selectDiverse(ranked.filter(item => (
+    item.candidate.type === 'project' && !isCurrentProject(item)
   )), 3)
+  const extracurricular = selectDiverse(
+    ranked.filter(item => item.candidate.type === 'extracurricular'),
+    3,
+  )
+  const extracurricularProject = Object.freeze([
+    ...currentProjects,
+    ...experienceProjects,
+    ...extracurricular,
+  ])
   const studentWork = selectDiverse(ranked.filter(item => item.candidate.type === 'student_work'), 3)
   const career = selectDiverse(ranked.filter(item => item.candidate.type === 'career'), 4)
   const support = selectDiverse(ranked.filter(item => item.candidate.type === 'support'), 4)

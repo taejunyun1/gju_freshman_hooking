@@ -53,6 +53,14 @@ export interface StudentWorkDisplayMetadata {
   readonly imageAlt: string
 }
 
+export interface ProjectDisplayMetadata {
+  readonly displayTier?: 'current' | 'experience'
+  readonly projectYear?: number
+  readonly periodLabel?: string
+  readonly statusLabel?: string
+  readonly programGroup?: string
+}
+
 export type EmptyDisplayMetadata = Readonly<Record<string, never>>
 
 interface ResultResourceBase<Type extends ResourceType, Metadata> {
@@ -71,7 +79,7 @@ export type CourseResultResource = ResultResourceBase<'course', CourseDisplayMet
 export type EquipmentResultResource = ResultResourceBase<'equipment', EquipmentDisplayMetadata>
 export type FacilityResultResource = ResultResourceBase<'facility', FacilityDisplayMetadata>
 export type ExtracurricularResultResource = ResultResourceBase<'extracurricular', EmptyDisplayMetadata>
-export type ProjectResultResource = ResultResourceBase<'project', EmptyDisplayMetadata>
+export type ProjectResultResource = ResultResourceBase<'project', ProjectDisplayMetadata>
 export type StudentWorkResultResource = ResultResourceBase<'student_work', StudentWorkDisplayMetadata>
 export type CareerResultResource = ResultResourceBase<'career', EmptyDisplayMetadata>
 export type SupportResultResource = ResultResourceBase<'support', EmptyDisplayMetadata>

@@ -84,7 +84,15 @@ const plainResource = (
   affinity: 82,
   primaryTag: 'commercial',
   connectionReason: reason(title),
-  displayMetadata: {},
+  displayMetadata: type === 'project'
+    ? {
+        displayTier: 'current' as const,
+        projectYear: 2026,
+        periodLabel: '2026년 2학기',
+        statusLabel: '예정',
+        programGroup: 'K-컬처 오픈랩',
+      }
+    : {},
 })
 
 const studentWork = {

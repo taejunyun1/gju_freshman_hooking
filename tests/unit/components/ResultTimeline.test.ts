@@ -128,7 +128,7 @@ describe('result master sequence', () => {
     expect(outcomes.text()).toContain('확인된 학과 데이터를 준비 중입니다')
   })
 
-  it('shows course metadata and reasons while keeping projects in a separate undated lane', async () => {
+  it('shows course metadata and prioritizes 2026 projects ahead of accumulated experience', async () => {
     const wrapper = await mountTimeline()
     const firstCourse = wrapper.get('[data-course-resource="101"]')
     const project = wrapper.get('[data-project-resource="302"]')
@@ -139,8 +139,10 @@ describe('result master sequence', () => {
     expect(firstCourse.text()).toContain('3학점')
     expect(firstCourse.text()).toContain('선택한 ‘제품·패션·광고 이미지 만들기’ 관심이 기초사진실기')
     expect(firstCourse.get('time').attributes('datetime')).toBe('2026-07-14')
-    expect(learningPath.get('[data-project-lane]').text()).toContain('연결 프로젝트')
+    expect(learningPath.get('[data-project-lane]').text()).toContain('2026 진행·예정 프로그램')
     expect(project.text()).toContain('지역 브랜드 캠페인 프로젝트')
+    expect(project.text()).toContain('2026년 2학기')
+    expect(project.text()).toContain('예정')
     expect(project.get('time').attributes('datetime')).toBe('2026-07-14')
     expect(project.element.closest('[data-learning-year]')).toBeNull()
   })

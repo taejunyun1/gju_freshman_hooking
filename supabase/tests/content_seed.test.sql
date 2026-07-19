@@ -2,13 +2,13 @@ begin;
 
 select plan(60);
 
-select is((select count(*)::integer from public.resources), 158, 'content seed has 158 resources');
+select is((select count(*)::integer from public.resources), 201, 'content seed and current project catalog have 201 resources');
 select is((select count(*)::integer from public.resources where type = 'course'), 41, '41 courses are seeded');
 select is((select count(*)::integer from public.resources where type = 'equipment'), 83, '83 equipment groups are seeded');
 select is((select count(*)::integer from public.resources where type = 'facility'), 7, 'seven facilities are seeded');
 select is((select count(*)::integer from public.resources where type = 'career'), 17, '17 bounded alumni career records are seeded');
 select is((select count(*)::integer from public.resources where type = 'extracurricular'), 5, 'five bounded extracurricular records are seeded');
-select is((select count(*)::integer from public.resources where type = 'project'), 5, 'five bounded project records are seeded');
+select is((select count(*)::integer from public.resources where type = 'project'), 48, 'five archive and 43 project-catalog records are seeded');
 select is((select count(*)::integer from public.resources where status = 'draft'), 158, 'all resources remain draft');
 select is((select count(*)::integer from public.resources where type = 'course' and visibility = 'public'), 41, 'all draft courses have public display metadata');
 select is((select count(*)::integer from public.resources where type = 'equipment' and visibility = 'public'), 72, '72 verified equipment groups have public display metadata');
@@ -80,7 +80,7 @@ select ok(
   not exists (select 1 from public.faculty_tags where weight not between 0 and 3),
   'all derived faculty tag weights remain in the schema range'
 );
-select is((select count(*)::integer from public.resource_tags), 903, 'all derived resource tags are linked without silent row loss');
+select is((select count(*)::integer from public.resource_tags), 1250, 'all derived resource and project-catalog tags are linked without silent row loss');
 select is((select count(*)::integer from public.faculty_tags), 174, 'all deduplicated faculty tags are linked without silent row loss');
 select is((select count(*)::integer from public.faculty_specialist_links), 14, '14 specialist tag links are seeded');
 select is(
@@ -256,9 +256,12 @@ select ok(
 select ok(
   not exists (
     select 1 from public.resources
-    where type = 'student_work'
+    where metadata ->> 'seedKey' like 'archive:%'
+      and (
+        type = 'student_work'
       or title ~ '(동아리|학생회|학생자치)'
       or summary ~ '(동아리|학생회|학생자치)'
+      )
   ),
   'archive enrichment contains no student work or unverified club claims'
 );

@@ -4,7 +4,7 @@ import ConnectionReason from './ConnectionReason.vue'
 
 defineProps<{
   resource: ResultResource
-  variant?: 'course' | 'project' | 'outcome' | 'support'
+  variant?: 'course' | 'project' | 'project-experience' | 'outcome' | 'support'
 }>()
 </script>
 
@@ -39,6 +39,19 @@ defineProps<{
     <h4>{{ resource.title }}</h4>
     <p class="resource-card__summary">{{ resource.summary }}</p>
 
+    <p
+      v-if="resource.type === 'project' && (
+        resource.displayMetadata.statusLabel
+        || resource.displayMetadata.periodLabel
+        || resource.displayMetadata.programGroup
+      )"
+      class="resource-card__project-meta"
+    >
+      <span v-if="resource.displayMetadata.statusLabel">{{ resource.displayMetadata.statusLabel }}</span>
+      <span v-if="resource.displayMetadata.periodLabel">{{ resource.displayMetadata.periodLabel }}</span>
+      <span v-if="resource.displayMetadata.programGroup">{{ resource.displayMetadata.programGroup }}</span>
+    </p>
+
     <dl
       v-if="resource.type === 'course'"
       class="resource-card__course-meta"
@@ -72,6 +85,11 @@ defineProps<{
 
 .resource-card--course {
   background: var(--color-surface);
+}
+
+.resource-card--project-experience {
+  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-primary-soft));
+  padding: 0.75rem;
 }
 
 .resource-card--support {
@@ -111,6 +129,23 @@ defineProps<{
   line-height: 1.55;
   overflow-wrap: anywhere;
   word-break: keep-all;
+}
+
+.resource-card__project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  margin: 0.65rem 0 0;
+  color: color-mix(in srgb, var(--color-ink) 64%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.resource-card__project-meta span + span::before {
+  margin-right: 0.6rem;
+  color: color-mix(in srgb, var(--color-primary) 65%, transparent);
+  content: '•';
 }
 
 .resource-card__course-meta {
