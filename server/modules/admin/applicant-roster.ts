@@ -54,11 +54,11 @@ const throwResultError = (value: unknown): never | void => {
   if (kind === 'conflict' || kind === 'forbidden') throw new AppError('ROSTER_CONFLICT')
 }
 
-const protectRow = async (row: ApplicantRosterRow, cycleId: string, keyring: RosterKeyring): Promise<ProtectedRow> => {
+const protectRow = async (row: ApplicantRosterRow, admissionYear: number, keyring: RosterKeyring): Promise<ProtectedRow> => {
   const [phone, name, password] = await Promise.all([
     protectPhone(row.phone, keyring.phoneHmacKey, keyring.piiEncryptionKey),
     protectApplicantName(row.name, keyring.nameHmacKey, keyring.piiEncryptionKey),
-    deriveInitialPassword({ cycleId, phone: row.phone, generation: 1, pepper: keyring.currentPassword.pepper }),
+    deriveInitialPassword({ admissionYear, phone: row.phone }),
   ])
   return {
     phoneHmac: hex(phone.hmac), phoneCiphertext: hex(phone.ciphertext), phoneIv: hex(phone.iv),
@@ -95,7 +95,7 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
   async start(input: unknown, context: CommandContext) {
     const { year } = startSchema.safeParse(input).success ? startSchema.parse(input) : (() => { throw new AppError('ROSTER_INVALID') })()
     const cycleId = crypto.randomUUID()
-    const students = await Promise.all(testRows.map(row => protectRow(row, cycleId, keyring)))
+    const students = await Promise.all(testRows.map(row => protectRow(row, year, keyring)))
     const data = await rpcData(rpc, 'start_admission_cycle_v1', {
       p_cycle_id: cycleId, p_year: year, p_password_key_version: keyring.currentPassword.version,
       p_admin_user_id: context.adminUserId, p_test_students: students,
@@ -135,7 +135,10 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
   async apply(input: RosterApplyRequest, context: CommandContext) {
     const parsed = rosterApplyRequestSchema.safeParse(input)
     if (!parsed.success) throw new AppError('ROSTER_INVALID')
-    const rows = await Promise.all(parsed.data.rows.map(row => protectRow(row, parsed.data.cycleId, keyring)))
+    const cycles = z.array(admissionCycleSchema).parse(await rpcData(rpc, 'list_admission_cycles_v1'))
+    const cycle = cycles.find(candidate => candidate.id === parsed.data.cycleId && candidate.status === 'current')
+    if (!cycle) throw new AppError('ROSTER_CONFLICT')
+    const rows = await Promise.all(parsed.data.rows.map(row => protectRow(row, cycle.year, keyring)))
     const data = await rpcData(rpc, 'apply_applicant_roster_v1', {
       p_cycle_id: parsed.data.cycleId, p_expected_version: parsed.data.expectedVersion,
       p_admin_user_id: context.adminUserId, p_request_digest: await requestDigest(parsed.data.cycleId, parsed.data.expectedVersion, parsed.data.rows),
@@ -155,27 +158,33 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
       if (!row) throw new Error('ROSTER_STORE_INVALID')
       return rosterCredentialSchema.parse({
         name: row.name, phone: row.phone,
-        password: await deriveInitialPassword({ cycleId: parsed.data.cycleId, phone: row.phone, generation: addition.generation, pepper: keyring.currentPassword.pepper }),
+        password: await deriveInitialPassword({ admissionYear: cycle.year, phone: row.phone }),
       })
     }))
     return { ...result.data, credentials }
   },
   async currentCredentials() {
-    const data = await rpcData(rpc, 'read_current_roster_credentials_v1')
+    const [data, cycleData] = await Promise.all([
+      rpcData(rpc, 'read_current_roster_credentials_v1'),
+      rpcData(rpc, 'list_admission_cycles_v1'),
+    ])
     const records = z.array(z.object({
       id: z.number().int().positive(),
       nameCiphertext: z.string(), nameIv: z.string(), phoneCiphertext: z.string(), phoneIv: z.string(),
       passwordGeneration: z.number().int().positive(), passwordKeyVersion: z.number().int().positive(),
       cycleId: z.string().uuid(),
     }).strict()).safeParse(data)
-    if (!records.success) throw new Error('ROSTER_STORE_INVALID')
+    const cycles = z.array(admissionCycleSchema).safeParse(cycleData)
+    if (!records.success || !cycles.success) throw new Error('ROSTER_STORE_INVALID')
     return Promise.all(records.data.map(async record => {
       if (record.passwordKeyVersion !== keyring.currentPassword.version) throw new Error('ROSTER_KEY_VERSION_INVALID')
+      const cycle = cycles.data.find(candidate => candidate.id === record.cycleId && candidate.status === 'current')
+      if (!cycle) throw new Error('ROSTER_STORE_INVALID')
       const [name, phone] = await Promise.all([
         revealApplicantName({ ciphertext: bytesFromHex(record.nameCiphertext), iv: bytesFromHex(record.nameIv) }, keyring.piiEncryptionKey),
         revealPhone({ ciphertext: bytesFromHex(record.phoneCiphertext), iv: bytesFromHex(record.phoneIv) }, keyring.piiEncryptionKey),
       ])
-      return rosterCredentialSchema.parse({ name, phone, password: await deriveInitialPassword({ cycleId: record.cycleId, phone, generation: record.passwordGeneration, pepper: keyring.currentPassword.pepper }) })
+      return rosterCredentialSchema.parse({ name, phone, password: await deriveInitialPassword({ admissionYear: cycle.year, phone }) })
     }))
   },
 })

@@ -15,6 +15,15 @@ vi.hoisted(() => {
 })
 
 const cycleId = '11111111-1111-4111-8111-111111111111'
+const currentCycle = {
+  id: cycleId,
+  year: 2026,
+  status: 'current',
+  rosterVersion: 1,
+  passwordKeyVersion: 1,
+  createdAt: '2026-07-20T00:00:00.000Z',
+  archivedAt: null,
+} as const
 const keyring = { phoneHmacKey: new Uint8Array(32).fill(1), nameHmacKey: new Uint8Array(32).fill(2), piiEncryptionKey: new Uint8Array(32).fill(3), currentPassword: { version: 1, pepper: new Uint8Array(32).fill(4) } }
 const applicant = { name: '윤 태준', phone: '010-1234-5678', highSchool: '광주고', grade: '고3' }
 
@@ -41,12 +50,16 @@ const protectedRecord = async (overrides: Record<string, unknown> = {}) => {
 
 describe('individual roster student commands', () => {
   it('adds one applicant through the add RPC and returns a one-time credential', async () => {
-    const rpc = vi.fn(async () => ({ data: { kind: 'success', prospectId: 42 }, error: null }))
+    const rpc = vi.fn(async (name: string) => name === 'list_admission_cycles_v1'
+      ? { data: [currentCycle], error: null }
+      : ({ data: { kind: 'success', prospectId: 42 }, error: null }))
     const result = await createRosterStudentCommands({ keyring, rpc }).add({ cycleId, ...applicant }, { adminUserId: 'admin-1' })
-    expect(result).toMatchObject({ id: 42, credential: { name: '윤 태준', phone: '01012345678', password: expect.any(String) } }); expect(rpc).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ id: 42, credential: { name: '윤 태준', phone: '01012345678', password: '265678' } }); expect(rpc).toHaveBeenCalledTimes(2)
   })
   it('maps a duplicate current-cycle phone to a safe conflict', async () => {
-    const rpc = vi.fn(async () => ({ data: { kind: 'conflict', code: 'PHONE_CONFLICT' }, error: null }))
+    const rpc = vi.fn(async (name: string) => name === 'list_admission_cycles_v1'
+      ? { data: [currentCycle], error: null }
+      : ({ data: { kind: 'conflict', code: 'PHONE_CONFLICT' }, error: null }))
     await expect(createRosterStudentCommands({ keyring, rpc }).add({ cycleId, ...applicant }, { adminUserId: 'admin-1' })).rejects.toMatchObject({ code: 'ROSTER_CONFLICT' })
   })
   it('keeps password generation unchanged when editing a profile', async () => {
@@ -56,9 +69,13 @@ describe('individual roster student commands', () => {
   })
   it('changes phone with a new password generation and one RPC', async () => {
     const record = await protectedRecord({ passwordGeneration: 2 })
-    const rpc = vi.fn(async (name: string) => name === 'read_roster_student_v1' ? { data: record, error: null } : { data: { kind: 'success', passwordGeneration: 3 }, error: null })
+    const rpc = vi.fn(async (name: string) => name === 'read_roster_student_v1'
+      ? { data: record, error: null }
+      : name === 'list_admission_cycles_v1'
+        ? { data: [currentCycle], error: null }
+        : { data: { kind: 'success', passwordGeneration: 3 }, error: null })
     const result = await createRosterStudentCommands({ keyring, rpc }).changePhone({ studentId: 42, phone: '010-9999-5678', expectedGeneration: 2 })
-    expect(result.passwordGeneration).toBe(3); expect(rpc).toHaveBeenCalledTimes(2)
+    expect(result.passwordGeneration).toBe(3); expect(rpc).toHaveBeenCalledTimes(3)
   })
   it('returns a safe conflict for a stale password generation', async () => {
     const rpc = vi.fn(async () => ({ data: await protectedRecord({ passwordGeneration: 3 }), error: null }))
@@ -71,9 +88,13 @@ describe('individual roster student commands', () => {
   })
   it('reissues a one-time credential with the next generation', async () => {
     const record = await protectedRecord({ passwordGeneration: 3 })
-    const rpc = vi.fn(async (name: string) => name === 'read_roster_student_v1' ? { data: record, error: null } : { data: { kind: 'success', passwordGeneration: 4 }, error: null })
+    const rpc = vi.fn(async (name: string) => name === 'read_roster_student_v1'
+      ? { data: record, error: null }
+      : name === 'list_admission_cycles_v1'
+        ? { data: [currentCycle], error: null }
+        : { data: { kind: 'success', passwordGeneration: 4 }, error: null })
     const result = await createRosterStudentCommands({ keyring, rpc }).reissuePassword({ studentId: 42, expectedGeneration: 3 })
-    expect(result).toMatchObject({ passwordGeneration: 4, credential: { password: expect.any(String) } })
+    expect(result).toMatchObject({ passwordGeneration: 4, credential: { password: '265678' } })
   })
 })
 

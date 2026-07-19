@@ -25,7 +25,21 @@ export const registerSchema = z.object({
   region: regionSchema,
 })
 
-export const rosterPasswordSchema = z.string().regex(/^\d{4}[A-Z]{2}$/u)
+export const rosterPasswordSchema = z.string().regex(/^(?:\d{6}|\d{4}[A-Z]{2})$/u)
+
+export const studentPinChangeSchema = z.object({
+  currentPin: z.string().regex(/^\d{6}$/u),
+  nextPin: z.string().regex(/^\d{6}$/u),
+  nextPinConfirm: z.string().regex(/^\d{6}$/u),
+}).strict().refine(input => input.nextPin === input.nextPinConfirm, {
+  message: 'PIN_CONFIRMATION_MISMATCH',
+  path: ['nextPinConfirm'],
+})
+
+export const studentPinResetSchema = z.object({
+  phone: phoneSchema,
+  deleteInterestHistory: z.literal(true),
+}).strict()
 
 export const loginSchema = z.object({
   phone: phoneSchema,

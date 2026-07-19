@@ -7,6 +7,15 @@ import { protectPhone } from '../../../server/modules/identity/phone'
 const cycleId = '11111111-1111-4111-8111-111111111111'
 const adminUserId = '22222222-2222-4222-8222-222222222222'
 const requestId = '33333333-3333-4333-8333-333333333333'
+const currentCycle = {
+  id: cycleId,
+  year: 2026,
+  status: 'current' as const,
+  rosterVersion: 4,
+  passwordKeyVersion: 1,
+  createdAt: '2026-07-20T00:00:00.000Z',
+  archivedAt: null,
+}
 const keyring = {
   phoneHmacKey: new Uint8Array(32).fill(1),
   nameHmacKey: new Uint8Array(32).fill(2),
@@ -43,7 +52,9 @@ describe('applicant roster service', () => {
   })
 
   it('applies a normalized roster through exactly one protected RPC', async () => {
-    const rpc = vi.fn(async (_name: string, args?: Record<string, unknown>) => ({ data: {
+    const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => name === 'list_admission_cycles_v1'
+      ? { data: [currentCycle], error: null }
+      : ({ data: {
       kind: 'success', cycleId, previousVersion: 4, rosterVersion: 5,
       counts: { add: 1, update: 0, inactive: 0, unchanged: 0 },
       added: [{ hmac: (args!.p_rows as Array<Record<string, unknown>>)[0]!.phoneHmac, generation: 1 }], credentials: [],
@@ -58,7 +69,7 @@ describe('applicant roster service', () => {
     }, { adminUserId, requestId: '44444444-4444-4444-8444-444444444444' })
 
     expect(result).toMatchObject({ cycleId, rosterVersion: 5, credentials: [{ name: '윤 태준', phone: '01012345678' }] })
-    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledTimes(2)
     expect(rpc).toHaveBeenCalledWith('apply_applicant_roster_v1', expect.objectContaining({
       p_expected_version: 4,
       p_request_id: requestId,
@@ -67,13 +78,14 @@ describe('applicant roster service', () => {
         phoneHmac: expect.any(String), nameHmac: expect.any(String),
       })],
     }))
-    const payload = rpc.mock.calls[0]![1]!.p_rows as Array<Record<string, unknown>>
+    const payload = rpc.mock.calls[1]![1]!.p_rows as Array<Record<string, unknown>>
     expect(payload[0]).not.toHaveProperty('name')
   })
 
   it('returns credentials only for additions in a mixed roster import', async () => {
     const addedRow = { ...row, name: '새 지원자', phone: '010-1234-9999' }
-    const rpc = vi.fn(async (_name: string, args?: Record<string, unknown>) => {
+    const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
+      if (name === 'list_admission_cycles_v1') return { data: [currentCycle], error: null }
       const rows = args!.p_rows as Array<Record<string, unknown>>
       return { data: {
         kind: 'success', cycleId, previousVersion: 4, rosterVersion: 5,
@@ -97,16 +109,19 @@ describe('applicant roster service', () => {
       protectApplicantName('윤 태준', keyring.nameHmacKey, keyring.piiEncryptionKey),
       protectPhone('01012345678', keyring.phoneHmacKey, keyring.piiEncryptionKey),
     ])
-    const rpc = vi.fn(async () => ({ data: [{
-      id: 42,
-      cycleId,
-      nameCiphertext: Buffer.from(name.ciphertext).toString('hex'), nameIv: Buffer.from(name.iv).toString('hex'),
-      phoneCiphertext: Buffer.from(phone.ciphertext).toString('hex'), phoneIv: Buffer.from(phone.iv).toString('hex'),
-      passwordGeneration: 1, passwordKeyVersion: 1,
-    }], error: null }))
+    const rpc = vi.fn(async (rpcName: string) => rpcName === 'list_admission_cycles_v1'
+      ? { data: [currentCycle], error: null }
+      : ({ data: [{
+        id: 42,
+        cycleId,
+        nameCiphertext: Buffer.from(name.ciphertext).toString('hex'), nameIv: Buffer.from(name.iv).toString('hex'),
+        phoneCiphertext: Buffer.from(phone.ciphertext).toString('hex'), phoneIv: Buffer.from(phone.iv).toString('hex'),
+        passwordGeneration: 1, passwordKeyVersion: 1,
+      }], error: null }))
 
     const credentials = await createApplicantRosterService({ keyring, rpc }).currentCredentials()
     expect(credentials).toMatchObject([{ name: '윤 태준', phone: '01012345678' }])
+    expect(credentials[0]?.password).toBe('265678')
     expect(credentials[0]).not.toHaveProperty('id')
   })
 })

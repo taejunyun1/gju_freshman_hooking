@@ -12,7 +12,7 @@ import { protectPhone, revealPhone } from '../identity/phone'
 import {
   deriveInitialPassword,
   derivePasswordDigest,
-  findNextPasswordGeneration,
+  nextPasswordGeneration,
   type RosterKeyring,
 } from '../identity/roster-credentials'
 import { getServerRosterKeyring } from './applicant-roster'
@@ -84,14 +84,14 @@ const assertSuccess = (value: unknown): Record<string, unknown> => {
 
 const protectApplicant = async (
   input: { name: string, phone: string, highSchool: string, grade: string },
-  cycleId: string,
+  admissionYear: number,
   keyring: RosterKeyring,
 ) => {
   const row = applicantRosterRowSchema.parse(input)
   const [phone, name, password] = await Promise.all([
     protectPhone(row.phone, keyring.phoneHmacKey, keyring.piiEncryptionKey),
     protectApplicantName(row.name, keyring.nameHmacKey, keyring.piiEncryptionKey),
-    deriveInitialPassword({ cycleId, phone: row.phone, generation: 1, pepper: keyring.currentPassword.pepper }),
+    deriveInitialPassword({ admissionYear, phone: row.phone }),
   ])
   return {
     row,
@@ -133,12 +133,21 @@ const credential = (input: { name: string, phone: string, password: string }): R
   rosterCredentialSchema.parse(input)
 )
 
-const cycleSchema = z.object({ id: z.string().uuid(), status: z.enum(['current', 'archived']) }).passthrough()
-const currentCycleId = async (rpc: Rpc): Promise<string> => {
-  const cycles = z.array(cycleSchema).parse(await rpcData(rpc, 'list_admission_cycles_v1'))
-  const current = cycles.find(cycle => cycle.status === 'current')
-  if (!current) throw new AppError('ROSTER_CONFLICT')
-  return current.id
+const cycleSchema = z.object({
+  id: z.string().uuid(),
+  year: z.number().int().min(2000).max(9999),
+  status: z.enum(['current', 'archived']),
+}).passthrough()
+
+const listCycles = async (rpc: Rpc) => z.array(cycleSchema).parse(await rpcData(rpc, 'list_admission_cycles_v1'))
+
+const resolveCycle = async (rpc: Rpc, cycleId?: string) => {
+  const cycles = await listCycles(rpc)
+  const cycle = cycleId === undefined
+    ? cycles.find(candidate => candidate.status === 'current')
+    : cycles.find(candidate => candidate.id === cycleId && candidate.status === 'current')
+  if (!cycle) throw new AppError('ROSTER_CONFLICT')
+  return cycle
 }
 
 const rosterStudentRecordSchema = z.object({
@@ -179,15 +188,15 @@ export const createRosterStudentCommands = ({ keyring, rpc }: CommandDependencie
       grade: z.string(),
     }).strict().safeParse(input)
     if (!parsed.success) throw new AppError('ROSTER_INVALID')
-    const cycleId = parsed.data.cycleId ?? await currentCycleId(rpc)
+    const cycle = await resolveCycle(rpc, parsed.data.cycleId)
     const protectedInput = await protectApplicant({
       name: parsed.data.name,
       phone: parsed.data.phone,
       highSchool: parsed.data.highSchool,
       grade: parsed.data.grade,
-    }, cycleId, keyring)
+    }, cycle.year, keyring)
     const data = assertSuccess(await rpcData(rpc, 'add_roster_student_v1', {
-      p_cycle_id: cycleId,
+      p_cycle_id: cycle.id,
       p_admin_user_id: context.adminUserId,
       p_student: protectedInput.protectedStudent,
     }))
@@ -227,25 +236,22 @@ export const createRosterStudentCommands = ({ keyring, rpc }: CommandDependencie
     const current = await loadRosterStudent(rpc, keyring, parsed.data.studentId)
     if (parsed.data.expectedGeneration !== undefined && current.passwordGeneration !== parsed.data.expectedGeneration) throw new AppError('ROSTER_CONFLICT')
     const expectedGeneration = current.passwordGeneration
-    const next = await findNextPasswordGeneration({
-      cycleId: current.cycleId,
-      phone: parsed.data.phone,
-      currentGeneration: expectedGeneration,
-      pepper: keyring.currentPassword.pepper,
-    })
+    const cycle = await resolveCycle(rpc, current.cycleId)
+    const nextGeneration = nextPasswordGeneration(expectedGeneration)
+    const nextPin = await deriveInitialPassword({ admissionYear: cycle.year, phone: parsed.data.phone })
     const phone = await protectPhone(parsed.data.phone, keyring.phoneHmacKey, keyring.piiEncryptionKey)
     const data = assertSuccess(await rpcData(rpc, 'change_roster_student_phone_v1', {
       p_prospect_id: parsed.data.studentId,
       p_expected_generation: expectedGeneration,
-      p_next_generation: next.generation,
+      p_next_generation: nextGeneration,
       p_phone_hmac: bytea(phone.hmac),
       p_phone_ciphertext: bytea(phone.ciphertext),
       p_phone_iv: bytea(phone.iv),
-      p_password_digest: bytea(await derivePasswordDigest(next.password, keyring.currentPassword.pepper)),
+      p_password_digest: bytea(await derivePasswordDigest(nextPin, keyring.currentPassword.pepper)),
     }))
     return {
       passwordGeneration: z.number().int().positive().parse(data.passwordGeneration),
-      credential: credential({ name: current.name, phone: parsed.data.phone, password: next.password }),
+      credential: credential({ name: current.name, phone: parsed.data.phone, password: nextPin }),
     }
   },
 
@@ -265,21 +271,18 @@ export const createRosterStudentCommands = ({ keyring, rpc }: CommandDependencie
     const current = await loadRosterStudent(rpc, keyring, parsed.data.studentId)
     if (parsed.data.expectedGeneration !== undefined && current.passwordGeneration !== parsed.data.expectedGeneration) throw new AppError('ROSTER_CONFLICT')
     const expectedGeneration = current.passwordGeneration
-    const next = await findNextPasswordGeneration({
-      cycleId: current.cycleId,
-      phone: current.phone,
-      currentGeneration: expectedGeneration,
-      pepper: keyring.currentPassword.pepper,
-    })
+    const cycle = await resolveCycle(rpc, current.cycleId)
+    const nextGeneration = nextPasswordGeneration(expectedGeneration)
+    const nextPin = await deriveInitialPassword({ admissionYear: cycle.year, phone: current.phone })
     const data = assertSuccess(await rpcData(rpc, 'reissue_roster_student_password_v1', {
       p_prospect_id: parsed.data.studentId,
       p_expected_generation: expectedGeneration,
-      p_next_generation: next.generation,
-      p_password_digest: bytea(await derivePasswordDigest(next.password, keyring.currentPassword.pepper)),
+      p_next_generation: nextGeneration,
+      p_password_digest: bytea(await derivePasswordDigest(nextPin, keyring.currentPassword.pepper)),
     }))
     return {
       passwordGeneration: z.number().int().positive().parse(data.passwordGeneration),
-      credential: credential({ name: current.name, phone: current.phone, password: next.password }),
+      credential: credential({ name: current.name, phone: current.phone, password: nextPin }),
     }
   },
 })

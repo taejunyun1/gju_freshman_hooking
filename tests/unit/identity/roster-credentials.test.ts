@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveInitialPassword,
   derivePasswordDigest,
-  findNextPasswordGeneration,
+  nextPasswordGeneration,
 } from '../../../server/modules/identity/roster-credentials'
 import { hmacSha256, utf8 } from '../../../server/utils/web-crypto'
+import { rosterPasswordSchema } from '../../../shared/schemas/identity'
 
-const cycleId = '8d60bf06-4160-4ea3-a1ed-6a4976c274b4'
 const pepper = new Uint8Array(32).fill(29)
 
 describe('roster credential primitives', () => {
@@ -20,47 +20,33 @@ describe('roster credential primitives', () => {
     expect(digest).toHaveLength(32)
   })
 
-  it('deterministically issues a six-character password from cycle, phone, and generation', async () => {
-    const issued = await deriveInitialPassword({ cycleId, phone: '01012344225', generation: 1, pepper })
+  it('issues a predictable six-digit initial PIN from admission year and normalized phone', async () => {
+    const issued = await deriveInitialPassword({ admissionYear: 2026, phone: '01012344225' })
 
-    expect(issued).toBe('4225DE')
-    expect(issued).toMatch(/^4225[A-Z]{2}$/u)
-    await expect(deriveInitialPassword({ cycleId, phone: '010-1234-4225', generation: 1, pepper }))
+    expect(issued).toBe('264225')
+    expect(issued).toMatch(/^\d{6}$/u)
+    await expect(deriveInitialPassword({ admissionYear: 2026, phone: '010-1234-4225' }))
       .resolves.toBe(issued)
   })
 
-  it('finds a later generation whose password differs from the current one', async () => {
-    const issued = await deriveInitialPassword({ cycleId, phone: '01012344225', generation: 1, pepper })
-    const next = await findNextPasswordGeneration({
-      cycleId,
-      phone: '01012344225',
-      currentGeneration: 1,
-      pepper,
-    })
-
-    expect(next.password).not.toBe(issued)
-    expect(next.generation).toBeGreaterThan(1)
-    expect(next.generation).toBeLessThanOrEqual(33)
+  it('increments a credential revision without changing the initial PIN rule', () => {
+    expect(nextPasswordGeneration(1)).toBe(2)
+    expect(nextPasswordGeneration(2_147_483_646)).toBe(2_147_483_647)
+    expect(() => nextPasswordGeneration(2_147_483_647)).toThrow('PASSWORD_GENERATION_EXHAUSTED')
   })
 
-  it('fails closed before the 32-generation search would exceed int32', async () => {
-    await expect(findNextPasswordGeneration({
-      cycleId,
-      phone: '01012344225',
-      currentGeneration: 2_147_483_616,
-      pepper,
-    })).rejects.toThrowError('PASSWORD_GENERATION_EXHAUSTED')
+  it('accepts new numeric PINs while retaining already-issued legacy credentials', () => {
+    expect(rosterPasswordSchema.safeParse('269442').success).toBe(true)
+    expect(rosterPasswordSchema.safeParse('9442AB').success).toBe(true)
+    expect(rosterPasswordSchema.safeParse('26944').success).toBe(false)
+    expect(rosterPasswordSchema.safeParse('26944A').success).toBe(false)
   })
 
   it('rejects password peppers that are not exactly 32 bytes', async () => {
     await expect(derivePasswordDigest('4225AB', new Uint8Array(31)))
       .rejects.toThrowError('CRYPTO_SECRET_INVALID')
-    await expect(deriveInitialPassword({
-      cycleId,
-      phone: '01012344225',
-      generation: 1,
-      pepper: new Uint8Array(33),
-    })).rejects.toThrowError('CRYPTO_SECRET_INVALID')
+    await expect(deriveInitialPassword({ admissionYear: 1999, phone: '01012344225' }))
+      .rejects.toThrowError('ADMISSION_YEAR_INVALID')
   })
 
   it('does not introduce PBKDF2 into roster credential derivation', () => {
