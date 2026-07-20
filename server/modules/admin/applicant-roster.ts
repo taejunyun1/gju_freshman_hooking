@@ -17,6 +17,16 @@ import { AppError } from '../../utils/app-error'
 import { decodeBase64urlSecret, sha256, utf8 } from '../../utils/web-crypto'
 import { getServerSupabaseClient } from '../../utils/supabase'
 
+export class RosterDatabaseValidationError extends AppError {
+  readonly diagnosticCode: string
+
+  constructor(diagnosticCode: string) {
+    super('ROSTER_INVALID')
+    this.name = 'RosterDatabaseValidationError'
+    this.diagnosticCode = diagnosticCode
+  }
+}
+
 type Rpc = (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown, error: unknown }>
 type CommandContext = { adminUserId: string, requestId: string }
 type ProtectedRow = {
@@ -39,18 +49,55 @@ const bytesFromHex = (value: string): Uint8Array => {
 }
 const stableRows = (rows: ApplicantRosterRow[]) => [...rows].sort((left, right) => left.phone.localeCompare(right.phone))
 const requestDigest = async (cycleId: string, expectedVersion: number, rows: ApplicantRosterRow[]) => (
-  hex(await sha256(utf8(JSON.stringify({ cycleId, expectedVersion, rows: stableRows(rows) }))))
+  `\\x${hex(await sha256(utf8(JSON.stringify({ cycleId, expectedVersion, rows: stableRows(rows) }))))}`
 )
+
+const hasExactHexBytes = (value: unknown, byteLength: number): boolean => (
+  typeof value === 'string' && new RegExp(`^[0-9a-f]{${byteLength * 2}}$`, 'iu').test(value)
+)
+const hasMinimumHexBytes = (value: unknown, byteLength: number): boolean => (
+  typeof value === 'string' && /^(?:[0-9a-f]{2})+$/iu.test(value) && value.length >= byteLength * 2
+)
+
+export const diagnoseProtectedRosterRows = (rows: Array<Pick<ProtectedRow,
+  'phoneHmac' | 'phoneCiphertext' | 'phoneIv' | 'nameHmac' | 'nameCiphertext' | 'nameIv' | 'passwordDigest'
+>>): string | null => {
+  const phoneHmacs = new Set<string>()
+  for (const [index, row] of rows.entries()) {
+    const rowNumber = index + 1
+    if (!hasExactHexBytes(row.phoneHmac, 32)) return `ROW_${rowNumber}_PHONE_HMAC`
+    if (!hasMinimumHexBytes(row.phoneCiphertext, 16)) return `ROW_${rowNumber}_PHONE_CIPHERTEXT`
+    if (!hasExactHexBytes(row.phoneIv, 12)) return `ROW_${rowNumber}_PHONE_IV`
+    if (!hasExactHexBytes(row.nameHmac, 32)) return `ROW_${rowNumber}_NAME_HMAC`
+    if (!hasMinimumHexBytes(row.nameCiphertext, 16)) return `ROW_${rowNumber}_NAME_CIPHERTEXT`
+    if (!hasExactHexBytes(row.nameIv, 12)) return `ROW_${rowNumber}_NAME_IV`
+    if (!hasExactHexBytes(row.passwordDigest, 32)) return `ROW_${rowNumber}_PASSWORD_DIGEST`
+    if (phoneHmacs.has(row.phoneHmac)) return `ROW_${rowNumber}_DUPLICATE_PHONE_HMAC`
+    phoneHmacs.add(row.phoneHmac)
+  }
+  return null
+}
 
 const rpcData = async (rpc: Rpc, name: string, args?: Record<string, unknown>): Promise<unknown> => {
   const { data, error } = await rpc(name, args)
   if (error) throw new Error('ROSTER_STORE_UNAVAILABLE')
   return data
 }
-const throwResultError = (value: unknown): never | void => {
+const throwResultError = (value: unknown, fallbackDiagnostic?: string | null): never | void => {
   if (!value || typeof value !== 'object') throw new Error('ROSTER_STORE_INVALID')
-  const kind = (value as { kind?: unknown }).kind
-  if (kind === 'validation_error') throw new AppError('ROSTER_INVALID')
+  const result = value as { kind?: unknown, diagnosticCode?: unknown }
+  const kind = result.kind
+  if (kind === 'validation_error') {
+    if (typeof result.diagnosticCode === 'string' && /^[0-9A-Z]{5}$/u.test(result.diagnosticCode)) {
+      console.error('ROSTER_APPLY_DATABASE_VALIDATION', { sqlState: result.diagnosticCode })
+      throw new RosterDatabaseValidationError(result.diagnosticCode)
+    }
+    if (fallbackDiagnostic) {
+      console.error('ROSTER_APPLY_PROTECTED_PRECHECK', { code: fallbackDiagnostic })
+      throw new RosterDatabaseValidationError(fallbackDiagnostic)
+    }
+    throw new AppError('ROSTER_INVALID')
+  }
   if (kind === 'conflict' || kind === 'forbidden') throw new AppError('ROSTER_CONFLICT')
 }
 
@@ -144,7 +191,7 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
       p_admin_user_id: context.adminUserId, p_request_digest: await requestDigest(parsed.data.cycleId, parsed.data.expectedVersion, parsed.data.rows),
       p_request_id: parsed.data.idempotencyKey, p_rows: rows,
     })
-    throwResultError(data)
+    throwResultError(data, diagnoseProtectedRosterRows(rows))
     const { kind: _kind, added, ...payload } = data as Record<string, unknown>
     const result = rosterApplyResultSchema.safeParse(payload)
     if (!result.success) throw new Error('ROSTER_STORE_INVALID')

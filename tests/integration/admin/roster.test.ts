@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import * as rosterModule from '../../../server/modules/admin/applicant-roster'
 import { createApplicantRosterService } from '../../../server/modules/admin/applicant-roster'
 import { protectApplicantName } from '../../../server/modules/identity/applicant-name'
 import { protectPhone } from '../../../server/modules/identity/phone'
@@ -31,6 +32,19 @@ const row = {
 }
 
 describe('applicant roster service', () => {
+  it('identifies invalid protected values without exposing student data', () => {
+    const diagnose = (rosterModule as unknown as {
+      diagnoseProtectedRosterRows?: (rows: unknown[]) => string | null
+    }).diagnoseProtectedRosterRows
+
+    expect(typeof diagnose).toBe('function')
+    expect(diagnose?.([{
+      phoneHmac: '00'.repeat(32), phoneCiphertext: '00'.repeat(16), phoneIv: '00'.repeat(11),
+      nameHmac: '00'.repeat(32), nameCiphertext: '00'.repeat(16), nameIv: '00'.repeat(12),
+      passwordDigest: '00'.repeat(32),
+    }])).toBe('ROW_1_PHONE_IV')
+  })
+
   it('maps protected preview rows back to plaintext only after the RPC response', async () => {
     const rpc = vi.fn(async (_name: string, args?: Record<string, unknown>) => {
       const protectedRow = (args!.p_rows as Array<Record<string, unknown>>)[0]!
@@ -73,6 +87,7 @@ describe('applicant roster service', () => {
     expect(rpc).toHaveBeenCalledWith('apply_applicant_roster_v1', expect.objectContaining({
       p_expected_version: 4,
       p_request_id: requestId,
+      p_request_digest: expect.stringMatching(/^\\x[0-9a-f]{64}$/iu),
       p_rows: [expect.objectContaining({
         applicantStage: 'high3', schoolName: '광주고', passwordDigest: expect.any(String),
         phoneHmac: expect.any(String), nameHmac: expect.any(String),
@@ -80,6 +95,23 @@ describe('applicant roster service', () => {
     }))
     const payload = rpc.mock.calls[1]![1]!.p_rows as Array<Record<string, unknown>>
     expect(payload[0]).not.toHaveProperty('name')
+  })
+
+  it('logs only the safe SQLSTATE when the roster database rejects protected input', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const rpc = vi.fn(async (name: string) => name === 'list_admission_cycles_v1'
+      ? { data: [currentCycle], error: null }
+      : ({ data: { kind: 'validation_error', diagnosticCode: '23514' }, error: null }))
+    const service = createApplicantRosterService({ keyring, rpc })
+
+    await expect(service.apply({
+      cycleId, expectedVersion: 4, idempotencyKey: requestId, rows: [row],
+    }, { adminUserId, requestId })).rejects.toMatchObject({
+      code: 'ROSTER_INVALID', diagnosticCode: '23514',
+    })
+
+    expect(log).toHaveBeenCalledWith('ROSTER_APPLY_DATABASE_VALIDATION', { sqlState: '23514' })
+    log.mockRestore()
   })
 
   it('returns credentials only for additions in a mixed roster import', async () => {

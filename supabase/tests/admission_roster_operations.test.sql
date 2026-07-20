@@ -1,6 +1,6 @@
 begin;
 
-select plan(52);
+select plan(57);
 
 insert into auth.users(id) values ('a4000000-0000-4000-8000-000000000001');
 insert into public.admin_users(id, is_active) values ('a4000000-0000-4000-8000-000000000001', true);
@@ -94,6 +94,38 @@ select is((select status from public.admission_cycles where id=(select cycle_id 
 select is((select count(*) from public.student_sessions s join public.prospects p on p.id=s.prospect_id where p.admission_cycle_id=(select cycle_id from roster_fixture) and s.revoked_at is null),0::bigint,'annual rollover revokes every previous-cycle session');
 select is((select status from public.admission_cycles where id='a4000000-0000-4000-8000-000000000031'),'current','annual rollover makes the new cycle current');
 select is((select count(*) from public.prospects where admission_cycle_id='a4000000-0000-4000-8000-000000000031' and is_test),5::bigint,'annual rollover creates five new test accounts');
+
+-- A 200-person annual roster must fit the audit metadata contract while keeping
+-- an idempotent retry able to return every newly issued credential reference.
+create temporary table high_volume_roster as
+select jsonb_agg(jsonb_build_object(
+  'nameHmac',lpad(to_hex(n + 1000),64,'0'),'nameCiphertext',repeat('c1',16),'nameIv',repeat('c2',12),
+  'phoneHmac',lpad(to_hex(n + 1300),64,'0'),'phoneCiphertext',repeat('c3',16),'phoneIv',repeat('c4',12),
+  'schoolName','대용량고','applicantStage','high3','passwordDigest',lpad(to_hex(n + 1600),64,'0'),'passwordGeneration',1
+) order by n) rows
+from generate_series(1,200) n;
+create temporary table high_volume_apply as
+select public.apply_applicant_roster_v1(
+  'a4000000-0000-4000-8000-000000000031',0,'a4000000-0000-4000-8000-000000000001',
+  decode(repeat('d1',32),'hex'),'a4000000-0000-4000-8000-000000000032',(select rows from high_volume_roster)
+) result;
+select is((select result->>'kind' from high_volume_apply),'success','200-person roster apply succeeds within the audit metadata limit');
+select is((select jsonb_array_length(result->'added') from high_volume_apply),200,'200-person apply returns every newly issued credential reference');
+select ok((select public.is_sanitized_metadata(metadata) and octet_length(metadata::text) <= 4096 from public.audit_events where request_id='a4000000-0000-4000-8000-000000000032'),'large roster audit metadata is bounded and sanitized');
+select is(jsonb_array_length(public.apply_applicant_roster_v1(
+  'a4000000-0000-4000-8000-000000000031',1,'a4000000-0000-4000-8000-000000000001',
+  decode(repeat('d1',32),'hex'),'a4000000-0000-4000-8000-000000000032',(select rows from high_volume_roster)
+)->'added'),200,'idempotent retry returns every original credential reference');
+create temporary table global_phone_collision as
+select jsonb_build_object(
+  'nameHmac',repeat('e1',32),'nameCiphertext',repeat('e2',16),'nameIv',repeat('e3',12),
+  'phoneHmac',repeat('24',32),'phoneCiphertext',repeat('e4',16),'phoneIv',repeat('e5',12),
+  'schoolName','중복진단고','applicantStage','high3','passwordDigest',repeat('e6',32),'passwordGeneration',1
+) student;
+select is((public.apply_applicant_roster_v1(
+  'a4000000-0000-4000-8000-000000000031',1,'a4000000-0000-4000-8000-000000000001',
+  decode(repeat('e7',32),'hex'),'a4000000-0000-4000-8000-000000000033',jsonb_build_array((select student from global_phone_collision))
+)->>'diagnosticCode'),'23505','database failures return a safe SQLSTATE for Worker diagnostics');
 
 -- The RPC surface is executable only by service_role.
 select is((select count(*) from (values
