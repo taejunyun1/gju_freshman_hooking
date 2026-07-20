@@ -110,6 +110,15 @@ begin
     return pg_catalog.jsonb_build_object('kind', 'failed');
   end if;
 
+  if not public.consume_rate_limit(
+    'roster-pin-reset:' || pg_catalog.encode(p_phone_hmac, 'hex'),
+    'roster-pin-reset',
+    4,
+    interval '30 minutes'
+  ) then
+    return pg_catalog.jsonb_build_object('kind', 'failed');
+  end if;
+
   select p.id, a.password_key_version, c.password_generation
   into v_prospect_id, v_password_key_version, v_password_generation
   from public.prospects p

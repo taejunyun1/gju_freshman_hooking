@@ -1,11 +1,20 @@
 begin;
 
-select plan(19);
+select plan(20);
 
 select isnt(
   pg_catalog.to_regprocedure('public.change_roster_student_pin_self_v1(bytea,bytea,integer,bytea,bytea,timestamptz)'),
   null,
   'signed-in student PIN-change RPC exists'
+);
+
+select ok(
+  position(
+    'roster-pin-reset' in pg_get_functiondef(
+      'public.reset_roster_student_pin_and_assessment_v1(bytea,bytea,integer,bytea,timestamptz)'::regprocedure
+    )
+  ) > 0,
+  'reset applies a narrow per-phone abuse limit inside its one database RPC'
 );
 
 select isnt(
