@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { decodeResultSnapshot } from '../../shared/schemas/result'
 import {
   expectedCommercialMatchingFixtureSummary,
   installCommercialMatchingFixture,
@@ -252,18 +253,52 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
     data: ResultSnapshot
     requestId: string
   }
-  const careerFixtures: CareerResultResource[] = Array.from({ length: 4 }, (_, index) => ({
-    id: 9_501 + index,
-    type: 'career',
-    title: `졸업생 진로 사례 ${index + 1}`,
-    summary: `추천 순서 ${index + 1}번째 졸업생 진로 사례입니다.`,
-    sourceDate: '2026-07-20',
-    affinity: 88 - index,
-    primaryTag: 'commercial',
-    connectionReason: `선택한 관심이 졸업생 진로 사례 ${index + 1}과 연결됩니다.`,
-    displayMetadata: {},
-  }))
-  resultEnvelope.data = {
+  const existingCareers = resultEnvelope.data.resources.career
+  const existingCareerIds = new Set(existingCareers.map(resource => resource.id))
+  const narrativeCareerIds = resultEnvelope.data.careerNarrative.sentences
+    .flatMap(sentence => sentence.evidenceIds)
+    .flatMap((reference) => {
+      const match = /^resource:(\d+)$/u.exec(reference)
+      const id = match === null ? null : Number(match[1])
+      return id !== null && existingCareerIds.has(id) ? [id] : []
+    })
+  const careerIdsToPreserve = new Set([
+    ...existingCareers.slice(0, 1).map(resource => resource.id),
+    ...narrativeCareerIds,
+  ])
+  const allResourceIds = new Set(Object.values(resultEnvelope.data.resources)
+    .flatMap(resources => resources.map(resource => resource.id)))
+  const selectedInterestLabel = resultEnvelope.data.selectedInterests[0]!.label
+  let nextFixtureId = 9_501
+  const additionalCareers: CareerResultResource[] = []
+  while (existingCareers.length + additionalCareers.length < 4) {
+    while (allResourceIds.has(nextFixtureId)) nextFixtureId += 1
+    const order = existingCareers.length + additionalCareers.length + 1
+    const title = `졸업생 진로 사례 ${order}`
+    additionalCareers.push({
+      id: nextFixtureId,
+      type: 'career',
+      title,
+      summary: `추천 순서 ${order}번째 졸업생 진로 사례입니다.`,
+      sourceDate: '2026-07-20',
+      affinity: 88 - order,
+      primaryTag: resultEnvelope.data.rankedTracks[0],
+      connectionReason: `선택한 ‘${selectedInterestLabel}’ 관심이 ${title}과 연결됩니다.`,
+      displayMetadata: {},
+    })
+    allResourceIds.add(nextFixtureId)
+    nextFixtureId += 1
+  }
+  const careerResources = existingCareers.length === 4
+    ? existingCareers
+    : [...existingCareers, ...additionalCareers]
+  expect(careerResources).toHaveLength(4)
+  expect([...careerIdsToPreserve].every(id => (
+    careerResources.some(resource => resource.id === id)
+  ))).toBe(true)
+
+  const expectedCareerTitles = careerResources.map(resource => resource.title)
+  const mockedSnapshot = decodeResultSnapshot({
     ...resultEnvelope.data,
     careerNarrative: {
       ...resultEnvelope.data.careerNarrative,
@@ -271,9 +306,12 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
     },
     resources: {
       ...resultEnvelope.data.resources,
-      career: careerFixtures,
+      career: careerResources,
     },
-  }
+  })
+  expect(mockedSnapshot.resources.career.map(resource => resource.id))
+    .toEqual(careerResources.map(resource => resource.id))
+  resultEnvelope.data = mockedSnapshot
   await page.route(`**/api/result/${publicId}`, async route => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify(resultEnvelope),
@@ -284,18 +322,10 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
   const careerRecommendations = outcomes.locator('[data-career-recommendations]')
   await expect(careerRecommendations.locator('[data-career-featured]')).toHaveCount(2)
   await expect(careerRecommendations.locator('[data-career-compact]')).toHaveCount(2)
-  expect(await careerRecommendations.locator('[data-career-featured]').evaluateAll(items => (
-    items.map(item => item.textContent)
-  ))).toEqual([
-    expect.stringContaining('졸업생 진로 사례 1'),
-    expect.stringContaining('졸업생 진로 사례 2'),
-  ])
-  expect(await careerRecommendations.locator('[data-career-compact]').evaluateAll(items => (
-    items.map(item => item.textContent)
-  ))).toEqual([
-    expect.stringContaining('졸업생 진로 사례 3'),
-    expect.stringContaining('졸업생 진로 사례 4'),
-  ])
+  expect(await careerRecommendations.locator('[data-career-featured] h4').allTextContents())
+    .toEqual(expectedCareerTitles.slice(0, 2))
+  expect(await careerRecommendations.locator('[data-career-compact] strong').allTextContents())
+    .toEqual(expectedCareerTitles.slice(2, 4))
   const alumniArchiveLinks = careerRecommendations.locator(
     'a[href="https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link"]',
   )
