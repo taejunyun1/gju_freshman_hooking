@@ -1,0 +1,77 @@
+# Supporting Instructor Scoring Fix Design
+
+## Goal
+
+Show one or two relevant adjunct or part-time instructors in the result faculty section when a student's real questionnaire selections provide verified evidence for those instructors. Keep the three full-time professors as the only primary and backup counseling recommendations.
+
+## Confirmed root cause
+
+The production faculty data, specialist links, result schema, and compact instructor card UI are present and active. The missing cards originate in `recommendFaculty()`: specialist category scores average every tag in a multi-disciplinary instructor profile. A student can strongly select documentary and video while the same instructor's other unselected specialties dilute the average below the existing 50-point threshold. The matcher then persists `faculty.specialists: []`, so the UI correctly has no instructor card to render.
+
+The reproduced production selection is:
+
+- `work.photo_everyday`
+- `work.video_post`
+- `result.documentary`
+- `result.brand_video`
+- `style.solo`
+- `style.studio`
+- `career.photo`
+- `career.video`
+
+It produces 김사라 as primary, 윤태준 as backup, and no specialists even though the verified documentary links for 유별남 and 김태현 have positive evidence.
+
+## Scoring correction
+
+Change specialist-only category matching from an average across all candidate tags to the strongest verified tag match in each available category. A specialist is a valid connection when the student's selected interest strongly matches at least one declared subfield; the student is not required to select the instructor's entire practice profile.
+
+Keep the existing category weights and normalization:
+
+- specialist: 0.50
+- result: 0.30
+- career: 0.20
+- categories absent from the candidate profile remain unavailable and are excluded from the denominator
+- categories present in the candidate profile but with no student signal remain zero
+
+Keep every existing boundary unchanged:
+
+- only active `adjunct|practitioner` + `specialist` candidates
+- only candidates linked to the chosen primary or through a null-primary link
+- the link tag must have positive student evidence
+- the final score must remain at least 50
+- return at most two specialists
+- retain deterministic score, priority, and ID ordering
+- do not change primary or backup professor scoring
+
+For the reproduced selection, the expected supporting instructors are 김태현 시간강사 and 유별남 시간강사. Their cards retain the existing compact hierarchy beneath the primary and backup professor cards.
+
+## Stored-result boundary
+
+Results are immutable snapshots. This fix applies when a result is newly generated and does not rewrite historical assessment rows. No database migration or bulk backfill is added. During production QA, resubmit the test student's existing selections to create a new result and verify that the supporting cards render. Real students who submit after the release receive the corrected recommendation automatically.
+
+## UI and copy
+
+No new visual system is introduced. Continue using the existing blue, rounded PHOTO:NEXT result design:
+
+- heading: `함께 연결되는 실무·창작 강사`
+- compact cards show name, title, expertise, and evidence-based reason
+- primary and backup professor cards remain visually dominant
+- the specialty example grid remains subordinate guidance after the actual instructor cards
+- when no candidate legitimately reaches 50, no fabricated instructor card is shown
+
+## Tests and verification
+
+1. Add a matcher regression test using the exact reproduced questionnaire selections and canonical seeded faculty data. It must fail before the correction because specialists are empty, then pass with 김태현 and 유별남 returned in deterministic order.
+2. Add a focused test proving unrelated specialties do not dilute a candidate's strongest verified subfield.
+3. Preserve the existing exact-50 inclusion, below-50 exclusion, unselected-category penalty, link eligibility, two-person cap, and primary/backup balance tests.
+4. Run focused matcher and result-component tests, then the full unit suite, typecheck, lint, and production build.
+5. After release, create a new dummy-account result with the reproduced selections and verify both compact instructor cards in a real mobile browser without console errors or horizontal overflow.
+
+## Out of scope
+
+- displaying the full instructor directory in every result
+- lowering or bypassing the 50-point threshold
+- adding fallback cards unrelated to student evidence
+- changing full-time professor distribution
+- rewriting existing result snapshots
+- adding a database migration or additional result-page database reads
