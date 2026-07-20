@@ -5,6 +5,15 @@ import { applicantStageSchema, regionSchema } from './identity'
 import { trackKeys } from '../types/domain'
 
 const safeIdSchema = z.number().int().positive().safe()
+export const adminExportSegmentSchema = z.enum([
+  'counseling_requested',
+  'completed_without_counseling',
+  'not_completed',
+])
+export const adminExportAssignedFacultySchema = z.union([
+  safeIdSchema,
+  z.literal('unassigned'),
+])
 const timestampSchema = z.iso.datetime({ offset: true }).max(40)
 const storedText = (maximum: number) => z.string().min(1).max(maximum)
   .refine(value => value === value.trim())
@@ -27,6 +36,8 @@ export const adminExportFilterSchema = z.object({
   track: z.enum(trackKeys).optional(),
   campaignId: safeIdSchema.optional(),
   counselingStatus: counselingStatusSchema.optional(),
+  exportSegment: adminExportSegmentSchema.optional(),
+  assignedFaculty: adminExportAssignedFacultySchema.optional(),
   dateFrom: z.iso.date().optional(),
   dateTo: z.iso.date().optional(),
 }).strict().superRefine((filters, context) => {

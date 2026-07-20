@@ -1,6 +1,6 @@
 begin;
 
-select plan(75);
+select plan(80);
 
 select has_table('public'::name, 'campaigns'::name, 'campaigns table exists');
 select has_table('public'::name, 'export_jobs'::name, 'export audit table exists');
@@ -78,6 +78,31 @@ select has_index('public', 'export_jobs', 'export_jobs_status_created_idx', 'exp
 select function_privs_are('public', 'enforce_immutable_campaign_code', array[]::text[], 'public', array[]::text[], 'campaign trigger helper is not public API');
 select function_privs_are('public', 'guard_export_job', array[]::text[], 'public', array[]::text[], 'export trigger helper is not public API');
 select function_privs_are('public', 'is_valid_export_filter_snapshot', array['jsonb'], 'public', array[]::text[], 'filter validator is not public API');
+
+select ok(
+  public.is_valid_export_filter_snapshot(
+    '{"exportSegment":"counseling_requested","assignedFaculty":7}'::jsonb
+  ),
+  'export snapshots accept a counseling target with an assigned professor'
+);
+select ok(
+  public.is_valid_export_filter_snapshot(
+    '{"exportSegment":"completed_without_counseling","assignedFaculty":"unassigned"}'::jsonb
+  ),
+  'export snapshots accept the completed-without-counseling target and unassigned professor'
+);
+select ok(
+  public.is_valid_export_filter_snapshot('{"exportSegment":"not_completed"}'::jsonb),
+  'export snapshots accept the not-completed target'
+);
+select ok(
+  not public.is_valid_export_filter_snapshot('{"exportSegment":"completed"}'::jsonb),
+  'export snapshots reject an unknown operational target'
+);
+select ok(
+  not public.is_valid_export_filter_snapshot('{"assignedFaculty":"7"}'::jsonb),
+  'export snapshots reject a faculty ID encoded as a string'
+);
 
 select lives_ok(
   $$insert into auth.users(id) values

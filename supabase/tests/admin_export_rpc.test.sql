@@ -1,6 +1,6 @@
 begin;
 
-select plan(31);
+select plan(42);
 
 select has_function('public', 'admin_export_counts', array['bigint','uuid'], 'export counts RPC exists');
 select has_function('public', 'admin_export_student_rows', array['bigint','uuid','timestamp with time zone','bigint','integer'], 'student export RPC exists');
@@ -247,6 +247,200 @@ select is(
    where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')),
   null::timestamptz,
   'rejected acknowledgement leaves downloaded_at empty'
+);
+
+insert into public.prospects(
+  nickname, phone_hmac, phone_ciphertext, phone_iv, school_name,
+  applicant_stage, region, created_at, last_active_at, updated_at
+) values
+  ('운영분류완료만', decode(repeat('71', 32), 'hex'), decode(repeat('72', 16), 'hex'), decode(repeat('73', 12), 'hex'),
+    '광주고등학교', 'high3', 'gwangju', '2026-07-16T01:00:00Z', '2026-07-16T01:00:00Z', '2026-07-16T01:00:00Z'),
+  ('운영분류상담', decode(repeat('74', 32), 'hex'), decode(repeat('75', 16), 'hex'), decode(repeat('76', 12), 'hex'),
+    '광주고등학교', 'high3', 'gwangju', '2026-07-16T01:00:01Z', '2026-07-16T01:00:01Z', '2026-07-16T01:00:01Z'),
+  ('운영분류미완료', decode(repeat('77', 32), 'hex'), decode(repeat('78', 16), 'hex'), decode(repeat('79', 12), 'hex'),
+    '광주고등학교', 'high3', 'gwangju', '2026-07-16T01:00:02Z', '2026-07-16T01:00:02Z', '2026-07-16T01:00:02Z'),
+  ('운영분류교수이력', decode(repeat('81', 32), 'hex'), decode(repeat('82', 16), 'hex'), decode(repeat('83', 12), 'hex'),
+    '광주고등학교', 'high3', 'gwangju', '2026-07-16T01:00:03Z', '2026-07-16T01:00:03Z', '2026-07-16T01:00:03Z'),
+  ('운영분류미배정', decode(repeat('84', 32), 'hex'), decode(repeat('85', 16), 'hex'), decode(repeat('86', 12), 'hex'),
+    '광주고등학교', 'high3', 'gwangju', '2026-07-16T01:00:04Z', '2026-07-16T01:00:04Z', '2026-07-16T01:00:04Z');
+
+insert into public.assessments(
+  prospect_id, idempotency_key, track_scores, environment_score, result_snapshot, completed_at, created_at
+)
+select prospect.id, pg_catalog.gen_random_uuid(),
+  '{"documentary":25,"art_photo":25,"commercial":25,"video":25}'::jsonb,
+  90,
+  '{"rankedTracks":["video","documentary","art_photo","commercial"],"selectedInterests":[{"group":"work","key":"work.video","label":"영상"},{"group":"result","key":"result.film","label":"영상 결과물"},{"group":"style","key":"style.cinematic","label":"시네마틱"},{"group":"career","key":"career.video","label":"영상 제작자"}]}'::jsonb,
+  '2026-07-16T02:00:00Z', '2026-07-16T02:00:00Z'
+from public.prospects prospect
+where prospect.nickname in ('운영분류완료만', '운영분류상담', '운영분류교수이력', '운영분류미배정');
+
+insert into public.counseling_requests(
+  prospect_id, assessment_id, status, contact_method, availability, consent_given,
+  assigned_faculty_id, assigned_at, contacted_at, closed_at, created_at, updated_at
+)
+select prospect.id,
+  (select assessment.id from public.assessments assessment where assessment.prospect_id = prospect.id limit 1),
+  'closed', 'text', 'weekday_evening', true,
+  (select id from public.faculty order by id limit 1),
+  '2026-07-16T03:00:00Z', null, '2026-07-16T03:30:00Z',
+  '2026-07-16T03:00:00Z', '2026-07-16T03:30:00Z'
+from public.prospects prospect
+where prospect.nickname = '운영분류교수이력';
+
+insert into public.counseling_requests(
+  prospect_id, assessment_id, status, contact_method, availability, consent_given,
+  assigned_faculty_id, assigned_at, created_at, updated_at
+)
+select prospect.id,
+  (select assessment.id from public.assessments assessment where assessment.prospect_id = prospect.id limit 1),
+  'assigned', 'text', 'weekday_evening', true,
+  (select id from public.faculty order by id offset 1 limit 1),
+  '2026-07-16T04:00:00Z', '2026-07-16T04:00:00Z', '2026-07-16T04:00:00Z'
+from public.prospects prospect
+where prospect.nickname = '운영분류교수이력';
+
+insert into public.counseling_requests(
+  prospect_id, assessment_id, status, contact_method, availability, consent_given,
+  assigned_faculty_id, assigned_at, created_at, updated_at
+)
+select prospect.id,
+  (select assessment.id from public.assessments assessment where assessment.prospect_id = prospect.id limit 1),
+  'assigned', 'text', 'weekday_evening', true,
+  (select id from public.faculty order by id limit 1),
+  '2026-07-16T04:10:00Z', '2026-07-16T04:10:00Z', '2026-07-16T04:10:00Z'
+from public.prospects prospect
+where prospect.nickname = '운영분류상담';
+
+insert into public.counseling_requests(
+  prospect_id, assessment_id, status, contact_method, availability, consent_given,
+  created_at, updated_at
+)
+select prospect.id,
+  (select assessment.id from public.assessments assessment where assessment.prospect_id = prospect.id limit 1),
+  'new', 'text', 'weekday_evening', true,
+  '2026-07-16T04:20:00Z', '2026-07-16T04:20:00Z'
+from public.prospects prospect
+where prospect.nickname = '운영분류미배정';
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  '{"query":"운영분류","exportSegment":"completed_without_counseling"}'::jsonb);
+select results_eq(
+  $$select student_count, assessment_count, counseling_count
+    from public.admin_export_counts(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  $$values (1, 1, 0)$$,
+  'completed-without-counseling target is exclusive across all sheet counts'
+);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select results_eq(
+  $$select payload ->> 'nickname'
+    from public.admin_export_student_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)$$,
+  $$values ('운영분류완료만')$$,
+  'completed-without-counseling student rows match the count predicate'
+);
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  '{"query":"운영분류","exportSegment":"not_completed"}'::jsonb);
+select results_eq(
+  $$select student_count, assessment_count, counseling_count
+    from public.admin_export_counts(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  $$values (1, 0, 0)$$,
+  'not-completed target excludes every completed assessment and counseling row'
+);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select results_eq(
+  $$select payload ->> 'nickname'
+    from public.admin_export_student_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)$$,
+  $$values ('운영분류미완료')$$,
+  'not-completed student rows match the count predicate'
+);
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  '{"query":"운영분류","exportSegment":"counseling_requested","counselingStatus":"assigned"}'::jsonb);
+select results_eq(
+  $$select student_count, assessment_count, counseling_count
+    from public.admin_export_counts(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  $$values (2, 2, 2)$$,
+  'counseling target ANDs with counseling status across every sheet count'
+);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select results_eq(
+  $$select payload ->> 'nickname'
+    from public.admin_export_student_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)
+    order by payload ->> 'nickname'$$,
+  $$values ('운영분류교수이력'), ('운영분류상담')$$,
+  'counseling student rows use the same status-composed target predicate'
+);
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  jsonb_build_object('query', '운영분류', 'assignedFaculty', (select id from public.faculty order by id offset 1 limit 1)));
+select results_eq(
+  $$select student_count, assessment_count, counseling_count
+    from public.admin_export_counts(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  $$values (1, 1, 2)$$,
+  'assigned faculty filter follows the current request while retaining that student history'
+);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select results_eq(
+  $$select payload ->> 'nickname'
+    from public.admin_export_student_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)$$,
+  $$values ('운영분류교수이력')$$,
+  'historic faculty A does not override current faculty B for student rows'
+);
+select results_eq(
+  $$select payload #>> '{prospect,nickname}'
+    from public.admin_export_counseling_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)
+    order by payload ->> 'created_at'$$,
+  $$values ('운영분류교수이력'), ('운영분류교수이력')$$,
+  'assigned faculty export retains counseling history for its latest-assigned student'
+);
+
+insert into public.export_jobs(created_by_admin_id, filter_snapshot)
+values ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  '{"query":"운영분류","assignedFaculty":"unassigned"}'::jsonb);
+select results_eq(
+  $$select student_count, assessment_count, counseling_count
+    from public.admin_export_counts(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')$$,
+  $$values (1, 1, 1)$$,
+  'unassigned faculty filter matches only the latest unassigned counseling request'
+);
+update public.export_jobs set status = 'fetching'
+where id = (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+select results_eq(
+  $$select payload ->> 'nickname'
+    from public.admin_export_student_rows(
+      (select max(id) from public.export_jobs where created_by_admin_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', null, null, 1000)$$,
+  $$values ('운영분류미배정')$$,
+  'unassigned faculty student rows match the count predicate'
 );
 
 select * from finish();
