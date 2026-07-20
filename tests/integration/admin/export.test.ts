@@ -96,7 +96,7 @@ describe('administrator export contracts', () => {
     }
   })
 
-  it('decodes historical export snapshots with a retired campaign field without re-exposing or applying it', async () => {
+  it('keeps a historical campaign filter while an existing export job loads its rows', async () => {
     const listStudents = vi.fn(async () => [])
     const service = createAdminExportService(dependencies({
       listStudents,
@@ -108,10 +108,25 @@ describe('administrator export contracts', () => {
     await service.students(71, undefined, { adminUserId: admin.userId })
 
     expect(listStudents).toHaveBeenCalledWith(expect.objectContaining({
-      filters: filterSnapshot,
+      filters: { ...filterSnapshot, campaignId: 7 },
       jobId: 71,
     }))
-    expect(listStudents.mock.calls[0]?.[0].filters).not.toHaveProperty('campaignId')
+    expect(listStudents.mock.calls[0]?.[0].filters).toHaveProperty('campaignId', 7)
+  })
+
+  it('omits a historical campaign field from an existing job response', async () => {
+    const historicalJob = storedJob({
+      filterSnapshot: { ...filterSnapshot, campaignId: 7 },
+      status: 'completed',
+      completedAt: '2026-07-16T02:05:00.000Z',
+      downloadedAt: '2026-07-16T02:06:00.000Z',
+    })
+    const response = await createAdminExportService(dependencies({
+      loadOwnedJob: vi.fn(async () => historicalJob),
+    })).downloaded(71, { adminUserId: admin.userId })
+
+    expect(response.filterSnapshot).toEqual(filterSnapshot)
+    expect(response.filterSnapshot).not.toHaveProperty('campaignId')
   })
 
   it('round-trips an exact microsecond created_at/id cursor and rejects non-canonical variants', () => {

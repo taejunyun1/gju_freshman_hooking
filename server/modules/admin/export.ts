@@ -33,11 +33,15 @@ const timestampSchema = z.iso.datetime({ offset: true }).max(40)
 const cursorSchema = z.object({ createdAt: timestampSchema, id: safeIdSchema }).strict()
 export type AdminExportCursor = z.infer<typeof cursorSchema>
 
-// Existing export jobs can retain the retired field in their immutable DB snapshot.
-// Decode it only to preserve those jobs, then strip it before any current request or response uses the filters.
 const storedExportFilterSchema = adminExportFilterSchema.extend({
   campaignId: safeIdSchema.optional(),
-}).transform(({ campaignId: _legacyCampaignId, ...filters }): AdminExportFilter => filters)
+})
+type StoredExportFilter = z.infer<typeof storedExportFilterSchema>
+
+const toCurrentExportFilter = (stored: StoredExportFilter): AdminExportFilter => {
+  const { campaignId: _legacyCampaignId, ...filters } = stored
+  return adminExportFilterSchema.parse(filters)
+}
 
 const decodeBase64url = (value: string): string => {
   if (!/^[A-Za-z0-9_-]+$/u.test(value) || value.length > 200 || value.length % 4 === 1) {
@@ -112,7 +116,7 @@ export const parseExportPageQuery = (value: unknown): AdminExportCursor | undefi
 export type StoredExportJob = {
   id: number
   createdByAdminId: string
-  filterSnapshot: AdminExportFilter
+  filterSnapshot: StoredExportFilter
   status: 'created' | 'fetching' | 'completed' | 'failed'
   studentRowCount: number
   participationRowCount: number
@@ -128,13 +132,13 @@ type PageInput = {
   adminUserId: string
   cutoff: string
   cursor?: AdminExportCursor
-  filters: AdminExportFilter
+  filters: StoredExportFilter
   jobId: number
   limit: typeof PAGE_SIZE
 }
 
 export type AdminExportDependencies = {
-  countRows: (filters: AdminExportFilter, context: {
+  countRows: (filters: StoredExportFilter, context: {
     adminUserId: string, cutoff: string, jobId: number
   }) => Promise<{
     students: number, assessments: number, counseling: number
@@ -245,7 +249,7 @@ export const createAdminExportService = (dependencies: AdminExportDependencies) 
       id: job.id,
       status: job.status,
       createdAt: job.createdAt,
-      filterSnapshot: job.filterSnapshot,
+      filterSnapshot: toCurrentExportFilter(job.filterSnapshot),
     })
     try {
       const counts = await dependencies.countRows(filters, {
@@ -315,7 +319,7 @@ export const createAdminExportService = (dependencies: AdminExportDependencies) 
       id: verified.id,
       status: verified.status,
       createdAt: verified.createdAt,
-      filterSnapshot: verified.filterSnapshot,
+      filterSnapshot: toCurrentExportFilter(verified.filterSnapshot),
     }
     return completion.status === 'completed'
       ? adminExportCompletedJobSchema.parse(response)
@@ -345,7 +349,7 @@ export const createAdminExportService = (dependencies: AdminExportDependencies) 
       id: verified.id,
       status: verified.status,
       createdAt: verified.createdAt,
-      filterSnapshot: verified.filterSnapshot,
+      filterSnapshot: toCurrentExportFilter(verified.filterSnapshot),
       downloadedAt: verified.downloadedAt,
     })
   },
