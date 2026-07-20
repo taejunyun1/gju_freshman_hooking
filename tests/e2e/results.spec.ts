@@ -244,17 +244,6 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
   expect(environmentMeterValue).toBeGreaterThanOrEqual(90)
   expect(environmentMeterValue).toBeLessThanOrEqual(100)
 
-  await narrative.getByRole('button', { name: '내용 알리기' }).click()
-  await narrative.getByRole('radio', { name: '사실과 다른 내용' }).check()
-  const reportResponse = page.waitForResponse((response) => (
-    new URL(response.url()).pathname === '/api/career-narrative/report'
-  ))
-  await narrative.getByRole('button', { name: '이 내용 알리기' }).click()
-  expect((await reportResponse).ok()).toBe(true)
-  await expect(narrative.getByRole('status')).toHaveText(
-    '알려주셔서 감사합니다. 담당자가 확인하겠습니다.',
-  )
-
   const resultEnvelope = await page.evaluate(async (path) => {
     const response = await fetch(path)
     return response.json()

@@ -78,7 +78,6 @@ export type AssessmentCompletionContext = {
   anonymousId: string
   ip: string
   requestId: string
-  resolveCampaignId?: () => Promise<number | null>
   sessionToken: string
 }
 
@@ -617,13 +616,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       const labelsByTag = selectedLabelsByTag(selected, scored.interestVector)
       const selectedInterests = resultSelectedInterests(selected)
       const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
-      const campaignId = context.resolveCampaignId
-        ? await deadline.run(() => Promise.resolve().then(context.resolveCampaignId))
-            .catch((error) => {
-              if (isDeadlineExceeded(error)) throw error
-              return null
-            })
-        : null
+      const campaignId = null
 
       const candidates = await deadline.run(dependencies.loadResourceCandidates)
       assertResourceCandidates(candidates)

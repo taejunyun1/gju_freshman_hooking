@@ -14,7 +14,6 @@ type StudentRequestSecurityDependencies = {
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
 const csrfProtectedPaths = new Set([
   '/api/assessment/submit',
-  '/api/career-narrative/report',
   '/api/student/logout',
   '/api/student/pin',
   '/api/student/assessment/validate',
@@ -43,9 +42,7 @@ const canonicalStudentPath = (rawPath: string): string | null => {
     || decodedCanonicalPath.startsWith('/api/student/')
   const targetsAssessmentSubmit = canonicalPath === '/api/assessment/submit'
     || decodedCanonicalPath === '/api/assessment/submit'
-  const targetsNarrativeReport = canonicalPath === '/api/career-narrative/report'
-    || decodedCanonicalPath === '/api/career-narrative/report'
-  if (!targetsStudentApi && !targetsAssessmentSubmit && !targetsNarrativeReport) return null
+  if (!targetsStudentApi && !targetsAssessmentSubmit) return null
   if (rawPath.includes('%') || rawPath.includes('\\')) forbidden()
   return canonicalPath
 }

@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LoginInput, LoginResult } from '../../../shared/types/api'
-import type { VerifiedCampaignId } from '../../utils/campaign-attribution'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { postgresByteaFromBytes } from '../../utils/postgres-bytea'
 import { decodeBase64urlSecret, hmacSha256, randomBytes, utf8, type RandomBytes } from '../../utils/web-crypto'
@@ -17,7 +16,6 @@ export type RosterIdentityRequestContext = {
   anonymousId: string
   ip: string
   requestId: string
-  resolveCampaignId?: () => Promise<VerifiedCampaignId | null>
 }
 
 type RpcResult = { data: unknown, error: { code?: string } | null }
@@ -46,7 +44,6 @@ const writeEventSafely = async (
   writeEvent: EventWriter,
   eventName: 'login_succeeded' | 'login_failed',
   context: RosterIdentityRequestContext,
-  campaignId: VerifiedCampaignId | null,
   prospectId?: number,
 ): Promise<void> => {
   try {
@@ -54,7 +51,6 @@ const writeEventSafely = async (
       anonymousId: context.anonymousId,
       eventName,
       path: LOGIN_ROUTE,
-      ...(campaignId === null ? {} : { verifiedCampaignId: campaignId }),
       ...(prospectId === undefined ? {} : { prospectId }),
       requestId: context.requestId,
     })
@@ -113,14 +109,11 @@ export const createRosterAuthService = (dependencies: RosterAuthDependencies) =>
     throwOnStoreError(error)
     const result = parseLoginResult(data)
     if (result.kind === 'failed') {
-      await writeEventSafely(dependencies.writeEvent, 'login_failed', context, null)
+      await writeEventSafely(dependencies.writeEvent, 'login_failed', context)
       return { kind: 'failed' }
     }
 
-    const campaignId = context.resolveCampaignId
-      ? await Promise.resolve().then(context.resolveCampaignId).catch(() => null)
-      : null
-    await writeEventSafely(dependencies.writeEvent, 'login_succeeded', context, campaignId, result.prospectId)
+    await writeEventSafely(dependencies.writeEvent, 'login_succeeded', context, result.prospectId)
     return { kind: 'authenticated', sessionToken: session.raw, expiresAt: result.expiresAt }
   }
 

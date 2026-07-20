@@ -434,10 +434,10 @@ const validateState = (input, expectedCommit) => {
 
   assertExactObjectKeys(
     input.appSecrets,
-    ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper', 'passwordPepperVersion', 'campaignCookie'],
+    ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper', 'passwordPepperVersion'],
     '배포 state appSecrets',
   )
-  for (const key of ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper', 'campaignCookie']) {
+  for (const key of ['nameHmac', 'phoneHmac', 'phoneEncryption', 'passwordPepper']) {
     assert(isCanonicalSecret(input.appSecrets[key]), `배포 state의 ${key} secret 형식이 잘못되었습니다.`)
   }
   assert(input.appSecrets.passwordPepperVersion === CURRENT_PASSWORD_PEPPER_VERSION, '배포 state의 passwordPepperVersion이 현재 버전과 다릅니다.')
@@ -651,7 +651,6 @@ const createState = (gitState, supabaseKeys) => ({
     phoneEncryption: randomSecret(),
     passwordPepper: randomSecret(),
     passwordPepperVersion: CURRENT_PASSWORD_PEPPER_VERSION,
-    campaignCookie: randomSecret(),
   },
   admin: {
     email: ADMIN_EMAIL,
@@ -802,7 +801,6 @@ const runtimeSecrets = state => ({
   NUXT_PHONE_ENCRYPTION_KEY: state.appSecrets.phoneEncryption,
   NUXT_PASSWORD_PEPPER: state.appSecrets.passwordPepper,
   NUXT_PASSWORD_PEPPER_VERSION: state.appSecrets.passwordPepperVersion,
-  NUXT_CAMPAIGN_COOKIE_KEY: state.appSecrets.campaignCookie,
   GIT_COMMIT_SHA: state.commit,
 })
 
@@ -867,7 +865,6 @@ const artifactTreesContainPrivateSecret = (state, roots = [
     state.appSecrets.phoneHmac,
     state.appSecrets.phoneEncryption,
     state.appSecrets.passwordPepper,
-    state.appSecrets.campaignCookie,
   ].map(value => Buffer.from(value))
   assert(
     markerBuffers.every(marker => marker.byteLength > 0),
@@ -1187,7 +1184,6 @@ const makeSelfCheckState = () => ({
     phoneEncryption: randomSecret(),
     passwordPepper: randomSecret(),
     passwordPepperVersion: CURRENT_PASSWORD_PEPPER_VERSION,
-    campaignCookie: randomSecret(),
   },
   admin: {
     email: ADMIN_EMAIL,
@@ -1404,7 +1400,6 @@ const runSelfCheck = async () => {
     state.appSecrets.phoneHmac,
     state.appSecrets.phoneEncryption,
     state.appSecrets.passwordPepper,
-    state.appSecrets.campaignCookie,
   ]) {
     assert(isCanonicalSecret(value), '32-byte base64url secret self-check 실패')
   }
@@ -1893,7 +1888,6 @@ const runSelfCheck = async () => {
     completedState.appSecrets.phoneHmac,
     completedState.appSecrets.phoneEncryption,
     completedState.appSecrets.passwordPepper,
-    completedState.appSecrets.campaignCookie,
   ]) {
     assert(!handoffJson.includes(forbiddenValue), '최종 result에 service/app secret이 포함되었습니다.')
   }

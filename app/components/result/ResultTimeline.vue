@@ -114,7 +114,6 @@ const hasOutcomes = computed(() => (
 
     <slot name="career-narrative">
       <CareerNarrative
-        :assessment-public-id="resultPublicId"
         :narrative="snapshot.careerNarrative"
       />
     </slot>

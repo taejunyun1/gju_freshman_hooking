@@ -27,7 +27,6 @@ const paginationErrorMessage = ref('')
 const refreshErrorMessage = ref('')
 const filters = reactive({
   assignedFacultyId: '',
-  campaignId: '',
   createdFrom: '',
   createdTo: '',
   primaryTrack: '',
@@ -52,7 +51,6 @@ const queueQuery = (cursor?: string): Record<string, string> => {
   if (cursor) query.cursor = cursor
   if (filters.status) query.status = filters.status
   if (filters.primaryTrack) query.primaryTrack = filters.primaryTrack
-  if (filters.campaignId) query.campaignId = String(filters.campaignId)
   if (filters.assignedFacultyId) query.assignedFacultyId = String(filters.assignedFacultyId)
   if (filters.createdFrom) query.createdFrom = startOfKoreanDate(filters.createdFrom)
   if (filters.createdTo) query.createdTo = endOfKoreanDate(filters.createdTo)
@@ -127,7 +125,6 @@ const resetAndLoad = async (): Promise<void> => {
 const clearFilters = async (): Promise<void> => {
   Object.assign(filters, {
     assignedFacultyId: '',
-    campaignId: '',
     createdFrom: '',
     createdTo: '',
     primaryTrack: '',
@@ -172,10 +169,6 @@ onBeforeUnmount(() => {
           <option value="">전체 분야</option>
           <option v-for="track in trackKeys" :key="track" :value="track">{{ trackLabels[track] }}</option>
         </select>
-      </label>
-      <label>
-        캠페인
-        <input v-model="filters.campaignId" name="campaignId" type="number" inputmode="numeric" min="1" step="1" placeholder="전체">
       </label>
       <label>
         담당 교수

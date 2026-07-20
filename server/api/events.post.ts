@@ -12,7 +12,6 @@ import { RequestBodyLimitError, readBoundedRequestBody } from '../utils/bounded-
 import { studentSessionCookie } from '../utils/student-request-security'
 import { getServerSupabaseClient } from '../utils/supabase'
 import { getTrustedClientIp } from '../utils/trusted-client-ip'
-import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../utils/campaign-attribution'
 
 const EVENT_ROUTE = '/api/events' as const
 const MAX_BODY_BYTES = 8_192
@@ -86,7 +85,6 @@ export const decodeOwnedAssessmentEventRow = (
 type EventsHandlerDependencies = {
   consumeRateLimit: (input: { key: string, route: string, limit: number, window: string }) => Promise<boolean>
   getAnonymousId: (event: unknown) => string
-  getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContentType: (event: unknown) => string | undefined
   getIp: (event: unknown) => string
   getOrigin: (event: unknown) => string | undefined
@@ -225,10 +223,6 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       return { data: { accepted: true }, requestId }
     }
 
-    const verifiedCampaignId = dependencies.getCampaignId
-      ? await dependencies.getCampaignId(event)
-      : null
-
     if (sessionToken) {
       try {
         prospectId = (await dependencies.readStudentSession(sessionToken))?.prospectId
@@ -249,7 +243,6 @@ export const createEventsHandler = (dependencies: EventsHandlerDependencies) => 
       properties,
       prospectId,
       requestId,
-      ...(verifiedCampaignId === null ? {} : { verifiedCampaignId }),
     })
 
     return { data: { accepted: true }, requestId }
@@ -289,7 +282,6 @@ export const createServerEventsHandler = (
       return data === true
     },
     getAnonymousId: getAnonymousVisitorId,
-    getCampaignId: getServerVerifiedCampaignId,
     getContentType: requestEvent => getHeader(requestEvent as never, 'content-type'),
     getIp: getTrustedClientIp,
     getOrigin: requestEvent => getHeader(requestEvent as never, 'origin'),

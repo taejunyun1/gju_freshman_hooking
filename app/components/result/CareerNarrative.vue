@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import type { CareerNarrative } from '../../../shared/types/career-narrative'
-import CareerNarrativeReport from './CareerNarrativeReport.vue'
 
 defineProps<{
-  assessmentPublicId: string
   narrative: CareerNarrative
 }>()
 </script>
@@ -39,9 +37,8 @@ defineProps<{
         선택과 확인된 학과 자료를 바탕으로 정리한 탐색 제안입니다. 실제 교과 운영과 상담 배정은 학과 확인 후 확정됩니다.
       </p>
       <p class="career-narrative__ai-note">
-        일부 표현 선택에 AI가 도움을 줄 수 있지만, AI는 진로를 결정하지 않습니다. 불편하거나 사실과 다른 내용은 바로 알려주세요.
+        일부 표현 선택에 AI가 도움을 줄 수 있지만, AI는 진로를 결정하지 않습니다.
       </p>
-      <CareerNarrativeReport :assessment-public-id="assessmentPublicId" />
     </div>
   </section>
 </template>

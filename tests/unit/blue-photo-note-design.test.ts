@@ -30,7 +30,6 @@ const allApplicationStyles = [
 ].join('\n')
 const legacyAccentCss = [
   'app/pages/admin/export.vue',
-  'app/components/admin/CampaignAttributionStrip.vue',
 ].map(read).join('\n')
 
 describe('Blue Photo Note visual contract', () => {
@@ -57,14 +56,12 @@ describe('Blue Photo Note visual contract', () => {
 
   it('keeps every administrator h1 declaration at or below 2rem', () => {
     const adminPages = [
-      'app/pages/admin/campaigns.vue',
       'app/pages/admin/counseling.vue',
       'app/pages/admin/export.vue',
       'app/pages/admin/faculty/[id].vue',
       'app/pages/admin/faculty/index.vue',
       'app/pages/admin/index.vue',
       'app/pages/admin/login.vue',
-      'app/pages/admin/narrative-reports.vue',
       'app/pages/admin/resources/[id].vue',
       'app/pages/admin/resources/index.vue',
       'app/pages/admin/students/[id].vue',
@@ -101,7 +98,6 @@ describe('Blue Photo Note visual contract', () => {
       ['app/pages/login.vue', '.login-page__frame'],
       ['app/pages/assessment.vue', '.assessment-page__state-panel'],
       ['app/pages/admin/login.vue', '.admin-login__panel'],
-      ['app/pages/admin/campaigns.vue', '.campaigns-page__maker'],
       ['app/pages/admin/faculty/index.vue', '.faculty-list__filters'],
       ['app/pages/admin/resources/index.vue', '.resources-list__filters'],
     ]

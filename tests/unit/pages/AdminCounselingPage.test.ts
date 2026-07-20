@@ -180,7 +180,7 @@ describe('administrator counseling page', () => {
     expect(wrapper.text()).not.toContain('다음 요청을 불러오지 못했습니다')
   })
 
-  it('sends track, campaign, faculty, and date bounds and refreshes without cursor', async () => {
+  it('sends track, faculty, and date bounds without a campaign filter and refreshes without cursor', async () => {
     const fetch = vi.fn(async () => envelope(queue({ nextCursor: null })))
     vi.stubGlobal('$fetch', fetch)
     const wrapper = await mountPage()
@@ -188,7 +188,7 @@ describe('administrator counseling page', () => {
 
     await wrapper.get('select[name="primaryTrack"]').setValue('documentary')
     await flushPromises()
-    await wrapper.get('input[name="campaignId"]').setValue('9')
+    expect(wrapper.find('[name="campaignId"]').exists()).toBe(false)
     await wrapper.get('select[name="assignedFacultyId"]').setValue('12')
     await wrapper.get('input[name="createdFrom"]').setValue('2026-07-01')
     await wrapper.get('input[name="createdTo"]').setValue('2026-07-15')
@@ -198,13 +198,13 @@ describe('administrator counseling page', () => {
     const lastOptions = fetch.mock.calls.at(-1)?.[1] as { query: Record<string, string> }
     expect(lastOptions.query).toMatchObject({
       assignedFacultyId: '12',
-      campaignId: '9',
       createdFrom: expect.stringMatching(/^2026-06-30T15:00:00\.000Z$/u),
       createdTo: expect.stringMatching(/^2026-07-15T14:59:59\.999Z$/u),
       limit: '20',
       primaryTrack: 'documentary',
     })
     expect(lastOptions.query).not.toHaveProperty('cursor')
+    expect(lastOptions.query).not.toHaveProperty('campaignId')
 
     await wrapper.get('[data-refresh]').trigger('click')
     await flushPromises()

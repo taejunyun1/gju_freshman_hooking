@@ -97,7 +97,7 @@ describe('administrator export page', () => {
     await wrapper.get('select[name="exportSegment"]').setValue('completed_without_counseling')
     await wrapper.get('select[name="assignedFaculty"]').setValue('2')
     await wrapper.get('select[name="track"]').setValue('art_photo')
-    await wrapper.get('input[name="campaignId"]').setValue('7')
+    expect(wrapper.find('[name="campaignId"]').exists()).toBe(false)
     await wrapper.get('input[name="dateFrom"]').setValue('2026-07-01')
     await wrapper.get('form').trigger('submit')
 
@@ -106,7 +106,6 @@ describe('administrator export page', () => {
       exportSegment: 'completed_without_counseling',
       assignedFaculty: 2,
       track: 'art_photo',
-      campaignId: 7,
       dateFrom: '2026-07-01',
     })
 
@@ -164,18 +163,6 @@ describe('administrator export page', () => {
     expect(wrapper.find('[data-action="start"]').exists()).toBe(false)
     expect(wrapper.get('[data-phase="failed"]').text()).toBe('FAILED')
   })
-
-  it.each(['0', '1.5', '9007199254740992', 'campaign-seven'])(
-    'rejects invalid non-empty campaign ID %s without widening the export scope',
-    async (campaignId) => {
-      const wrapper = await mountPage()
-      await wrapper.get('input[name="campaignId"]').setValue(campaignId)
-      await wrapper.get('form').trigger('submit')
-
-      expect(start).not.toHaveBeenCalled()
-      expect(wrapper.get('[data-campaign-error]').text()).toContain('양의 정수')
-    },
-  )
 
   it('uses one filter column on mobile and two columns before the desktop six-column layout', async () => {
     const css = readFileSync('app/pages/admin/export.vue', 'utf8')

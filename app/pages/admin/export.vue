@@ -22,12 +22,10 @@ const form = reactive({
   stage: '',
   region: '',
   track: '',
-  campaignId: '',
   counselingStatus: '',
   dateFrom: '',
   dateTo: '',
 })
-const campaignError = ref('')
 const facultyItems = ref<AdminFacultyListItem[]>([])
 const facultyLoadError = ref('')
 
@@ -97,15 +95,6 @@ const normalizedFilters = (): AdminExportFilter | null => {
   if (form.counselingStatus) filters.counselingStatus = form.counselingStatus as AdminExportFilter['counselingStatus']
   if (form.dateFrom) filters.dateFrom = form.dateFrom
   if (form.dateTo) filters.dateTo = form.dateTo
-  const campaignId = form.campaignId.trim()
-  if (campaignId) {
-    if (!/^[1-9]\d{0,15}$/u.test(campaignId) || !Number.isSafeInteger(Number(campaignId))) {
-      campaignError.value = '캠페인 ID는 1 이상의 안전한 양의 정수로 입력해 주세요.'
-      return null
-    }
-    filters.campaignId = Number(campaignId)
-  }
-  campaignError.value = ''
   return filters
 }
 const beginExport = (): void => {
@@ -116,7 +105,6 @@ const beginExport = (): void => {
 const resetFilters = (): void => {
   if (state.value.busy) return
   for (const key of Object.keys(form) as Array<keyof typeof form>) form[key] = ''
-  campaignError.value = ''
 }
 const formatCount = (value: number): string => value.toLocaleString('ko-KR')
 
@@ -213,19 +201,6 @@ onBeforeUnmount(dispose)
             </select>
           </label>
           <label>
-            <span>캠페인 ID</span>
-            <input
-              v-model="form.campaignId"
-              name="campaignId"
-              type="text"
-              inputmode="numeric"
-              autocomplete="off"
-              aria-describedby="campaign-id-error"
-              :aria-invalid="campaignError ? 'true' : undefined"
-              placeholder="전체"
-            >
-          </label>
-          <label>
             <span>참여 시작일</span>
             <input v-model="form.dateFrom" name="dateFrom" type="date" :max="form.dateTo || undefined">
           </label>
@@ -247,14 +222,6 @@ onBeforeUnmount(dispose)
             </div>
           </details>
         </fieldset>
-        <p
-          v-if="campaignError"
-          id="campaign-id-error"
-          class="export-filter__error"
-          data-campaign-error
-          role="alert"
-        >{{ campaignError }}</p>
-
         <div class="export-filter__notice">
           <span aria-hidden="true">15</span>
           <p><strong>최근 인증 15분</strong>을 넘겼다면 시작 직후 로그인 화면으로 안내됩니다.</p>

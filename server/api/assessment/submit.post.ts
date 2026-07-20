@@ -8,7 +8,6 @@ import { AppError, toApiFailure } from '../../utils/app-error'
 import { RequestBodyLimitError, readBoundedRequestBody } from '../../utils/bounded-request-body'
 import { studentSessionCookie } from '../../utils/student-request-security'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
-import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../../utils/campaign-attribution'
 
 const MAX_BODY_BYTES = 8_192
 const encoder = new TextEncoder()
@@ -16,7 +15,6 @@ const encoder = new TextEncoder()
 type SubmitAssessmentHandlerDependencies = {
   assessment: Pick<ReturnType<typeof getServerAssessmentCompletionService>, 'submitAssessment'>
   getContentType: (event: unknown) => string | undefined
-  getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContext: (event: unknown) => AssessmentCompletionContext
   readRawBody: (event: unknown) => Promise<string | undefined>
   setHeader: (event: unknown, name: string, value: string) => void
@@ -46,15 +44,9 @@ export const createSubmitAssessmentHandler = (
     catch {
       throw new AppError('ASSESSMENT_INVALID')
     }
-    const context: AssessmentCompletionContext = {
-      ...baseContext,
-      ...(dependencies.getCampaignId
-        ? { resolveCampaignId: () => dependencies.getCampaignId!(event) }
-        : {}),
-    }
     return {
-      data: await dependencies.assessment.submitAssessment(input, context),
-      requestId: context.requestId,
+      data: await dependencies.assessment.submitAssessment(input, baseContext),
+      requestId: baseContext.requestId,
     }
   }
   catch (error) {
@@ -81,7 +73,6 @@ const requestContext = (event: unknown): AssessmentCompletionContext => {
 export default defineEventHandler(event => createSubmitAssessmentHandler({
   assessment: getServerAssessmentCompletionService(),
   getContentType: requestEvent => getHeader(requestEvent as never, 'content-type'),
-  getCampaignId: getServerVerifiedCampaignId,
   getContext: requestContext,
   readRawBody: readBoundedRequestBody,
   setHeader: (requestEvent, name, value) => setResponseHeader(requestEvent as never, name, value),

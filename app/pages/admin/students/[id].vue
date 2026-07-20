@@ -314,7 +314,6 @@ onBeforeUnmount(() => {
                 <th scope="col">완료일</th>
                 <th scope="col">주 관심</th>
                 <th scope="col">다음 관심</th>
-                <th scope="col">캠페인</th>
               </tr>
             </thead>
             <tbody>
@@ -322,7 +321,6 @@ onBeforeUnmount(() => {
                 <td><time :datetime="result.completedAt">{{ formatDate(result.completedAt) }}</time></td>
                 <td><strong>{{ trackLabels[result.primaryTrack] }}</strong></td>
                 <td>{{ trackLabels[result.secondaryTrack] }}</td>
-                <td>{{ result.campaignId === null ? '직접 참여' : `#${result.campaignId}` }}</td>
               </tr>
             </tbody>
           </table>

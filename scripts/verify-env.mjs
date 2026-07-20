@@ -18,7 +18,6 @@ const requiredNames = [
   'NUXT_PHONE_ENCRYPTION_KEY',
   'NUXT_PASSWORD_PEPPER',
   'NUXT_PASSWORD_PEPPER_VERSION',
-  'NUXT_CAMPAIGN_COOKIE_KEY',
 ]
 
 const issues = []
@@ -49,7 +48,6 @@ const exactSecretNames = [
   'NUXT_NAME_HMAC_KEY',
   'NUXT_PHONE_ENCRYPTION_KEY',
   'NUXT_PASSWORD_PEPPER',
-  'NUXT_CAMPAIGN_COOKIE_KEY',
 ]
 
 const decodedSecrets = new Map()
@@ -59,9 +57,7 @@ for (const name of exactSecretNames) {
     if (!isCanonicalExactBase64urlSecret(encoded, 32)) {
       issues.push({ name, reason: 'must encode exactly 32 bytes as unpadded base64url' })
     }
-    else if (name !== 'NUXT_CAMPAIGN_COOKIE_KEY') {
-      decodedSecrets.set(name, Buffer.from(encoded, 'base64url'))
-    }
+    else decodedSecrets.set(name, Buffer.from(encoded, 'base64url'))
   }
 }
 

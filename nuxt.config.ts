@@ -11,7 +11,6 @@ export default defineNuxtConfig({
     passwordPepperVersion: '',
     previousPasswordPepper: '',
     previousPasswordPepperVersion: '',
-    campaignCookieKey: '',
     public: {
       supabasePublishableKey: '',
       supabaseUrl: '',

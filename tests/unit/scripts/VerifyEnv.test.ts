@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 const script = resolve('scripts/verify-env.mjs')
 const secret32 = (fill: number) => Buffer.alloc(32, fill).toString('base64url')
 const required = {
-  NUXT_CAMPAIGN_COOKIE_KEY: secret32(1),
   NUXT_NAME_HMAC_KEY: secret32(3),
   NUXT_PASSWORD_PEPPER_VERSION: '2',
   NUXT_PHONE_ENCRYPTION_KEY: secret32(4),
@@ -34,14 +33,6 @@ describe('Worker environment verifier', () => {
 
   it('accepts a complete runtime contract', () => {
     expect(runVerifier().status).toBe(0)
-  })
-
-  it('requires the dedicated campaign cookie key to encode exactly 32 bytes', () => {
-    const result = runVerifier({ NUXT_CAMPAIGN_COOKIE_KEY: 'short-shared-secret' })
-
-    expect(result.status).not.toBe(0)
-    expect(result.stderr).toContain('NUXT_CAMPAIGN_COOKIE_KEY')
-    expect(result.stderr).not.toContain('short-shared-secret')
   })
 
   it.each([
@@ -77,12 +68,6 @@ describe('Worker environment verifier', () => {
     expect(result.stderr).toContain(name)
     expect(result.stderr).toContain('must use distinct key material')
     expect(`${result.stdout}${result.stderr}`).not.toContain(duplicate)
-  })
-
-  it('keeps the campaign cookie key outside the roster-key distinctness set', () => {
-    const result = runVerifier({ NUXT_CAMPAIGN_COOKIE_KEY: required.NUXT_PHONE_HMAC_KEY })
-
-    expect(result.status).toBe(0)
   })
 
   it('requires the previous password pepper and version together with a different version', () => {

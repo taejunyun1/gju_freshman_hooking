@@ -17,7 +17,6 @@ import { isMinorRolloutApprovalId } from '../../../server/utils/openai-career-ap
 describe('deployment and E2E safety contracts', () => {
   const exactSecret = (fill: number) => Buffer.alloc(32, fill).toString('base64url')
   const rosterSecrets = {
-    NUXT_CAMPAIGN_COOKIE_KEY: exactSecret(1),
     NUXT_PHONE_HMAC_KEY: exactSecret(2),
     NUXT_NAME_HMAC_KEY: exactSecret(3),
     NUXT_PHONE_ENCRYPTION_KEY: exactSecret(4),
@@ -288,7 +287,6 @@ describe('deployment and E2E safety contracts', () => {
       'NUXT_PHONE_HMAC_KEY',
       'NUXT_PHONE_ENCRYPTION_KEY',
       'NUXT_PASSWORD_PEPPER',
-      'NUXT_CAMPAIGN_COOKIE_KEY',
     ]) {
       expect(runner).toContain(`'${requiredSecret}'`)
     }

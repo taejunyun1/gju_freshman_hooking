@@ -379,7 +379,7 @@ describe('assessment completion service', () => {
       route: '/api/assessment/submit',
     }))
     expect(dependencies.completeAssessment).toHaveBeenCalledOnce()
-    expect(resolveCampaignId).toHaveBeenCalledOnce()
+    expect(resolveCampaignId).not.toHaveBeenCalled()
     const persisted = dependencies.completeAssessment.mock.calls[0]![0]
     expect(Object.keys(persisted).sort()).toEqual([
       'campaignId',
@@ -393,7 +393,7 @@ describe('assessment completion service', () => {
     ].sort())
     expect(persisted).toMatchObject({
       prospectId: 42,
-      campaignId: 17,
+      campaignId: null,
       idempotencyKey,
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
       environmentScore: 51.3,
@@ -1054,7 +1054,7 @@ describe('assessment completion service', () => {
     const event = recordEvent.mock.calls[0]![0]
     expect(event).toEqual({
       anonymousId,
-      campaignId: 17,
+      campaignId: null,
       eventName: 'assessment_completed',
       path: '/api/assessment/submit',
       prospectId: 42,
