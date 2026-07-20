@@ -23,7 +23,7 @@ export const registerAndLoginStudent = async (
   await onRegistered?.({ nickname })
   await page.goto('/login')
   await page.getByLabel('휴대전화 번호').fill(rosterPhone)
-  await page.getByLabel('임시 비밀번호').fill(rosterPassword)
+  await page.getByLabel('PIN').fill(rosterPassword)
 
   const loginResponsePromise = page.waitForResponse((response) => {
     return new URL(response.url()).pathname === '/api/student/login'
