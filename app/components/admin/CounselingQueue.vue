@@ -366,6 +366,9 @@ onBeforeUnmount(() => {
         <div>
           <p>REQUEST / {{ item.id.slice(0, 8).toUpperCase() }}</p>
           <h2 :id="`counseling-${item.id}`">{{ item.nickname }}</h2>
+          <span v-if="item.nameStatus === 'verification_required'" class="counseling-record__name-warning">
+            원본 명단과 암호화 설정에서 이름을 확인해 주세요.
+          </span>
           <span>{{ item.schoolName }} · {{ stageLabels[item.applicantStage] }} · {{ regionLabels[item.region] }}</span>
         </div>
         <div class="counseling-record__state">
@@ -608,6 +611,7 @@ onBeforeUnmount(() => {
   color: color-mix(in srgb, var(--color-ink) 70%, transparent);
   font-size: 0.875rem;
 }
+.counseling-record__header > div:first-child > .counseling-record__name-warning { color: var(--color-error); font-weight: 700; }
 
 .counseling-record__state { text-align: right; }
 .counseling-record__state strong {

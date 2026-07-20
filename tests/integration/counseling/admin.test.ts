@@ -26,6 +26,7 @@ const adminUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const requestPublicId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const assessmentPublicId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const createdAt = '2026-07-15T01:00:00.000Z'
+const rosterPlaceholder = `roster:11111111-1111-4111-8111-111111111111:${'ab'.repeat(32)}`
 
 const admin = {
   aal: 'aal2' as const,
@@ -241,6 +242,86 @@ describe('administrator counseling queue', () => {
       requestId: traceId,
     })
     expect(JSON.stringify(response)).not.toMatch(/legacy phone key mismatch|01012345678|phoneCiphertext|phoneIv/iu)
+  })
+
+  it('decrypts a roster applicant name without exposing the internal placeholder', async () => {
+    const decryptName = vi.fn(async () => '윤 태준')
+    const rosterRequest = storedRequest({
+      prospect: {
+        ...storedRequest().prospect,
+        nickname: rosterPlaceholder,
+        nameCiphertext: new Uint8Array(16).fill(3),
+        nameIv: new Uint8Array(12).fill(4),
+      },
+    })
+    const service = createAdminCounselingService(dependencies({
+      decryptName,
+      listRequests: vi.fn(async () => [rosterRequest]),
+    } as never))
+
+    const result = await service.list({ limit: 20 })
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ nickname: '윤 태준', nameStatus: 'available' }),
+    ])
+    expect(JSON.stringify(result)).not.toContain(rosterPlaceholder)
+    expect(decryptName).toHaveBeenCalledWith({
+      ciphertext: rosterRequest.prospect.nameCiphertext,
+      iv: rosterRequest.prospect.nameIv,
+    })
+  })
+
+  it.each([
+    ['missing encrypted name', {}],
+    ['name decryption failure', {
+      nameCiphertext: new Uint8Array(16).fill(3),
+      nameIv: new Uint8Array(12).fill(4),
+    }],
+  ])('keeps a roster counseling item private and usable after %s', async (scenario, encryptedName) => {
+    const rosterRequest = storedRequest({
+      prospect: {
+        ...storedRequest().prospect,
+        nickname: rosterPlaceholder,
+        ...encryptedName,
+      },
+    })
+    const decryptName = vi.fn(async () => {
+      throw new Error(`private ${scenario} detail`)
+    })
+    const service = createAdminCounselingService(dependencies({
+      decryptName,
+      listRequests: vi.fn(async () => [rosterRequest]),
+    } as never))
+
+    const result = await service.list({ limit: 20 })
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        nickname: '학생 이름 확인 필요',
+        nameStatus: 'verification_required',
+      }),
+    ])
+    expect(JSON.stringify(result)).not.toMatch(/roster:|private .* detail/iu)
+  })
+
+  it('uses the decrypted roster applicant name in a counseling summary', async () => {
+    const rosterRequest = storedRequest({
+      prospect: {
+        ...storedRequest().prospect,
+        nickname: rosterPlaceholder,
+        nameCiphertext: new Uint8Array(16).fill(3),
+        nameIv: new Uint8Array(12).fill(4),
+      },
+    })
+    const service = createAdminCounselingService(dependencies({
+      decryptName: vi.fn(async () => '윤 태준'),
+      loadRequest: vi.fn(async () => rosterRequest),
+    } as never))
+
+    const summary = await service.summary(requestPublicId, { adminUserId, traceId })
+
+    expect(summary).toContain('상담 학생: 윤 태준')
+    expect(summary).not.toContain(rosterPlaceholder)
   })
 
   it('rejects malformed, oversized, array-valued, reversed-date, and forged cursors', async () => {
@@ -543,6 +624,24 @@ describe('administrator counseling store decoder', () => {
       .toThrow('COUNSELING_ADMIN_STORE_INVALID')
   })
 
+  it('accepts a roster placeholder with only the encrypted applicant-name envelope', () => {
+    expect(rosterPlaceholder).toHaveLength(108)
+    const request = decodeAdminCounselingRow(rawRow({
+      prospect: {
+        ...rawRow().prospect,
+        nickname: rosterPlaceholder,
+        name_ciphertext: `\\x${'03'.repeat(16)}`,
+        name_iv: `\\x${'04'.repeat(12)}`,
+      },
+    }))
+
+    expect(request.prospect).toMatchObject({
+      nickname: rosterPlaceholder,
+      nameCiphertext: expect.any(Uint8Array),
+      nameIv: expect.any(Uint8Array),
+    })
+  })
+
   it('preserves only allow-listed database conflict reasons for public 409 mapping', async () => {
     for (const reason of ['COUNSELING_TRANSITION_INVALID', 'COUNSELING_OPEN_REQUEST_EXISTS'] as const) {
       const client = {
@@ -628,7 +727,7 @@ describe('administrator counseling store decoder', () => {
     })])
     expect(client.from).toHaveBeenCalledWith('counseling_requests')
     expect(calls.select.map(value => value.replace(/\s+/gu, ''))).toEqual([
-      'id,public_id,prospect_id,assessment_public_id_snapshot,campaign_id_snapshot,primary_track_snapshot,secondary_track_snapshot,selected_work_labels_snapshot,selected_career_labels_snapshot,status,contact_method,availability,inquiry,consented_at,assigned_at,contacted_at,completed_at,closed_at,version,created_at,updated_at,prospect:prospects!inner(nickname,school_name,applicant_stage,region,phone_ciphertext,phone_iv),assigned_faculty:faculty!counseling_requests_assigned_faculty_fk(id,name,title),recommendations:counseling_faculty_recommendations(faculty_id,faculty_name_snapshot,faculty_title_snapshot,role,rank)',
+      'id,public_id,prospect_id,assessment_public_id_snapshot,campaign_id_snapshot,primary_track_snapshot,secondary_track_snapshot,selected_work_labels_snapshot,selected_career_labels_snapshot,status,contact_method,availability,inquiry,consented_at,assigned_at,contacted_at,completed_at,closed_at,version,created_at,updated_at,prospect:prospects!inner(nickname,name_ciphertext,name_iv,school_name,applicant_stage,region,phone_ciphertext,phone_iv),assigned_faculty:faculty!counseling_requests_assigned_faculty_fk(id,name,title),recommendations:counseling_faculty_recommendations(faculty_id,faculty_name_snapshot,faculty_title_snapshot,role,rank)',
     ])
     expect(calls.eq).toEqual([
       ['status', 'assigned'],

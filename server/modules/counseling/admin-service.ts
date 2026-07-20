@@ -17,6 +17,7 @@ import { bytesFromPostgresBytea } from '../../utils/postgres-bytea'
 import { getServerSupabaseClient } from '../../utils/supabase'
 import { base64urlEncode, decodeBase64urlSecret } from '../../utils/web-crypto'
 import { normalizeKoreanPhone, revealPhone } from '../identity/phone'
+import { revealApplicantName } from '../identity/applicant-name'
 
 const safeIdSchema = z.number().int().positive().safe()
 const versionSchema = z.number().int().nonnegative().max(2_147_483_647)
@@ -191,10 +192,14 @@ const storedRequestSchema = z.object({
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
   prospect: z.object({
-    nickname: storedText(100),
+    nickname: storedText(128),
     schoolName: storedText(40),
     applicantStage: applicantStageSchema,
     region: regionSchema,
+    nameCiphertext: z.instanceof(Uint8Array)
+      .refine(value => value.byteLength >= 16 && value.byteLength <= 128)
+      .optional(),
+    nameIv: z.instanceof(Uint8Array).refine(value => value.byteLength === 12).optional(),
     phoneCiphertext: z.instanceof(Uint8Array),
     phoneIv: z.instanceof(Uint8Array),
   }).strict(),
@@ -270,6 +275,7 @@ const reopenResultSchema = z.object({
 export type AdminCounselingListStoreInput = Omit<AdminCounselingQueueQuery, 'limit'> & { limit: number }
 
 export type AdminCounselingServiceDependencies = {
+  decryptName?: (value: { ciphertext: Uint8Array, iv: Uint8Array }) => Promise<string>
   decryptPhone: (value: { ciphertext: Uint8Array, iv: Uint8Array }) => Promise<string>
   listAssignableFaculty: () => Promise<unknown>
   listRequests: (input: AdminCounselingListStoreInput) => Promise<unknown>
@@ -385,6 +391,42 @@ const maskPhone = (phone: string): string => {
   return `010-****-${normalized.slice(-4)}`
 }
 
+const applicantNameSchema = storedText(100)
+const unavailableApplicantName = '학생 이름 확인 필요' as const
+
+const namePresentation = async (
+  dependencies: AdminCounselingServiceDependencies,
+  request: StoredRequest,
+): Promise<
+  | { nickname: string, nameStatus: 'available' }
+  | { nickname: typeof unavailableApplicantName, nameStatus: 'verification_required' }
+> => {
+  const encryptedName = request.prospect.nameCiphertext && request.prospect.nameIv && dependencies.decryptName
+    ? {
+        ciphertext: request.prospect.nameCiphertext,
+        iv: request.prospect.nameIv,
+      }
+    : null
+  if (encryptedName !== null) {
+    try {
+      return {
+        nickname: applicantNameSchema.parse(await dependencies.decryptName!(encryptedName)),
+        nameStatus: 'available',
+      }
+    }
+    catch {
+      // A roster placeholder must never become a public display name.
+    }
+  }
+  if (request.prospect.nickname.startsWith('roster:')) {
+    return { nickname: unavailableApplicantName, nameStatus: 'verification_required' }
+  }
+  return {
+    nickname: applicantNameSchema.parse(request.prospect.nickname),
+    nameStatus: 'available',
+  }
+}
+
 const phonePresentation = async (
   dependencies: AdminCounselingServiceDependencies,
   request: StoredRequest,
@@ -411,7 +453,10 @@ const publicQueueItem = async (
   request: StoredRequest,
 ) => {
   const roleOrder = { primary: 0, backup: 1, specialist: 2 } as const
-  const phone = await phonePresentation(dependencies, request)
+  const [name, phone] = await Promise.all([
+    namePresentation(dependencies, request),
+    phonePresentation(dependencies, request),
+  ])
   return {
     ...toCurrent(request),
     assessmentPublicId: request.assessmentPublicId,
@@ -419,7 +464,7 @@ const publicQueueItem = async (
     secondaryTrack: request.secondaryTrack,
     selectedWorkLabels: request.selectedWorkLabels,
     selectedCareerLabels: request.selectedCareerLabels,
-    nickname: request.prospect.nickname,
+    ...name,
     ...phone,
     schoolName: request.prospect.schoolName,
     applicantStage: request.prospect.applicantStage,
@@ -470,8 +515,8 @@ const recommendationLine = (request: StoredRequest, role: 'primary' | 'backup' |
   return recommendations.length === 0 ? '없음' : recommendations.join(', ')
 }
 
-const buildSummary = (request: StoredRequest, phone: string): string => [
-  `상담 학생: ${request.prospect.nickname}`,
+const buildSummary = (request: StoredRequest, nickname: string, phone: string): string => [
+  `상담 학생: ${nickname}`,
   `연락처: ${phone}`,
   `학교: ${request.prospect.schoolName}`,
   `지원 단계: ${stageLabels[request.prospect.applicantStage]}`,
@@ -592,11 +637,14 @@ export const createAdminCounselingService = (dependencies: AdminCounselingServic
   const summary = async (publicId: string, context: AdminCounselingActionContext): Promise<string> => {
     try {
       const request = await loadStoredRequest(dependencies, publicId)
-      const phone = normalizeKoreanPhone(await dependencies.decryptPhone({
-        ciphertext: request.prospect.phoneCiphertext,
-        iv: request.prospect.phoneIv,
-      }))
-      const text = buildSummary(request, phone)
+      const [name, phone] = await Promise.all([
+        namePresentation(dependencies, request),
+        dependencies.decryptPhone({
+          ciphertext: request.prospect.phoneCiphertext,
+          iv: request.prospect.phoneIv,
+        }).then(normalizeKoreanPhone),
+      ])
+      const text = buildSummary(request, name.nickname, phone)
       await dependencies.recordSensitiveAccess({
         action: 'summary',
         adminUserId: context.adminUserId,
@@ -663,10 +711,12 @@ const rawRequestSchema = z.object({
   created_at: timestampSchema,
   updated_at: timestampSchema,
   prospect: z.object({
-    nickname: storedText(100),
+    nickname: storedText(128),
     school_name: storedText(40),
     applicant_stage: applicantStageSchema,
     region: regionSchema,
+    name_ciphertext: postgresByteaSchema.nullish(),
+    name_iv: postgresByteaSchema.nullish(),
     phone_ciphertext: postgresByteaSchema,
     phone_iv: postgresByteaSchema,
   }).strict(),
@@ -715,7 +765,7 @@ const requestSelection = `
   version,
   created_at,
   updated_at,
-  prospect:prospects!inner(nickname,school_name,applicant_stage,region,phone_ciphertext,phone_iv),
+  prospect:prospects!inner(nickname,name_ciphertext,name_iv,school_name,applicant_stage,region,phone_ciphertext,phone_iv),
   assigned_faculty:faculty!counseling_requests_assigned_faculty_fk(id,name,title),
   recommendations:counseling_faculty_recommendations(
     faculty_id,
@@ -755,6 +805,12 @@ export const decodeAdminCounselingRow = (input: unknown): StoredRequest => {
       schoolName: row.prospect.school_name,
       applicantStage: row.prospect.applicant_stage,
       region: row.prospect.region,
+      ...(row.prospect.name_ciphertext === null || row.prospect.name_ciphertext === undefined
+        ? {}
+        : { nameCiphertext: bytesFromPostgresBytea(row.prospect.name_ciphertext) }),
+      ...(row.prospect.name_iv === null || row.prospect.name_iv === undefined
+        ? {}
+        : { nameIv: bytesFromPostgresBytea(row.prospect.name_iv) }),
       phoneCiphertext: bytesFromPostgresBytea(row.prospect.phone_ciphertext),
       phoneIv: bytesFromPostgresBytea(row.prospect.phone_iv),
     },
@@ -780,7 +836,9 @@ const throwStoreError = (error: { code?: string, message?: string } | null): nev
 export const createSupabaseAdminCounselingDependencies = (
   client: SupabaseClient,
   decrypt: AdminCounselingServiceDependencies['decryptPhone'],
+  decryptName?: NonNullable<AdminCounselingServiceDependencies['decryptName']>,
 ): AdminCounselingServiceDependencies => ({
+  ...(decryptName === undefined ? {} : { decryptName }),
   decryptPhone: decrypt,
   listAssignableFaculty: async () => {
     const { data, error } = await client.from('faculty')
@@ -877,5 +935,6 @@ export const getServerAdminCounselingService = () => {
   return createAdminCounselingService(createSupabaseAdminCounselingDependencies(
     getServerSupabaseClient(),
     value => revealPhone(value, encryptionKey),
+    value => revealApplicantName(value, encryptionKey),
   ))
 }

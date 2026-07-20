@@ -20,6 +20,7 @@ const request = (status: AdminCounselingQueueItem['status'] = 'new'): AdminCouns
   selectedWorkLabels: ['사진과 영상을 결합한 전시'],
   selectedCareerLabels: ['미디어아티스트'],
   nickname: '빛의기록27',
+  nameStatus: 'available',
   maskedPhone: '010-****-5678',
   phoneStatus: 'available',
   schoolName: '광주고등학교',
@@ -122,6 +123,19 @@ describe('administrator counseling queue', () => {
     expect(wrapper.find('button[data-action="reveal-phone"]').exists()).toBe(false)
     expect(wrapper.find('button[data-action="copy-summary"]').exists()).toBe(false)
     expect(wrapper.text()).not.toMatch(/010[-\d]+/u)
+  })
+
+  it('marks an unavailable roster applicant name for source verification', () => {
+    const unavailable = {
+      ...request(),
+      nickname: '학생 이름 확인 필요',
+      nameStatus: 'verification_required',
+    } as unknown as AdminCounselingQueueItem
+    const wrapper = mountQueue(unavailable)
+
+    expect(wrapper.text()).toContain('학생 이름 확인 필요')
+    expect(wrapper.text()).toContain('원본 명단과 암호화 설정에서 이름을 확인해 주세요')
+    expect(wrapper.text()).not.toContain('roster:')
   })
 
   it('assigns an explicitly selected faculty member with the current version and authorization', async () => {

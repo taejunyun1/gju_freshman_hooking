@@ -12,6 +12,7 @@ const item = {
   selectedWorkLabels: ['전시 프로젝트'],
   selectedCareerLabels: ['사진작가'],
   nickname: '빛의기록27',
+  nameStatus: 'available',
   maskedPhone: '010-****-5678',
   phoneStatus: 'available',
   schoolName: '광주고등학교',

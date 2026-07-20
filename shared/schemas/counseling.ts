@@ -98,6 +98,7 @@ export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.exten
   selectedWorkLabels: storedLabelListSchema.max(4),
   selectedCareerLabels: storedLabelListSchema.max(2),
   nickname: safeStoredText(100),
+  nameStatus: z.enum(['available', 'verification_required']),
   maskedPhone: z.string().regex(/^010-\*{4}-\d{4}$/u).nullable(),
   phoneStatus: z.enum(['available', 'verification_required']),
   schoolName: safeStoredText(40),
@@ -114,6 +115,9 @@ export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.exten
     : item.maskedPhone === null
   if (!phoneShapeIsValid) {
     context.addIssue({ code: 'custom', message: '연락처 확인 상태와 마스킹 값이 일치해야 합니다.' })
+  }
+  if (item.nameStatus === 'verification_required' && item.nickname !== '학생 이름 확인 필요') {
+    context.addIssue({ code: 'custom', message: '확인할 수 없는 이름은 대체 문구로만 표시해야 합니다.' })
   }
 })
 
