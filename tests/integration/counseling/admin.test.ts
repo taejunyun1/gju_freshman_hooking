@@ -192,6 +192,57 @@ describe('administrator counseling queue', () => {
     expect(serialized).not.toMatch(/01012345678|phoneCiphertext|phoneIv|adminNote|ciphertext/u)
   })
 
+  it('keeps the queue available when one stored phone cannot be decrypted', async () => {
+    const unavailablePublicId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    const unavailable = storedRequest({
+      requestId: 74,
+      publicId: unavailablePublicId,
+      prospect: {
+        ...storedRequest().prospect,
+        phoneCiphertext: new Uint8Array([9, 9, 9]),
+      },
+    })
+    const decryptPhone = vi.fn(async ({ ciphertext }: { ciphertext: Uint8Array }) => {
+      if (ciphertext[0] === 9) throw new Error('legacy phone key mismatch: private detail')
+      return '01012345678'
+    })
+    const service = createAdminCounselingService(dependencies({
+      decryptPhone,
+      listRequests: vi.fn(async () => [unavailable, storedRequest()]),
+    }))
+    const event = handlerEvent()
+    const handler = createAdminCounselingListHandler({
+      counseling: service,
+      getQuery: () => ({ limit: '20' }),
+      getRequestId: () => traceId,
+      requireAdmin: async () => admin,
+      setHeader: vi.fn(),
+      setStatus: (target, status) => { (target as typeof event).status = status },
+    })
+
+    const response = await handler(event)
+
+    expect(event.status).toBeUndefined()
+    expect(response).toMatchObject({
+      data: {
+        items: [
+          {
+            id: unavailablePublicId,
+            maskedPhone: null,
+            phoneStatus: 'verification_required',
+          },
+          {
+            id: requestPublicId,
+            maskedPhone: '010-****-5678',
+            phoneStatus: 'available',
+          },
+        ],
+      },
+      requestId: traceId,
+    })
+    expect(JSON.stringify(response)).not.toMatch(/legacy phone key mismatch|01012345678|phoneCiphertext|phoneIv/iu)
+  })
+
   it('rejects malformed, oversized, array-valued, reversed-date, and forged cursors', async () => {
     const setStatus = vi.fn()
     const listRequests = vi.fn(async () => [])

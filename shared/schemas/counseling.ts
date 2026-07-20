@@ -98,7 +98,8 @@ export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.exten
   selectedWorkLabels: storedLabelListSchema.max(4),
   selectedCareerLabels: storedLabelListSchema.max(2),
   nickname: safeStoredText(100),
-  maskedPhone: z.string().regex(/^010-\*{4}-\d{4}$/u),
+  maskedPhone: z.string().regex(/^010-\*{4}-\d{4}$/u).nullable(),
+  phoneStatus: z.enum(['available', 'verification_required']),
   schoolName: safeStoredText(40),
   applicantStage: applicantStageSchema,
   region: regionSchema,
@@ -107,7 +108,14 @@ export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.exten
   consentedAt: counselingTimestampSchema,
   createdAt: counselingTimestampSchema,
   recommendations: z.array(adminRecommendationSchema).min(2).max(4),
-}).strict()
+}).strict().superRefine((item, context) => {
+  const phoneShapeIsValid = item.phoneStatus === 'available'
+    ? item.maskedPhone !== null
+    : item.maskedPhone === null
+  if (!phoneShapeIsValid) {
+    context.addIssue({ code: 'custom', message: '연락처 확인 상태와 마스킹 값이 일치해야 합니다.' })
+  }
+})
 
 export const adminCounselingQueueSchema = z.object({
   faculty: z.array(adminFacultySummarySchema).max(100),

@@ -402,7 +402,8 @@ onBeforeUnmount(() => {
         <dl>
           <div>
             <dt>휴대전화</dt>
-            <dd>{{ revealedPhones[item.id] ?? item.maskedPhone }}</dd>
+            <dd v-if="item.phoneStatus === 'available'">{{ revealedPhones[item.id] ?? item.maskedPhone }}</dd>
+            <dd v-else class="counseling-record__contact-warning">저장된 연락처를 확인할 수 없습니다.</dd>
           </div>
           <div>
             <dt>상담 방법</dt>
@@ -413,7 +414,7 @@ onBeforeUnmount(() => {
             <dd>{{ availabilityLabels[item.availability] }}</dd>
           </div>
         </dl>
-        <div class="counseling-record__sensitive-actions">
+        <div v-if="item.phoneStatus === 'available'" class="counseling-record__sensitive-actions">
           <AppButton
             data-action="reveal-phone"
             variant="secondary"
@@ -427,6 +428,9 @@ onBeforeUnmount(() => {
             @click="copySummary(item)"
           >상담 요약 복사</AppButton>
         </div>
+        <p v-else class="counseling-record__contact-guidance">
+          원본 명단과 암호화 설정 확인이 필요합니다. 다른 상담 처리는 계속할 수 있습니다.
+        </p>
       </section>
 
       <section class="counseling-record__faculty" aria-label="교수 연결">
@@ -664,6 +668,9 @@ onBeforeUnmount(() => {
   gap: 1rem;
 }
 .counseling-record__contact dd { margin: 0.35rem 0 0; overflow-wrap: anywhere; }
+.counseling-record__contact-warning,
+.counseling-record__contact-guidance { color: var(--color-error); }
+.counseling-record__contact-guidance { flex: 1 1 22rem; margin: 0; font-size: 0.8125rem; line-height: 1.55; }
 .counseling-record__sensitive-actions,
 .counseling-record__transitions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 

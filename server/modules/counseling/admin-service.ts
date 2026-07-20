@@ -385,11 +385,33 @@ const maskPhone = (phone: string): string => {
   return `010-****-${normalized.slice(-4)}`
 }
 
+const phonePresentation = async (
+  dependencies: AdminCounselingServiceDependencies,
+  request: StoredRequest,
+): Promise<
+  | { maskedPhone: string, phoneStatus: 'available' }
+  | { maskedPhone: null, phoneStatus: 'verification_required' }
+> => {
+  try {
+    return {
+      maskedPhone: maskPhone(await dependencies.decryptPhone({
+        ciphertext: request.prospect.phoneCiphertext,
+        iv: request.prospect.phoneIv,
+      })),
+      phoneStatus: 'available',
+    }
+  }
+  catch {
+    return { maskedPhone: null, phoneStatus: 'verification_required' }
+  }
+}
+
 const publicQueueItem = async (
   dependencies: AdminCounselingServiceDependencies,
   request: StoredRequest,
 ) => {
   const roleOrder = { primary: 0, backup: 1, specialist: 2 } as const
+  const phone = await phonePresentation(dependencies, request)
   return {
     ...toCurrent(request),
     assessmentPublicId: request.assessmentPublicId,
@@ -398,10 +420,7 @@ const publicQueueItem = async (
     selectedWorkLabels: request.selectedWorkLabels,
     selectedCareerLabels: request.selectedCareerLabels,
     nickname: request.prospect.nickname,
-    maskedPhone: maskPhone(await dependencies.decryptPhone({
-      ciphertext: request.prospect.phoneCiphertext,
-      iv: request.prospect.phoneIv,
-    })),
+    ...phone,
     schoolName: request.prospect.schoolName,
     applicantStage: request.prospect.applicantStage,
     region: request.prospect.region,

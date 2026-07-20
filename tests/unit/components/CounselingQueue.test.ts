@@ -21,6 +21,7 @@ const request = (status: AdminCounselingQueueItem['status'] = 'new'): AdminCouns
   selectedCareerLabels: ['미디어아티스트'],
   nickname: '빛의기록27',
   maskedPhone: '010-****-5678',
+  phoneStatus: 'available',
   schoolName: '광주고등학교',
   applicantStage: 'high3',
   region: 'gwangju',
@@ -106,6 +107,21 @@ describe('administrator counseling queue', () => {
     expect(wrapper.text()).toMatch(/총괄 윤태준/u)
     expect(wrapper.text()).toMatch(/예비 조대연/u)
     expect(wrapper.text()).not.toMatch(/장비|기자재|facility/u)
+  })
+
+  it('marks an undecryptable stored phone for verification without exposing unusable actions', () => {
+    const unavailable = {
+      ...request(),
+      maskedPhone: null,
+      phoneStatus: 'verification_required',
+    } as unknown as AdminCounselingQueueItem
+    const wrapper = mountQueue(unavailable)
+
+    expect(wrapper.text()).toContain('저장된 연락처를 확인할 수 없습니다')
+    expect(wrapper.text()).toContain('원본 명단과 암호화 설정 확인이 필요합니다')
+    expect(wrapper.find('button[data-action="reveal-phone"]').exists()).toBe(false)
+    expect(wrapper.find('button[data-action="copy-summary"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/010[-\d]+/u)
   })
 
   it('assigns an explicitly selected faculty member with the current version and authorization', async () => {
