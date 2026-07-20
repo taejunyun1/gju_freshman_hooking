@@ -12,7 +12,7 @@
 
 - Keep category weights exactly `specialist 0.50`, `result 0.30`, and `career 0.20`.
 - Exclude a category from the denominator only when the candidate has no positive-weight tag in that category; a present category with no student signal remains zero.
-- Keep the specialist threshold at `rawScore >= 50` and the result limit at two people.
+- Keep the specialist threshold at `qualificationScore >= 50` and the result limit at two people.
 - Count only distinct positive-signal keys with a selected questionnaire label in the specialist, result, or career category; two or more such keys raise a lower calculated score to exactly 50, while one weak key receives no floor.
 - Keep deterministic ordering by qualification score, underlying calculated score, distinct verified evidence count, priority, then ID.
 - Keep eligibility limited to active `adjunct|practitioner` candidates with `consultationRole: specialist`, an applicable primary/null link, and positive link evidence.

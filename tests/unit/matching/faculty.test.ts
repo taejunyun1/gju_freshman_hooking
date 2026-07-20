@@ -551,17 +551,18 @@ describe('recommendFaculty', () => {
         tag('weak_specialist_a', '선택하지 않은 전문분야 A', 'specialist'),
         tag('weak_specialist_b', '선택하지 않은 전문분야 B', 'specialist'),
         tag('weak_specialist_c', '선택하지 않은 전문분야 C', 'specialist'),
-        tag('focused_result', '선택한 결과물', 'result', 2),
-        tag('weak_result_a', '선택하지 않은 결과물 A', 'result', 2),
-        tag('weak_result_b', '선택하지 않은 결과물 B', 'result', 2),
-        tag('weak_result_c', '선택하지 않은 결과물 C', 'result', 2),
       ],
     })
     const evidence = student(
       { ...zeroTracks(), video: 100 },
-      { focused_specialist: 0.8, focused_result: 0.8 },
-      { focused_specialist: '선택한 전문분야', focused_result: '선택한 결과물' },
+      { focused_specialist: 0.8 },
+      { focused_specialist: '선택한 전문분야' },
     )
+
+    const verifiedEvidenceKeys = new Set(faculty[3]!.tags
+      .filter(candidateTag => (evidence.interestVector[candidateTag.key] ?? 0) > 0
+        && evidence.selectedLabels[candidateTag.key] !== undefined)
+      .map(candidateTag => candidateTag.key))
 
     const result = recommend(
       evidence,
@@ -569,6 +570,7 @@ describe('recommendFaculty', () => {
       [{ primaryFacultyId: 2, specialistFacultyId: 72, tagKey: 'focused_specialist', priority: 1 }],
     )
 
+    expect([...verifiedEvidenceKeys]).toEqual(['focused_specialist'])
     expect(result.primary.id).toBe(2)
     expect(result.specialists.map(({ id }) => id)).toContain(72)
   })
