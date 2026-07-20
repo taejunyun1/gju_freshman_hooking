@@ -23,6 +23,28 @@ const updatePhone = (event: Event): void => {
   input.value = formatted
 }
 
+const pastePhone = (event: ClipboardEvent): void => {
+  if (!event.cancelable || !event.clipboardData) return
+  event.preventDefault()
+
+  const input = event.target as HTMLInputElement
+  const selectionStart = input.selectionStart ?? input.value.length
+  const selectionEnd = input.selectionEnd ?? selectionStart
+  const beforeSelection = input.value.slice(0, selectionStart)
+  const pastedText = event.clipboardData.getData('text')
+  const formatted = formatStudentPhoneInput(
+    `${beforeSelection}${pastedText}${input.value.slice(selectionEnd)}`,
+  )
+  const caret = Math.min(
+    formatStudentPhoneInput(`${beforeSelection}${pastedText}`).length,
+    formatted.length,
+  )
+
+  form.phone = formatted
+  input.value = formatted
+  input.setSelectionRange(caret, caret)
+}
+
 const submitLogin = async (): Promise<void> => {
   submitting.value = true
   errorMessage.value = ''
@@ -96,6 +118,7 @@ const submitLogin = async (): Promise<void> => {
               placeholder="010-0000-0000"
               required
               @input="updatePhone"
+              @paste="pastePhone"
             >
           </div>
           <div class="login-form__field">

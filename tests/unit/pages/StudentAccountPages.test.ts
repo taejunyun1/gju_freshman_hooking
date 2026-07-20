@@ -15,6 +15,17 @@ const renderAccountPage = async (component: Parameters<typeof createSSRApp>[0]):
   return renderToString(app)
 }
 
+const dispatchPaste = (input: HTMLInputElement, text: string): Event => {
+  const event = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', {
+    value: {
+      getData: (format: string) => format === 'text' ? text : '',
+    },
+  })
+  input.dispatchEvent(event)
+  return event
+}
+
 describe('student account pages', () => {
   it('uses numeric PIN guidance without exposing backend authentication details', async () => {
     const fetch = vi.fn().mockRejectedValue(new Error('unexpected backend detail'))
@@ -55,6 +66,37 @@ describe('student account pages', () => {
     const loginHtml = await renderAccountPage(LoginPage)
 
     expect(loginHtml).toMatch(/<fieldset class="login-form__fieldset"[^>]*disabled/u)
+  })
+
+  it('formats complete mixed clipboard text before maxlength can truncate it', async () => {
+    const { default: LoginPage } = await import('../../../app/pages/login.vue')
+    const wrapper = mount(LoginPage, { global: { stubs: { NuxtLink: true } } })
+    const phone = wrapper.get<HTMLInputElement>('input[name="phone"]')
+    await phone.setValue('010-9999-0000')
+    phone.element.setSelectionRange(0, phone.element.value.length)
+
+    const event = dispatchPaste(phone.element, '010-12가34 5678...')
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(phone.element.value).toBe('010-1234-5678')
+    expect(phone.element.selectionStart).toBe(13)
+    expect(phone.element.selectionEnd).toBe(13)
+  })
+
+  it('replaces the selected phone range and restores the logical paste caret', async () => {
+    const { default: LoginPage } = await import('../../../app/pages/login.vue')
+    const wrapper = mount(LoginPage, { global: { stubs: { NuxtLink: true } } })
+    const phone = wrapper.get<HTMLInputElement>('input[name="phone"]')
+    await phone.setValue('010-9999-0000')
+    phone.element.setSelectionRange(4, 8)
+
+    const event = dispatchPaste(phone.element, '12가34')
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(phone.element.value).toBe('010-1234-0000')
+    expect(phone.element.selectionStart).toBe(8)
+    expect(phone.element.selectionEnd).toBe(8)
+    expect(phone.element.selectionStart).not.toBe(phone.element.value.length)
   })
 
   it.each([
