@@ -17,17 +17,27 @@ const renderAccountPage = async (component: Parameters<typeof createSSRApp>[0]):
 
 describe('student account pages', () => {
   it('uses numeric PIN guidance without exposing backend authentication details', async () => {
-    vi.stubGlobal('$fetch', vi.fn().mockRejectedValue(new Error('unexpected backend detail')))
+    const fetch = vi.fn().mockRejectedValue(new Error('unexpected backend detail'))
+    vi.stubGlobal('$fetch', fetch)
     const { default: LoginPage } = await import('../../../app/pages/login.vue')
     const wrapper = mount(LoginPage, { global: { stubs: { NuxtLink: true } } })
 
     expect(wrapper.get('[data-department-brand]').text()).toBe('광주대학교 사진영상미디어학과 · PHOTO:NEXT')
     expect(wrapper.text()).toContain('광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 PIN')
 
-    await wrapper.find('input[name="phone"]').setValue('01012345678')
+    await wrapper.find('input[name="phone"]').setValue('010-12가34 5678')
+    expect(wrapper.find('input[name="phone"]').element.value).toBe('010-1234-5678')
+    expect(wrapper.find('input[name="phone"]').attributes('inputmode')).toBe('numeric')
+    expect(wrapper.find('input[name="phone"]').attributes('maxlength')).toBe('13')
+
     await wrapper.find('input[name="password"]').setValue('269442')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith('/api/student/login', {
+      body: { phone: '01012345678', password: '269442' },
+      method: 'POST',
+    })
 
     expect(wrapper.find('input[name="phone"]').attributes('autocomplete')).toBe('tel')
     expect(wrapper.find('input[name="password"]').attributes('autocomplete')).toBe('current-password')

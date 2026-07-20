@@ -2,6 +2,10 @@
 import { onMounted, reactive, ref } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import type { ApiSuccess } from '../../shared/types/api'
+import {
+  formatStudentPhoneInput,
+  studentPhoneDigits,
+} from '../utils/student-phone-input'
 
 const hydrated = ref(false)
 const submitting = ref(false)
@@ -12,12 +16,22 @@ onMounted(() => {
   hydrated.value = true
 })
 
+const updatePhone = (event: Event): void => {
+  const input = event.target as HTMLInputElement
+  const formatted = formatStudentPhoneInput(input.value)
+  form.phone = formatted
+  input.value = formatted
+}
+
 const submitLogin = async (): Promise<void> => {
   submitting.value = true
   errorMessage.value = ''
   try {
     await $fetch<ApiSuccess<{ kind: 'authenticated', expiresAt: string }>>('/api/student/login', {
-      body: form,
+      body: {
+        phone: studentPhoneDigits(form.phone),
+        password: form.password,
+      },
       method: 'POST',
     })
     await navigateTo('/assessment', { replace: true })
@@ -73,13 +87,15 @@ const submitLogin = async (): Promise<void> => {
             <label for="login-phone">휴대전화 번호</label>
             <input
               id="login-phone"
-              v-model="form.phone"
+              :value="form.phone"
               name="phone"
               type="tel"
-              inputmode="tel"
+              inputmode="numeric"
+              maxlength="13"
               autocomplete="tel"
               placeholder="010-0000-0000"
               required
+              @input="updatePhone"
             >
           </div>
           <div class="login-form__field">
