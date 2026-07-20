@@ -509,6 +509,141 @@ describe('resource matching', () => {
     expect(ranked.capabilityEvidence.map(item => item.id)).toEqual([40, 41, 42, 43])
   })
 
+  it('prefers a Sony or Canon body and a same-brand lens for tied photo-commercial evidence', () => {
+    const ranked = rankResources({
+      interestVector: { commercial: 1 },
+      selectedInterests: selected(['commercial']),
+      candidates: [
+        facility(60, { tags: [tag('commercial')] }),
+        facility(61, { tags: [tag('commercial')] }),
+        equipment(1, {
+          title: '니콘 D850 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('commercial')],
+        }),
+        equipment(10, {
+          title: '소니 A7M3 Body',
+          metadata: { ...equipment(10).metadata, category: 'body' },
+          tags: [tag('commercial')],
+        }),
+        equipment(20, {
+          title: '캐논 EOS R Body',
+          metadata: { ...equipment(20).metadata, category: 'body' },
+          tags: [tag('commercial')],
+        }),
+        equipment(2, {
+          title: '캐논 RF 24-70mm Lens',
+          metadata: { ...equipment(2).metadata, category: 'lens' },
+          tags: [tag('commercial')],
+        }),
+        equipment(3, {
+          title: '니콘 AF-S 24-70mm Lens',
+          metadata: { ...equipment(3).metadata, category: 'lens' },
+          tags: [tag('commercial')],
+        }),
+        equipment(30, {
+          title: '소니 FE 24-70mm GM Lens',
+          metadata: { ...equipment(30).metadata, category: 'lens' },
+          tags: [tag('commercial')],
+        }),
+      ],
+    })
+
+    const body = ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'body'
+    ))
+    const lens = ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'lens'
+    ))
+    expect(body?.title).toMatch(/^(소니|캐논)\s/u)
+    expect(lens?.title.startsWith(body?.title.split(' ')[0] ?? '')).toBe(true)
+    expect(ranked.capabilityEvidence.map(item => item.type)).toEqual([
+      'facility',
+      'facility',
+      'equipment',
+      'equipment',
+    ])
+  })
+
+  it('prefers a Sony video body over tied general Sony and Canon bodies', () => {
+    const ranked = rankResources({
+      interestVector: { video: 1, cinematography: 1 },
+      selectedInterests: selected(['video', 'cinematography']),
+      candidates: [
+        equipment(1, {
+          title: '캐논 EOS R5 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('video')],
+        }),
+        equipment(2, {
+          title: '소니 A7M3 Body',
+          metadata: { ...equipment(2).metadata, category: 'body' },
+          tags: [tag('video')],
+        }),
+        equipment(3, {
+          title: '소니 FX3 Body',
+          metadata: { ...equipment(3).metadata, category: 'body' },
+          tags: [tag('video')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'body'
+    ))?.title).toBe('소니 FX3 Body')
+  })
+
+  it('prefers a Canon EOS body for tied film-darkroom evidence', () => {
+    const ranked = rankResources({
+      interestVector: { film: 1, darkroom: 1 },
+      selectedInterests: selected(['film', 'darkroom']),
+      candidates: [
+        equipment(1, {
+          title: '소니 A7M3 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('film')],
+        }),
+        equipment(2, {
+          title: '캐논 750D Body',
+          metadata: { ...equipment(2).metadata, category: 'body' },
+          tags: [tag('film')],
+        }),
+        equipment(3, {
+          title: '캐논 EOS 5 Body',
+          metadata: { ...equipment(3).metadata, category: 'body' },
+          tags: [tag('film')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'body'
+    ))?.title).toBe('캐논 EOS 5 Body')
+  })
+
+  it('never lets camera brand preference override higher raw affinity', () => {
+    const ranked = rankResources({
+      interestVector: { commercial: 1, portrait: 0.9 },
+      selectedInterests: selected(['commercial', 'portrait']),
+      candidates: [
+        equipment(1, {
+          title: '니콘 D850 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('commercial')],
+        }),
+        equipment(2, {
+          title: '소니 A7M3 Body',
+          metadata: { ...equipment(2).metadata, category: 'body' },
+          tags: [tag('portrait')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'body'
+    ))?.title).toBe('니콘 D850 Body')
+  })
+
   it('fills unused capability slots with the strongest unselected equipment', () => {
     const ranked = rankResources({
       interestVector: { facility: 1, body: 0.8, lighting: 0.95, audio: 0.7 },

@@ -390,11 +390,73 @@ interface RankedCandidate {
   readonly result: ResultResource
 }
 
+type CameraBrand = 'sony' | 'canon' | 'other'
+
 const compareRankedCandidates = (left: RankedCandidate, right: RankedCandidate): number => (
   right.rawAffinity - left.rawAffinity
   || right.candidate.priority - left.candidate.priority
   || compareText(right.candidate.sourceDate, left.candidate.sourceDate)
   || left.candidate.id - right.candidate.id
+)
+
+const cameraBrand = (title: string): CameraBrand => {
+  const normalized = title.trim().toLocaleLowerCase('ko-KR')
+  if (/^(소니|sony)(?:\s|$)/u.test(normalized)) return 'sony'
+  if (/^(캐논|canon)(?:\s|$)/u.test(normalized)) return 'canon'
+  return 'other'
+}
+
+const maxInterest = (
+  interestVector: Readonly<Record<string, number>>,
+  keys: readonly string[],
+): number => Math.max(0, ...keys.map(key => interestVector[key] ?? 0))
+
+const cameraPreference = (
+  candidate: RankedCandidate,
+  interestVector: Readonly<Record<string, number>>,
+  preferredLensBrand: CameraBrand | null,
+): number => {
+  const brand = cameraBrand(candidate.candidate.title)
+  const video = maxInterest(interestVector, [
+    'video',
+    'cinematography',
+    'editing',
+    'color_grading',
+    'post_production',
+    'ai',
+    'drone',
+    'video_360',
+    'vr',
+  ])
+  const film = maxInterest(interestVector, [
+    'film',
+    'darkroom',
+    'black_and_white',
+    'analog',
+  ])
+  const base = film > video
+    ? brand === 'canon' && /\bEOS\b/iu.test(candidate.candidate.title)
+      ? 4
+      : brand === 'canon' ? 3 : 0
+    : video > 0
+      ? brand === 'sony' && /\b(FX3|A7SII|PXW[\s-]*FS7)\b/iu.test(candidate.candidate.title)
+        ? 4
+        : brand === 'sony' ? 3 : brand === 'canon' ? 2 : 0
+      : brand === 'sony' || brand === 'canon' ? 2 : 0
+
+  return base + (preferredLensBrand !== null && brand === preferredLensBrand ? 1 : 0)
+}
+
+const compareCameraCandidates = (
+  left: RankedCandidate,
+  right: RankedCandidate,
+  interestVector: Readonly<Record<string, number>>,
+  preferredLensBrand: CameraBrand | null,
+): number => (
+  right.rawAffinity - left.rawAffinity
+  || cameraPreference(right, interestVector, preferredLensBrand)
+    - cameraPreference(left, interestVector, preferredLensBrand)
+  || compareRankedCandidates(left, right)
 )
 
 const selectDiverse = (
@@ -429,6 +491,7 @@ const resultsOf = <Result extends ResultResource>(
 
 const selectCapabilityEvidence = (
   ranked: readonly RankedCandidate[],
+  interestVector: Readonly<Record<string, number>>,
 ): readonly RankedCandidate[] => {
   const facilities = ranked.filter(item => item.candidate.type === 'facility').slice(0, 2)
   const equipment = ranked.filter(
@@ -436,8 +499,13 @@ const selectCapabilityEvidence = (
       item.candidate.type === 'equipment' && item.result.type === 'equipment'
     ),
   )
-  const body = equipment.find(item => equipmentCategoryOf(item.result) === 'body')
-  const lens = equipment.find(item => equipmentCategoryOf(item.result) === 'lens')
+  const body = equipment
+    .filter(item => equipmentCategoryOf(item.result) === 'body')
+    .sort((left, right) => compareCameraCandidates(left, right, interestVector, null))[0]
+  const bodyBrand = body === undefined ? null : cameraBrand(body.candidate.title)
+  const lens = equipment
+    .filter(item => equipmentCategoryOf(item.result) === 'lens')
+    .sort((left, right) => compareCameraCandidates(left, right, interestVector, bodyBrand))[0]
   const selected = [...facilities, body, lens]
     .filter((item): item is RankedCandidate => item !== undefined)
   const selectedIds = new Set(selected.map(item => item.candidate.id))
@@ -475,7 +543,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .sort(compareRankedCandidates)
 
   const course = selectDiverse(ranked.filter(item => item.candidate.type === 'course'), 5)
-  const capabilityEvidence = selectCapabilityEvidence(ranked)
+  const capabilityEvidence = selectCapabilityEvidence(ranked, input.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
   const experienceProjects = selectDiverse(ranked.filter(item => (
     item.candidate.type === 'project' && !isCurrentProject(item)

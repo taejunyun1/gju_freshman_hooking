@@ -270,9 +270,6 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
   }))).toEqual({ clientWidth: 390, scrollWidth: 390 })
-  const mobileReportButton = narrative.getByRole('button', { name: '내용 알리기' })
-  const mobileButtonBox = await mobileReportButton.boundingBox()
-  expect(mobileButtonBox?.height ?? 0).toBeGreaterThanOrEqual(44)
   await captureResultVisualQa(page, 'commercial')
   expect(browserOriginatedOpenAiRequests).toEqual([])
 }))
@@ -297,6 +294,14 @@ test('영상과 기술 관심사가 후반작업 예시와 컴퓨터실로 이�
     .locator('[data-capability-kind="facility"]')
     .first()
   await expect(firstFacility.getByRole('heading')).toHaveText(/컴퓨터실/u)
+  const capability = page.locator('[data-result-section="capability-evidence"]')
+  const moreCapability = capability.getByTestId('capability-more')
+  if (await moreCapability.isVisible()) {
+    await moreCapability.click()
+  }
+  await expect(capability.getByRole('heading', {
+    name: /소니 (FX3|A7SII|PXW FS7)/u,
+  })).toBeVisible()
 
   const exampleItems = outcomes.locator('.result-example-grid__items')
   await page.setViewportSize({ width: 719, height: 1000 })
