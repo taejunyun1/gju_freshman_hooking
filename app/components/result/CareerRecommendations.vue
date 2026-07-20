@@ -160,7 +160,7 @@ const compact = computed(() => props.career.slice(2, 4))
 
 .career-recommendations__archive {
   justify-self: start;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-control);
   padding: 0.45rem 0.1rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
