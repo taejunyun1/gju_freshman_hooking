@@ -271,6 +271,30 @@ describe('administrator counseling queue', () => {
     })
   })
 
+  it('accepts the maximum forty four-byte applicant-name characters and their GCM tag', async () => {
+    const applicantName = '𠮷'.repeat(40)
+    const ciphertextLength = new TextEncoder().encode(applicantName).byteLength + 16
+    expect(ciphertextLength).toBe(176)
+    const rosterRequest = storedRequest({
+      prospect: {
+        ...storedRequest().prospect,
+        nickname: rosterPlaceholder,
+        nameCiphertext: new Uint8Array(ciphertextLength).fill(3),
+        nameIv: new Uint8Array(12).fill(4),
+      },
+    })
+    const service = createAdminCounselingService(dependencies({
+      decryptName: vi.fn(async () => applicantName),
+      listRequests: vi.fn(async () => [rosterRequest]),
+    }))
+
+    const result = await service.list({ limit: 20 })
+
+    expect(result.items).toEqual([
+      expect.objectContaining({ nickname: applicantName, nameStatus: 'available' }),
+    ])
+  })
+
   it.each([
     ['missing encrypted name', {}],
     ['name decryption failure', {

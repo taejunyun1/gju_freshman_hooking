@@ -26,6 +26,7 @@ const canonicalUuidSchema = z.string().uuid()
 const inputUuidSchema = z.string().uuid().transform(value => value.toLowerCase())
 const timestampSchema = z.iso.datetime({ offset: true }).max(40)
 const nullableTimestampSchema = timestampSchema.nullable()
+const maxApplicantNameCiphertextBytes = 40 * 4 + 16
 const storedText = (maximum: number) => z.string().min(1).max(maximum)
   .refine(value => value === value.trim(), 'stored text must be trimmed')
   .refine(value => [...value].every((character) => {
@@ -197,7 +198,7 @@ const storedRequestSchema = z.object({
     applicantStage: applicantStageSchema,
     region: regionSchema,
     nameCiphertext: z.instanceof(Uint8Array)
-      .refine(value => value.byteLength >= 16 && value.byteLength <= 128)
+      .refine(value => value.byteLength >= 16 && value.byteLength <= maxApplicantNameCiphertextBytes)
       .optional(),
     nameIv: z.instanceof(Uint8Array).refine(value => value.byteLength === 12).optional(),
     phoneCiphertext: z.instanceof(Uint8Array),
