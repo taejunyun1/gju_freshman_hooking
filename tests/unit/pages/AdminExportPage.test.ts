@@ -24,6 +24,7 @@ const state = ref({
   filename: '',
   currentSheet: null,
   message: '내보낼 범위를 확인해 주세요.',
+  requestId: null as string | null,
   rows: { students: 0, assessments: 0, counseling: 0 },
 })
 const faculty = {
@@ -59,7 +60,7 @@ describe('administrator export page', () => {
     vi.stubGlobal('$fetch', mocks.fetch)
     state.value = {
       phase: 'idle', busy: false, canRetry: false, error: '', filename: '', currentSheet: null,
-      message: '내보낼 범위를 확인해 주세요.', rows: { students: 0, assessments: 0, counseling: 0 },
+      message: '내보낼 범위를 확인해 주세요.', requestId: null, rows: { students: 0, assessments: 0, counseling: 0 },
     }
     start.mockReset()
     dispose.mockReset()
@@ -155,10 +156,20 @@ describe('administrator export page', () => {
 
   it('renders a private recoverable error and exposes retry only after a failed terminal', async () => {
     const wrapper = await mountPage()
-    state.value = { ...state.value, phase: 'failed', busy: false, canRetry: true, error: '내보내기를 완료하지 못했습니다.', message: '작업을 종료했습니다.' }
+    state.value = {
+      ...state.value,
+      phase: 'failed',
+      busy: false,
+      canRetry: true,
+      error: '내보내기 데이터 수집 단계에서 작업을 처리하지 못했습니다.',
+      message: '잠시 후 다시 시도하고, 반복되면 요청 번호를 운영 담당자에게 전달해 주세요.',
+      requestId: 'export-req-17',
+    }
     await flushPromises()
 
-    expect(wrapper.get('[role="alert"]').text()).toContain('완료하지 못했습니다')
+    expect(wrapper.get('[role="alert"]').text()).toContain('이유')
+    expect(wrapper.get('[role="alert"]').text()).toContain('해결 방법')
+    expect(wrapper.get('[role="alert"]').text()).toContain('요청 번호: export-req-17')
     expect(wrapper.get('[data-action="retry"]').text()).toContain('다시 시도')
     expect(wrapper.find('[data-action="start"]').exists()).toBe(false)
     expect(wrapper.get('[data-phase="failed"]').text()).toBe('FAILED')

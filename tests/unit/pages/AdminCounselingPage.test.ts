@@ -56,6 +56,9 @@ const AppStateStub = {
 }
 
 const envelope = (data: AdminCounselingQueue) => ({ data, requestId: 'trace-id' })
+const apiFailure = (code: string, requestId = 'counseling-req-17') => ({
+  data: { error: { code, message: 'private database detail' }, requestId },
+})
 
 const deferred = <Value>() => {
   let resolve!: (value: Value) => void
@@ -82,6 +85,7 @@ describe('administrator counseling page', () => {
       userId: 'admin-1',
     })
     vi.stubGlobal('definePageMeta', vi.fn())
+    vi.stubGlobal('navigateTo', vi.fn())
   })
 
   afterEach(() => {
@@ -147,7 +151,7 @@ describe('administrator counseling page', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-testid="queue"]').text()).toContain('빛의기록27')
-    expect(wrapper.text()).toContain('다음 요청을 불러오지 못했습니다')
+    expect(wrapper.text()).toContain('서버가 상담 목록을 처리하지 못했습니다')
     expect(wrapper.text()).not.toContain('private pagination detail')
     await wrapper.get('button[data-action="retry-next-page"]').trigger('click')
     await flushPromises()
@@ -170,7 +174,7 @@ describe('administrator counseling page', () => {
 
     await wrapper.get('button[data-action="next-page"]').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('다음 요청을 불러오지 못했습니다')
+    expect(wrapper.text()).toContain('서버가 상담 목록을 처리하지 못했습니다')
 
     await wrapper.get('select[name="status"]').setValue('assigned')
     await flushPromises()
@@ -236,11 +240,28 @@ describe('administrator counseling page', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    expect(wrapper.get('[data-state="error"]').text()).toContain('다시 시도')
+    expect(wrapper.get('[data-state="error"]').text()).toContain('서버가 상담 목록을 처리하지 못했습니다')
+    expect(wrapper.text()).toContain('잠시 후 다시 시도')
     expect(wrapper.text()).not.toContain('private network detail')
     await wrapper.get('button[data-action="retry"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[data-state="empty"]').text()).toContain('상담 요청이 없습니다')
+  })
+
+  it('explains an expired administrator session without exposing server detail and opens login on demand', async () => {
+    const fetch = vi.fn().mockRejectedValueOnce(apiFailure('ADMIN_REQUIRED'))
+    const navigateTo = vi.fn()
+    vi.stubGlobal('$fetch', fetch)
+    vi.stubGlobal('navigateTo', navigateTo)
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('로그인 세션이 만료')
+    expect(wrapper.text()).toContain('요청 번호: counseling-req-17')
+    expect(wrapper.text()).not.toContain('private database detail')
+    expect(wrapper.find('[data-action="retry"]').exists()).toBe(false)
+    await wrapper.get('[data-action="login"]').trigger('click')
+    expect(navigateTo).toHaveBeenCalledWith({ path: '/admin/login', query: { redirect: '/admin/counseling' } }, { replace: true })
   })
 
   it('ignores a queue response that resolves after unmount', async () => {

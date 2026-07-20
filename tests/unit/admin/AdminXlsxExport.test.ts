@@ -272,7 +272,7 @@ describe('administrator XLSX export flow', () => {
     await exporter.start({})
     expect(download).toHaveBeenCalledTimes(1)
     expect(exporter.state.value).toMatchObject({ phase: 'failed', canRetry: true })
-    expect(exporter.state.value.error).toContain('서버 확인')
+    expect(exporter.state.value.error).toContain('완료 확인')
 
     await exporter.start({})
     expect(download).toHaveBeenCalledTimes(1)
@@ -308,7 +308,7 @@ describe('administrator XLSX export flow', () => {
   it('best-effort terminates a failed job and offers only a retryable failed state', async () => {
     const fetcher = vi.fn(async (url: string) => {
       if (url === '/api/admin/export') return { data: job, requestId: 'create' }
-      if (url.endsWith('/students')) throw new Error('network-private-detail')
+      if (url.endsWith('/students')) throw new TypeError('network-private-detail')
       return { data: { ...job, status: 'failed' }, requestId: 'failed' }
     })
     const exporter = useXlsxExport({
@@ -328,6 +328,7 @@ describe('administrator XLSX export flow', () => {
     }))
     expect(exporter.state.value).toMatchObject({ phase: 'failed', canRetry: true })
     expect(exporter.state.value.error).not.toContain('network-private-detail')
+    expect(exporter.state.value.error).toContain('인터넷 연결')
   })
 
   it.each(['MFA_REQUIRED', 'REAUTH_REQUIRED', 'ADMIN_REQUIRED', 'ADMIN_SESSION_REQUIRED'])('recovers %s through the fixed local login redirect', async (code) => {

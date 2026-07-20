@@ -281,7 +281,11 @@ onBeforeUnmount(dispose)
           <p>{{ state.message }}</p>
           <strong v-if="state.filename">{{ state.filename }}</strong>
         </div>
-        <p v-if="state.error" class="export-error" role="alert">{{ state.error }}</p>
+        <div v-if="state.error" class="export-error" role="alert">
+          <p><strong>이유</strong> {{ state.error }}</p>
+          <p><strong>해결 방법</strong> {{ state.message }}</p>
+          <p v-if="state.requestId" class="export-error__request-id">요청 번호: {{ state.requestId }}</p>
+        </div>
 
         <p class="export-status__privacy">XLSX에는 검증된 학생·참여·상담 데이터만 포함됩니다. 운영 후 파일 보관 위치를 확인해 주세요.</p>
       </aside>
@@ -554,6 +558,9 @@ onBeforeUnmount(dispose)
 .export-live p { margin: 0.35rem 0 0; line-height: 1.55; }
 .export-live strong { display: block; margin-top: 0.5rem; overflow-wrap: anywhere; color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.75rem; }
 .export-error { margin: 0.75rem 0 0; border: 1px solid var(--color-error); border-radius: var(--radius-card); padding: 0.75rem; color: var(--color-surface); font-size: 0.8125rem; line-height: 1.55; }
+.export-error p { margin: 0; }
+.export-error p + p { margin-top: 0.35rem; }
+.export-error__request-id { color: var(--color-primary-soft); font-family: var(--font-mono); font-size: 0.75rem; }
 .export-status__privacy { margin: 1rem 0 0; color: color-mix(in srgb, var(--color-surface) 52%, transparent); font-size: 0.6875rem; line-height: 1.6; }
 
 @media (min-width: 36rem) {

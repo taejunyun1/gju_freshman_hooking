@@ -12,6 +12,10 @@ import CounselingQueue from '../../components/admin/CounselingQueue.vue'
 import AppButton from '../../components/common/AppButton.vue'
 import AppState from '../../components/common/AppState.vue'
 import { useAdminSessionStore } from '../../stores/admin-session'
+import {
+  explainAdminOperationError,
+  type AdminOperationFailure,
+} from '../../utils/admin-operation-error'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 
@@ -22,9 +26,9 @@ const nextCursor = ref<string | null>(null)
 const loading = ref(true)
 const loadingNext = ref(false)
 const refreshing = ref(false)
-const errorMessage = ref('')
-const paginationErrorMessage = ref('')
-const refreshErrorMessage = ref('')
+const failure = ref<AdminOperationFailure | null>(null)
+const paginationFailure = ref<AdminOperationFailure | null>(null)
+const refreshFailure = ref<AdminOperationFailure | null>(null)
 const filters = reactive({
   assignedFacultyId: '',
   createdFrom: '',
@@ -73,15 +77,15 @@ const loadQueue = async (append = false, background = false): Promise<void> => {
   else if (background) refreshing.value = true
   else loading.value = true
   if (append) {
-    paginationErrorMessage.value = ''
+    paginationFailure.value = null
   }
   else if (background) {
-    refreshErrorMessage.value = ''
+    refreshFailure.value = null
   }
   else {
-    errorMessage.value = ''
-    paginationErrorMessage.value = ''
-    refreshErrorMessage.value = ''
+    failure.value = null
+    paginationFailure.value = null
+    refreshFailure.value = null
   }
 
   try {
@@ -95,11 +99,15 @@ const loadQueue = async (append = false, background = false): Promise<void> => {
     faculty.value = parsed.faculty
     nextCursor.value = parsed.nextCursor
   }
-  catch {
+  catch (error) {
     if (active && thisRequest === requestVersion) {
-      if (append) paginationErrorMessage.value = '다음 요청을 불러오지 못했습니다. 현재 목록을 유지한 채 다시 시도하세요.'
-      else if (background) refreshErrorMessage.value = '최신 상담 상태를 불러오지 못했습니다. 현재 표시 내용을 확인한 뒤 다시 시도하세요.'
-      else errorMessage.value = '상담 대기열을 불러오지 못했습니다. 세션을 확인하고 다시 시도하세요.'
+      const explained = explainAdminOperationError(error, {
+        operation: 'counseling',
+        phase: append ? 'pagination' : background ? 'refreshing' : 'loading',
+      })
+      if (append) paginationFailure.value = explained
+      else if (background) refreshFailure.value = explained
+      else failure.value = explained
     }
   }
   finally {
@@ -113,6 +121,11 @@ const loadQueue = async (append = false, background = false): Promise<void> => {
 
 const refreshQueue = async (): Promise<void> => {
   await loadQueue(false, items.value.length > 0)
+}
+
+const openLogin = async (): Promise<void> => {
+  adminSession.clear()
+  await navigateTo({ path: '/admin/login', query: { redirect: '/admin/counseling' } }, { replace: true })
 }
 
 const resetAndLoad = async (): Promise<void> => {
@@ -198,17 +211,44 @@ onBeforeUnmount(() => {
     </div>
 
     <AppState v-if="loading" variant="loading" message="상담 요청을 확인하고 있습니다." />
-    <div v-else-if="errorMessage" class="counseling-operations__state">
-      <AppState variant="error" :message="`${errorMessage} 다시 시도할 수 있습니다.`" />
-      <AppButton data-action="retry" variant="secondary" @click="resetAndLoad">다시 시도</AppButton>
+    <div v-else-if="failure" class="counseling-operations__state">
+      <AppState variant="error" :message="failure.reason" />
+      <p class="counseling-operations__failure-action">{{ failure.action }}</p>
+      <p v-if="failure.requestId" class="counseling-operations__request-id">요청 번호: {{ failure.requestId }}</p>
+      <AppButton
+        v-if="failure.requiresLogin"
+        data-action="login"
+        variant="primary"
+        @click="openLogin"
+      >다시 로그인</AppButton>
+      <AppButton
+        v-else-if="failure.canRetry"
+        data-action="retry"
+        variant="secondary"
+        @click="resetAndLoad"
+      >다시 시도</AppButton>
     </div>
     <AppState v-else-if="items.length === 0" variant="empty" message="조건에 맞는 상담 요청이 없습니다." />
     <template v-else>
       <CounselingQueue :items="items" :faculty="faculty" @refresh="refreshQueue" />
-      <p v-if="refreshErrorMessage" class="counseling-operations__inline-error" role="alert">{{ refreshErrorMessage }}</p>
-      <div v-if="paginationErrorMessage" class="counseling-operations__pagination-error" aria-live="polite">
-        <p>{{ paginationErrorMessage }}</p>
+      <div v-if="refreshFailure" class="counseling-operations__inline-error" role="alert">
+        <p>{{ refreshFailure.reason }}</p>
+        <p>{{ refreshFailure.action }}</p>
+        <p v-if="refreshFailure.requestId" class="counseling-operations__request-id">요청 번호: {{ refreshFailure.requestId }}</p>
+        <AppButton v-if="refreshFailure.requiresLogin" data-action="login-refresh" variant="secondary" @click="openLogin">다시 로그인</AppButton>
+      </div>
+      <div v-if="paginationFailure" class="counseling-operations__pagination-error" aria-live="polite">
+        <p>{{ paginationFailure.reason }}</p>
+        <p>{{ paginationFailure.action }}</p>
+        <p v-if="paginationFailure.requestId" class="counseling-operations__request-id">요청 번호: {{ paginationFailure.requestId }}</p>
         <AppButton
+          v-if="paginationFailure.requiresLogin"
+          data-action="login-next-page"
+          variant="secondary"
+          @click="openLogin"
+        >다시 로그인</AppButton>
+        <AppButton
+          v-else-if="paginationFailure.canRetry"
           data-action="retry-next-page"
           variant="secondary"
           :loading="loadingNext"
@@ -311,9 +351,11 @@ onBeforeUnmount(() => {
 .counseling-operations__count strong { color: var(--color-sequence); font-size: 1.5rem; }
 .counseling-operations__state { display: grid; gap: 0.75rem; justify-items: start; }
 .counseling-operations__next { display: flex; justify-content: center; }
-.counseling-operations__inline-error,
+.counseling-operations__failure-action,
+.counseling-operations__inline-error p,
 .counseling-operations__pagination-error p { margin: 0; color: var(--color-error); }
 .counseling-operations__pagination-error { display: grid; justify-items: center; gap: 0.75rem; }
+.counseling-operations__request-id { color: color-mix(in srgb, var(--color-ink) 60%, transparent) !important; font-family: var(--font-mono); font-size: 0.75rem; }
 
 @media (max-width: 80rem) {
   .counseling-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }

@@ -17,6 +17,7 @@ import {
   type AdminExportStudent,
 } from '../../shared/schemas/admin-export'
 import { useAdminSessionStore } from '../stores/admin-session'
+import { explainAdminOperationError } from '../utils/admin-operation-error'
 
 const DATE_FORMAT = 'yyyy-mm-dd hh:mm'
 const HEADER_FILL = 'FF17151D'
@@ -45,6 +46,7 @@ export type XlsxExportState = {
   filename: string
   message: string
   phase: ExportPhase
+  requestId: string | null
   rows: Record<ExportSheetKey, number>
 }
 
@@ -340,6 +342,7 @@ const initialState = (): XlsxExportState => ({
   filename: '',
   message: '내보낼 범위를 확인해 주세요.',
   phase: 'idle',
+  requestId: null,
   rows: { students: 0, assessments: 0, counseling: 0 },
 })
 
@@ -410,28 +413,25 @@ export const useXlsxExport = (
     options: { pending: PendingDownload | null },
   ): Promise<void> => {
     if (error instanceof ExportDisposed || !isCurrent(version)) return
-    const code = errorCode(error)
-    const authFailure = AUTH_CODES.has(code)
-    if (authFailure) await dependencies.recoverAuth('/admin/login?redirect=/admin/export')
-    if (!isCurrent(version)) return
     const pending = options.pending
+    const failure = explainAdminOperationError(error, {
+      operation: 'export',
+      phase: pending?.browserDownloaded
+        ? 'confirming'
+        : pending
+          ? 'downloading'
+          : state.value.phase,
+    })
+    if (failure.requiresLogin) await dependencies.recoverAuth('/admin/login?redirect=/admin/export')
+    if (!isCurrent(version)) return
     patchState(version, {
       busy: false,
-      canRetry: !authFailure,
+      canRetry: failure.canRetry,
       currentSheet: null,
-      error: authFailure
-        ? '최근 인증이 필요합니다. 로그인 화면에서 다시 인증해 주세요.'
-        : pending?.browserDownloaded
-          ? '파일은 다운로드됐지만 서버 확인을 완료하지 못했습니다. 다시 시도해 주세요.'
-          : pending
-            ? '완성된 파일 다운로드를 시작하지 못했습니다. 다시 시도해 주세요.'
-            : '내보내기를 완료하지 못했습니다. 필터를 확인한 뒤 다시 시도해 주세요.',
-      message: pending?.browserDownloaded
-        ? '다운로드 확인을 다시 시도할 수 있습니다.'
-        : pending
-          ? '서버 작업은 완료됐으며 파일 다운로드만 다시 시도할 수 있습니다.'
-          : '서버 작업을 종료했습니다.',
+      error: failure.reason,
+      message: failure.action,
       phase: 'failed',
+      requestId: failure.requestId,
     })
   }
 
@@ -476,6 +476,7 @@ export const useXlsxExport = (
       filename: pending.filename,
       message: `${pending.filename} 다운로드를 완료했습니다.`,
       phase: 'completed',
+      requestId: null,
       rows: { ...pending.rows },
     })
   }
