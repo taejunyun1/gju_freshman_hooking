@@ -93,6 +93,7 @@ const studentColumns: ColumnDefinition[] = [
   { header: '추천 교수', key: 'recommendedFaculty', width: 18 },
   { header: '배정 교수', key: 'assignedFaculty', width: 18 },
   { header: '상담 상태', key: 'counselingStatus', width: 14 },
+  { header: '내보내기 분류', key: 'exportSegment', width: 24 },
 ]
 
 const assessmentColumns: ColumnDefinition[] = [
@@ -139,6 +140,11 @@ export const asKoreanExcelDate = (value: string | null): Date | null => {
 }
 const joined = (values: string[]): string => values.join(' · ')
 const displayPhone = (value: string): string => `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(7)}`
+const exportSegmentLabel = (student: AdminExportStudent): string => {
+  if (student.counselingStatus !== null) return '상담 신청자'
+  if (student.latestResultAt !== null) return '설문 완료자 (상담 미신청)'
+  return '설문 미완료자'
+}
 
 const configureSheet = (sheet: Worksheet, columns: ColumnDefinition[]): void => {
   sheet.columns = columns.map(column => ({ header: column.header, key: column.key, width: column.width }))
@@ -201,6 +207,7 @@ export const createAdminExportWorkbook = (workbook: Workbook) => {
         recommendedFaculty: item.recommendedFaculty,
         assignedFaculty: item.assignedFaculty,
         counselingStatus: item.counselingStatus,
+        exportSegment: exportSegmentLabel(item),
       })))
     },
     appendAssessments(items: AdminExportAssessment[]): void {

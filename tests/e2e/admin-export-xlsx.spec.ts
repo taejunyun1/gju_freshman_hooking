@@ -69,6 +69,20 @@ const counseling: AdminExportCounseling = {
   adminNote: '영상과 기술 분야 상담',
 }
 
+const activeFaculty = {
+  id: 2,
+  name: '윤태준',
+  title: '교수',
+  employmentType: 'full_time',
+  consultationRole: 'primary',
+  status: 'active',
+  weeklyCapacity: 12,
+  openAssignedCount: 1,
+  lastVerifiedAt: '2026-07-20T00:00:00.000Z',
+  primaryTags: [],
+  updatedAt: '2026-07-20T00:00:00.000Z',
+}
+
 test('downloads and decodes the real 1,001-row private workbook in Chromium', async ({ page }) => {
   const firstBatch = Array.from({ length: 1_000 }, (_, index) => student(index + 1))
   const secondBatch = [student(1_001)]
@@ -77,6 +91,7 @@ test('downloads and decodes the real 1,001-row private workbook in Chromium', as
   const pageErrors: string[] = []
   const requests: string[] = []
   let completionBody: unknown
+  let createBody: unknown
   let downloadedAcknowledged = false
   page.on('console', message => consoleMessages.push(`${message.type()}: ${message.text()}`))
   page.on('pageerror', error => pageErrors.push(error.message))
@@ -85,11 +100,23 @@ test('downloads and decodes the real 1,001-row private workbook in Chromium', as
     if (url.pathname.startsWith('/api/admin/export')) requests.push(`${request.method()} ${url.pathname}${url.search}`)
   })
 
+  await page.route('**/api/admin/faculty**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { items: [activeFaculty], nextCursor: null },
+        requestId: 'faculty-list-e2e',
+      }),
+    })
+  })
+
   await page.route('**/api/admin/export**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     calls.push(`${request.method()} ${url.pathname}${url.search}`)
     if (request.method() === 'POST' && url.pathname === '/api/admin/export') {
+      createBody = request.postDataJSON()
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -166,6 +193,8 @@ test('downloads and decodes the real 1,001-row private workbook in Chromium', as
   await page.goto('/admin/export')
   await expect(page.getByRole('heading', { name: '데이터 내보내기', exact: true })).toBeVisible()
   await expect(page.getByText(/^세션 만료/u)).toBeVisible()
+  await page.getByLabel('내보내기 대상').selectOption('completed_without_counseling')
+  await page.getByLabel('담당 교수').selectOption('2')
   await page.getByLabel('관심 분야').selectOption('video')
 
   const createRequestPromise = page.waitForRequest((request) => {
@@ -237,5 +266,13 @@ test('downloads and decodes the real 1,001-row private workbook in Chromium', as
     'POST /api/admin/export/7/downloaded',
   ])
   expect(downloadedAcknowledged).toBe(true)
+  expect(createBody).toEqual({
+    filters: {
+      exportSegment: 'completed_without_counseling',
+      assignedFaculty: 2,
+      track: 'video',
+    },
+  })
+  expect(students.getCell('M2').value).toBe('상담 신청자')
   await expect(page.locator('[aria-live="polite"]')).toContainText(download.suggestedFilename())
 })

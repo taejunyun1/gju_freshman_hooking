@@ -3,8 +3,15 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ useXlsxExport: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  authorizationHeaders: vi.fn(() => ({ Authorization: 'Bearer test-admin-session' })),
+  fetch: vi.fn(),
+  useXlsxExport: vi.fn(),
+}))
 vi.mock('../../../app/composables/useXlsxExport', () => ({ useXlsxExport: mocks.useXlsxExport }))
+vi.mock('../../../app/stores/admin-session', () => ({
+  useAdminSessionStore: () => ({ authorizationHeaders: mocks.authorizationHeaders }),
+}))
 
 const wrappers: VueWrapper[] = []
 const start = vi.fn()
@@ -19,6 +26,19 @@ const state = ref({
   message: '내보낼 범위를 확인해 주세요.',
   rows: { students: 0, assessments: 0, counseling: 0 },
 })
+const faculty = {
+  id: 2,
+  name: '윤태준',
+  title: '교수',
+  employmentType: 'full_time' as const,
+  consultationRole: 'primary' as const,
+  status: 'active' as const,
+  weeklyCapacity: 12,
+  openAssignedCount: 1,
+  lastVerifiedAt: '2026-07-20T00:00:00.000Z',
+  primaryTags: [],
+  updatedAt: '2026-07-20T00:00:00.000Z',
+}
 
 const mountPage = async () => {
   const { default: Page } = await import('../../../app/pages/admin/export.vue')
@@ -36,12 +56,16 @@ const mountPage = async () => {
 describe('administrator export page', () => {
   beforeEach(() => {
     vi.stubGlobal('definePageMeta', vi.fn())
+    vi.stubGlobal('$fetch', mocks.fetch)
     state.value = {
       phase: 'idle', busy: false, canRetry: false, error: '', filename: '', currentSheet: null,
       message: '내보낼 범위를 확인해 주세요.', rows: { students: 0, assessments: 0, counseling: 0 },
     }
     start.mockReset()
     dispose.mockReset()
+    mocks.authorizationHeaders.mockClear()
+    mocks.fetch.mockReset()
+    mocks.fetch.mockResolvedValue({ data: { items: [faculty], nextCursor: null }, requestId: 'faculty-list' })
     mocks.useXlsxExport.mockReturnValue({ dispose, start, state })
   })
 
@@ -66,16 +90,24 @@ describe('administrator export page', () => {
     expect(wrapper.text()).not.toMatch(/장비 목록|시설 카탈로그|교교 재고/u)
   })
 
-  it('submits only normalized supported filters and locks the fieldset while running', async () => {
+  it('submits operation filters with the selected active faculty and locks the fieldset while running', async () => {
     const wrapper = await mountPage()
+    await flushPromises()
     await wrapper.get('input[name="query"]').setValue('  선명  ')
+    await wrapper.get('select[name="exportSegment"]').setValue('completed_without_counseling')
+    await wrapper.get('select[name="assignedFaculty"]').setValue('2')
     await wrapper.get('select[name="track"]').setValue('art_photo')
     await wrapper.get('input[name="campaignId"]').setValue('7')
     await wrapper.get('input[name="dateFrom"]').setValue('2026-07-01')
     await wrapper.get('form').trigger('submit')
 
     expect(start).toHaveBeenCalledWith({
-      query: '선명', track: 'art_photo', campaignId: 7, dateFrom: '2026-07-01',
+      query: '선명',
+      exportSegment: 'completed_without_counseling',
+      assignedFaculty: 2,
+      track: 'art_photo',
+      campaignId: 7,
+      dateFrom: '2026-07-01',
     })
 
     state.value = { ...state.value, busy: true, phase: 'collecting', message: '학생목록 1,000행 수집', rows: { students: 1_000, assessments: 0, counseling: 0 } }
@@ -83,6 +115,43 @@ describe('administrator export page', () => {
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-row-counts]').text()).toContain('1,000')
     expect(wrapper.text()).not.toContain('%')
+  })
+
+  it('loads active faculty once and keeps an honest fallback when the list is unavailable', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    expect(mocks.fetch).toHaveBeenCalledWith('/api/admin/faculty', {
+      headers: { Authorization: 'Bearer test-admin-session' },
+      query: { status: 'active', limit: '50' },
+    })
+    expect(wrapper.get('select[name="assignedFaculty"]').text()).toContain('윤태준 교수')
+    expect(wrapper.get('select[name="assignedFaculty"]').text()).toContain('미배정')
+
+    wrapper.unmount()
+    wrappers.splice(wrappers.indexOf(wrapper), 1)
+    mocks.fetch.mockRejectedValueOnce(new Error('offline'))
+    const unavailable = await mountPage()
+    await flushPromises()
+    expect(unavailable.get('[data-faculty-load-error]').text()).toContain('담당 교수 목록을 불러오지 못했습니다')
+    expect(unavailable.get('select[name="assignedFaculty"]').text()).toContain('전체 담당 교수')
+  })
+
+  it('uses operation controls first, keeps personal lookup optional, and resets every filter', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    const controls = wrapper.findAll('fieldset > label').map(label => label.get('span').text())
+    expect(controls.slice(0, 2)).toEqual(['내보내기 대상', '담당 교수'])
+    expect(wrapper.get('details').get('summary').text()).toBe('추가 검색')
+
+    await wrapper.get('select[name="exportSegment"]').setValue('not_completed')
+    await wrapper.get('select[name="assignedFaculty"]').setValue('unassigned')
+    await wrapper.get('input[name="query"]').setValue('학생1')
+    await wrapper.get('button[type="button"]').trigger('click')
+
+    expect((wrapper.get('select[name="exportSegment"]').element as HTMLSelectElement).value).toBe('')
+    expect((wrapper.get('select[name="assignedFaculty"]').element as HTMLSelectElement).value).toBe('')
+    expect((wrapper.get('input[name="query"]').element as HTMLInputElement).value).toBe('')
   })
 
   it('renders a private recoverable error and exposes retry only after a failed terminal', async () => {

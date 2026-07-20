@@ -76,6 +76,7 @@ describe('administrator XLSX workbook', () => {
     expect(workbook.getWorksheet('학생목록')!.getRow(1).values).toEqual([
       undefined, '닉네임', '휴대전화', '학교', '지원자 단계', '지역', '1순위 관심 분야',
       '2순위 관심 분야', '총 참여 횟수', '최근 검사 일시', '추천 교수', '배정 교수', '상담 상태',
+      '내보내기 분류',
     ])
     for (const sheet of workbook.worksheets) {
       expect(sheet.views[0]).toMatchObject({ state: 'frozen', ySplit: 1, showGridLines: false })
@@ -101,6 +102,7 @@ describe('administrator XLSX workbook', () => {
     expect(students.getCell('I2').value).toBeInstanceOf(Date)
     expect((students.getCell('I2').value as Date).toISOString()).toBe('2026-07-16T10:02:03.000Z')
     expect(students.getCell('I2').numFmt).toBe('yyyy-mm-dd hh:mm')
+    expect(students.getCell('M2').value).toBe('상담 신청자')
     expect(participation.getCell('B2').value).toBe(2)
     expect(participation.getCell('C2').value).toBeInstanceOf(Date)
     expect(participation.getCell('H2').value).toBe(71.5)

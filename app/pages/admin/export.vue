@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { z } from 'zod'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
+import { adminFacultyListItemSchema, type AdminFacultyListItem } from '../../../shared/schemas/admin-faculty'
 import type { AdminExportFilter } from '../../../shared/schemas/admin-export'
+import type { ApiSuccess } from '../../../shared/types/api'
 import { counselingStatuses, trackKeys, trackLabels } from '../../../shared/types/domain'
 import AppButton from '../../components/common/AppButton.vue'
 import { useXlsxExport } from '../../composables/useXlsxExport'
+import { useAdminSessionStore } from '../../stores/admin-session'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 
 const { dispose, start, state } = useXlsxExport()
+const adminSession = useAdminSessionStore()
 const form = reactive({
+  exportSegment: '',
+  assignedFaculty: '',
   query: '',
   school: '',
   stage: '',
@@ -21,6 +28,13 @@ const form = reactive({
   dateTo: '',
 })
 const campaignError = ref('')
+const facultyItems = ref<AdminFacultyListItem[]>([])
+const facultyLoadError = ref('')
+
+const facultyListSchema = z.object({
+  items: z.array(adminFacultyListItemSchema).max(50),
+  nextCursor: z.string().min(1).max(200).nullable(),
+}).strict()
 
 const stageLabels = {
   high1: '고1',
@@ -47,6 +61,11 @@ const counselingLabels = {
   completed: '상담 완료',
   closed: '요청 종료',
 } as const
+const exportSegmentLabels = {
+  counseling_requested: '상담 신청자',
+  completed_without_counseling: '설문 완료자 (상담 미신청)',
+  not_completed: '설문 미완료자',
+} as const
 const steps = ['범위 확인', '최근 인증', '행 수집', '워크북 생성']
 const sheets = [
   { name: '학생목록', description: '지원자 기본 정보와 관심 분야, 최근 상담 상태' },
@@ -63,6 +82,11 @@ const currentStep = computed(() => {
 
 const normalizedFilters = (): AdminExportFilter | null => {
   const filters: AdminExportFilter = {}
+  if (form.exportSegment) filters.exportSegment = form.exportSegment as AdminExportFilter['exportSegment']
+  if (form.assignedFaculty === 'unassigned') filters.assignedFaculty = 'unassigned'
+  else if (/^[1-9]\d{0,15}$/u.test(form.assignedFaculty) && Number.isSafeInteger(Number(form.assignedFaculty))) {
+    filters.assignedFaculty = Number(form.assignedFaculty)
+  }
   const query = form.query.trim()
   const school = form.school.trim()
   if (query) filters.query = query
@@ -96,6 +120,22 @@ const resetFilters = (): void => {
 }
 const formatCount = (value: number): string => value.toLocaleString('ko-KR')
 
+const loadFaculty = async (): Promise<void> => {
+  facultyLoadError.value = ''
+  try {
+    const response = await $fetch<ApiSuccess<unknown>>('/api/admin/faculty', {
+      headers: adminSession.authorizationHeaders(),
+      query: { status: 'active', limit: '50' },
+    })
+    facultyItems.value = facultyListSchema.parse(response.data).items
+  }
+  catch {
+    facultyItems.value = []
+    facultyLoadError.value = '담당 교수 목록을 불러오지 못했습니다. 전체 또는 미배정 기준으로는 계속 내보낼 수 있습니다.'
+  }
+}
+
+onMounted(() => { void loadFaculty() })
 onBeforeUnmount(dispose)
 </script>
 
@@ -128,14 +168,22 @@ onBeforeUnmount(dispose)
         </div>
 
         <fieldset :disabled="state.busy">
-          <label class="export-filter__wide">
-            <span>닉네임·검색어</span>
-            <input v-model="form.query" name="query" type="search" maxlength="100" autocomplete="off" placeholder="닉네임 또는 검색어">
+          <label class="export-filter__operation">
+            <span>내보내기 대상</span>
+            <select v-model="form.exportSegment" name="exportSegment">
+              <option value="">전체 학생</option>
+              <option v-for="(label, value) in exportSegmentLabels" :key="value" :value="value">{{ label }}</option>
+            </select>
           </label>
-          <label class="export-filter__wide">
-            <span>학교</span>
-            <input v-model="form.school" name="school" type="search" maxlength="40" autocomplete="off" placeholder="학교명">
+          <label class="export-filter__operation">
+            <span>담당 교수</span>
+            <select v-model="form.assignedFaculty" name="assignedFaculty">
+              <option value="">전체 담당 교수</option>
+              <option value="unassigned">미배정</option>
+              <option v-for="faculty in facultyItems" :key="faculty.id" :value="String(faculty.id)">{{ faculty.name }} {{ faculty.title }}</option>
+            </select>
           </label>
+          <p v-if="facultyLoadError" class="export-filter__error export-filter__faculty-error" data-faculty-load-error role="status">{{ facultyLoadError }}</p>
           <label>
             <span>학년</span>
             <select v-model="form.stage" name="stage">
@@ -185,6 +233,19 @@ onBeforeUnmount(dispose)
             <span>참여 종료일</span>
             <input v-model="form.dateTo" name="dateTo" type="date" :min="form.dateFrom || undefined">
           </label>
+          <details class="export-filter__additional-search">
+            <summary>추가 검색</summary>
+            <div>
+              <label>
+                <span>닉네임·검색어</span>
+                <input v-model="form.query" name="query" type="search" maxlength="100" autocomplete="off" placeholder="닉네임 또는 검색어">
+              </label>
+              <label>
+                <span>학교</span>
+                <input v-model="form.school" name="school" type="search" maxlength="40" autocomplete="off" placeholder="학교명">
+              </label>
+            </div>
+          </details>
         </fieldset>
         <p
           v-if="campaignError"
@@ -388,7 +449,7 @@ onBeforeUnmount(dispose)
   font-weight: 600;
 }
 
-.export-filter__wide { grid-column: 1 / -1; }
+.export-filter__operation { border-top: 2px solid var(--color-sequence); padding-top: 0.55rem; }
 
 .export-filter input,
 .export-filter select {
@@ -421,6 +482,29 @@ onBeforeUnmount(dispose)
   font-size: 0.8125rem;
   line-height: 1.5;
 }
+.export-filter__faculty-error { grid-column: 1 / -1; margin: 0; }
+.export-filter__additional-search {
+  grid-column: 1 / -1;
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  padding-top: 0.75rem;
+}
+
+.export-filter__additional-search summary {
+  color: var(--color-resource);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+
+.export-filter__additional-search > div {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.export-filter__additional-search label { display: block; }
 
 .export-filter__notice {
   display: grid;
@@ -507,13 +591,16 @@ onBeforeUnmount(dispose)
 
 @media (min-width: 36rem) {
   .export-filter fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .export-filter__additional-search > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (min-width: 62rem) {
   .export-page__grid { grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.75fr); gap: 1.25rem; }
   .export-filter fieldset { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .export-filter label { grid-column: span 2; }
-  .export-filter__wide { grid-column: span 3 !important; }
+  .export-filter__operation { grid-column: span 3 !important; }
+  .export-filter__additional-search > div { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .export-filter__additional-search label { grid-column: span 3; }
 }
 
 @media (max-width: 35rem) {
