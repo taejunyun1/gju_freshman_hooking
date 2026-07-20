@@ -83,7 +83,7 @@ const yearTitles = {
       <div class="learning-path__project-heading">
         <p>CURRENT PROGRAMS / 2026</p>
         <h3 id="project-lane-title">2026 진행·예정 프로그램</h3>
-        <span>선택한 관심사와 직접 맞닿는 올해의 프로젝트를 우선 보여드립니다.</span>
+        <span>특정 학년을 임의로 지정하지 않은 학과 프로젝트입니다.</span>
       </div>
       <div
         v-if="currentProjects.length > 0"

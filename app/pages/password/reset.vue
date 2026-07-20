@@ -93,7 +93,7 @@ const resetAndRestart = async (): Promise<void> => {
 .pin-reset-page__masthead > span { color: var(--color-muted); }
 .pin-reset-page__frame { width: min(100%, 35rem); margin: 4.5rem auto 0; border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-radius: var(--radius-panel); background: var(--color-surface); padding: clamp(1.25rem, 5vw, 2.25rem); }
 .pin-reset-page__eyebrow { margin: 0 0 0.875rem; color: var(--color-primary); }
-.pin-reset-page__frame h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 5vw, 2rem); font-weight: 760; letter-spacing: -0.06em; line-height: 1.08; word-break: keep-all; }
+.pin-reset-page__frame h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.75rem, 4vw, 2rem); font-weight: 760; letter-spacing: -0.06em; line-height: 1.08; word-break: keep-all; }
 .pin-reset-page__intro { margin: 1rem 0 1.5rem; color: var(--color-muted); line-height: 1.65; word-break: keep-all; }
 .pin-reset-page__warning { border: 1px solid color-mix(in srgb, var(--color-error) 75%, transparent); border-radius: var(--radius-control); background: color-mix(in srgb, var(--color-error) 4%, var(--color-surface)); padding: 1rem; }
 .pin-reset-page__warning strong { color: var(--color-error); font-family: var(--font-display); }
