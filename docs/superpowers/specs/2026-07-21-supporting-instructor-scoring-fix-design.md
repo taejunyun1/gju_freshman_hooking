@@ -25,6 +25,8 @@ It produces 김사라 as primary, 윤태준 as backup, and no specialists even t
 
 Change specialist-only category matching from an average across all candidate tags to the strongest verified tag match in each available category. A specialist is a valid connection when the student's selected interest strongly matches at least one declared subfield; the student is not required to select the instructor's entire practice profile.
 
+Count distinct verified evidence keys across the specialist, result, and career categories. Evidence is verified only when the key has both a positive student signal and a selected questionnaire label. When a candidate has at least two distinct verified keys, treat that independent breadth as sufficient for the existing 50-point specialist boundary: keep the calculated score when it is already 50 or above, otherwise raise it to exactly 50. A single weak signal receives no floor and remains subject to its calculated score.
+
 Keep the existing category weights and normalization:
 
 - specialist: 0.50
@@ -40,10 +42,10 @@ Keep every existing boundary unchanged:
 - the link tag must have positive student evidence
 - the final score must remain at least 50
 - return at most two specialists
-- retain deterministic score, priority, and ID ordering
+- retain deterministic score ordering, then prefer more distinct verified evidence keys before priority and ID
 - do not change primary or backup professor scoring
 
-For the reproduced selection, the expected supporting instructors are 김태현 시간강사 and 유별남 시간강사. Their cards retain the existing compact hierarchy beneath the primary and backup professor cards.
+For the reproduced selection, 김태현 has six distinct verified keys and 유별남 has two. Both reach the 50-point boundary, and the evidence-count tie-break returns 김태현 시간강사 before 유별남 시간강사. Their cards retain the existing compact hierarchy beneath the primary and backup professor cards.
 
 ## Stored-result boundary
 
@@ -63,7 +65,7 @@ No new visual system is introduced. Continue using the existing blue, rounded PH
 
 1. Add a matcher regression test using the exact reproduced questionnaire selections and canonical seeded faculty data. It must fail before the correction because specialists are empty, then pass with 김태현 and 유별남 returned in deterministic order.
 2. Add a focused test proving unrelated specialties do not dilute a candidate's strongest verified subfield.
-3. Preserve the existing exact-50 inclusion, below-50 exclusion, unselected-category penalty, link eligibility, two-person cap, and primary/backup balance tests.
+3. Preserve the existing exact-50 inclusion and below-50 exclusion for single-signal candidates, plus the unselected-category penalty, link eligibility, two-person cap, and primary/backup balance tests.
 4. Run focused matcher and result-component tests, then the full unit suite, typecheck, lint, and production build.
 5. After release, create a new dummy-account result with the reproduced selections and verify both compact instructor cards in a real mobile browser without console errors or horizontal overflow.
 

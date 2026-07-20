@@ -4,7 +4,7 @@
 
 **Goal:** Make newly generated results show up to two evidence-backed adjunct or part-time instructors without changing the full-time professor recommendation or fabricating fallback cards.
 
-**Architecture:** Keep the existing candidate eligibility, primary/backup selection, threshold, ordering, immutable result schema, and Vue rendering. Add one specialist-only category scorer that selects the strongest student signal in each available specialist/result/career category, while leaving the weighted-average scorer used by full-time professor matching unchanged.
+**Architecture:** Keep the existing candidate eligibility, primary/backup selection, threshold, immutable result schema, and Vue rendering. Add one specialist-only category scorer that selects the strongest student signal in each available specialist/result/career category, count distinct label-backed positive evidence keys, and apply the existing 50-point boundary when at least two independent keys match. Leave the weighted-average scorer used by full-time professor matching unchanged.
 
 **Tech Stack:** TypeScript 6, Nuxt 4, Vitest 4, Vue 3, Cloudflare Workers
 
@@ -12,7 +12,9 @@
 
 - Keep category weights exactly `specialist 0.50`, `result 0.30`, and `career 0.20`.
 - Exclude a category from the denominator only when the candidate has no positive-weight tag in that category; a present category with no student signal remains zero.
-- Keep the specialist threshold at `rawScore >= 50`, the result limit at two people, and deterministic ordering by score, priority, then ID.
+- Keep the specialist threshold at `rawScore >= 50` and the result limit at two people.
+- Count only distinct positive-signal keys with a selected questionnaire label in the specialist, result, or career category; two or more such keys raise a lower calculated score to exactly 50, while one weak key receives no floor.
+- Keep deterministic ordering by score, distinct verified evidence count, priority, then ID.
 - Keep eligibility limited to active `adjunct|practitioner` candidates with `consultationRole: specialist`, an applicable primary/null link, and positive link evidence.
 - Do not change primary or backup professor scoring, distribution, output schema, reason copy, or contact visibility.
 - Do not add a database migration, result-page read, dependency, static fallback card, or historical-result backfill.
@@ -37,7 +39,7 @@
 
 **Interfaces:**
 - Consumes: `signalForTag(student, tag): number`, `scoreSpecialist(student, candidate): SpecialistScore`, canonical `faculty-2026.json`, and canonical `assessment-options.json`.
-- Produces: private `strongestCategoryMatch(student, tags, category): number`; public `recommendFaculty()` signature and result remain unchanged.
+- Produces: private `strongestCategoryMatch(student, tags, category): number`, private `countSpecialistEvidence(student, tags): number`, and internal `SpecialistScore.evidenceCount`; public `recommendFaculty()` signature and result remain unchanged.
 
 - [ ] **Step 1: Add the exact questionnaire regression test**
 
@@ -112,11 +114,11 @@ corepack pnpm exec vitest run --project unit \
   -t "reproduced multi-selection|가장 강한 검증 분야"
 ```
 
-Expected: both new tests fail because `result.specialists` omits the expected candidates under the current per-category weighted average. If the primary/backup assertions fail, stop and report the canonical distribution mismatch instead of weakening those assertions.
+Expected: the production regression fails because `result.specialists` omits the expected candidates under the current per-category weighted average. The anti-dilution test also fails before any production edit. If the primary/backup assertions fail, stop and report the canonical distribution mismatch instead of weakening those assertions.
 
 - [ ] **Step 4: Add the minimal specialist-only strongest-match helper**
 
-Add this helper next to `categoryMatch()` in `server/modules/matching/faculty.ts`:
+Add these helpers next to `categoryMatch()` in `server/modules/matching/faculty.ts`:
 
 ```ts
 const strongestCategoryMatch = (
@@ -126,17 +128,57 @@ const strongestCategoryMatch = (
 ): number => tags
   .filter(tag => tag.category === category && tag.weight > 0)
   .reduce((strongest, tag) => Math.max(strongest, signalForTag(student, tag)), 0)
+
+const specialistScoringCategories = new Set<TagCategory>(['specialist', 'result', 'career'])
+
+const countSpecialistEvidence = (
+  student: ParsedStudent,
+  tags: readonly ParsedTag[],
+): number => new Set(tags
+  .filter(tag => specialistScoringCategories.has(tag.category)
+    && tag.weight > 0
+    && signalForTag(student, tag) > 0
+    && student.selectedLabels[tag.key] !== undefined)
+  .map(tag => tag.key)).size
 ```
 
-Then change only the three category calls in `scoreSpecialist()`:
+Extend `SpecialistScore` and replace `scoreSpecialist()` with this complete specialist-only implementation:
 
 ```ts
-const specialist = strongestCategoryMatch(student, tags, 'specialist')
-const result = strongestCategoryMatch(student, tags, 'result')
-const career = strongestCategoryMatch(student, tags, 'career')
+interface SpecialistScore {
+  readonly candidate: ParsedFaculty
+  readonly rawScore: number
+  readonly evidenceCount: number
+}
+
+const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): SpecialistScore => {
+  const tags = [...candidate.tags].sort(compareTags)
+  const specialist = strongestCategoryMatch(student, tags, 'specialist')
+  const result = strongestCategoryMatch(student, tags, 'result')
+  const career = strongestCategoryMatch(student, tags, 'career')
+  const components = [
+    { category: 'specialist' as const, score: specialist, weight: 0.50 },
+    { category: 'result' as const, score: result, weight: 0.30 },
+    { category: 'career' as const, score: career, weight: 0.20 },
+  ].filter(component => tags.some(tag => (
+    tag.category === component.category && tag.weight > 0
+  )))
+  const availableWeight = components.reduce((sum, component) => sum + component.weight, 0)
+  const weightedScore = components.reduce(
+    (sum, component) => sum + component.score * component.weight,
+    0,
+  )
+  const evidenceCount = countSpecialistEvidence(student, tags)
+  const normalizedScore = availableWeight === 0 ? 0 : weightedScore / availableWeight
+  return {
+    candidate,
+    rawScore: evidenceCount >= 2 ? Math.max(50, normalizedScore) : normalizedScore,
+    evidenceCount,
+  }
+}
 ```
 
-Do not change `categoryMatch()` or the four calls inside `scorePrimary()`.
+In the specialist sort, insert `right.evidenceCount - left.evidenceCount` immediately after raw score and before candidate priority. Do not change `categoryMatch()` or the four calls inside `scorePrimary()`.
 
 - [ ] **Step 5: Run the focused matcher suite and verify GREEN**
 
@@ -149,7 +191,7 @@ corepack pnpm exec vitest run --project unit \
   tests/unit/components/FacultyRecommendation.test.ts
 ```
 
-Expected: all three files pass, including the existing exact-50 inclusion, 49.9 exclusion, present-but-unselected result-category penalty, link eligibility, two-person cap, public-contact, primary balance, and compact-card tests.
+Expected: all three files pass. The reproduced result returns `김태현`, `유별남`; the existing 김명우 case remains inside the two-person cap; and the existing exact-50 inclusion, single-signal 49.9 exclusion, present-but-unselected result-category penalty, link eligibility, public-contact, primary balance, and compact-card tests remain green.
 
 - [ ] **Step 6: Run static verification**
 
