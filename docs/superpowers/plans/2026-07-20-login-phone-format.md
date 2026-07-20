@@ -92,7 +92,7 @@ export const formatStudentPhoneInput = (value: string): string => {
 
 Run the Step 2 command again.
 
-Expected: 8 tests pass.
+Expected: 7 tests pass.
 
 - [ ] **Step 5: Write the failing login page contract assertions**
 
