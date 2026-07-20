@@ -11,7 +11,7 @@ const FACILITY_LOCATION_LABEL = '사진영상미디어학과'
 const FACILITY_OPERATION_NOTE = '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const COMPUTER_LAB_OPERATION_NOTE = '2020년형 iMac 및 RTX 4080급 그래픽카드 탑재 워크스테이션이 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:ffe1638a4680a07452ac685d13f2c4cedf2dc51912650ed4e8fbbdf676831ee2'
+const EXPECTED_CONTENT_REVISION = 'sha256:11918b8b8bf1f687725d549f746780d1c91a792d274b269e18f3f2dff7ebc7ce'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -30,7 +30,10 @@ const expectedCourseTitles = [
   '예술창작 프로젝트 랩', '포스트 다큐멘터리 랩',
 ] as const
 
-const expectedFacultyNames = ['조대연', '윤태준', '김사라', '박재웅', '정철호', '곽동욱'] as const
+const expectedFacultyNames = [
+  '조대연', '윤태준', '김사라', '박재웅', '정철호', '곽동욱',
+  '정한결', '유별남', '김태현', '김명우',
+] as const
 const expectedFacilityKeys = ['studio_a_horizon', 'studio_b', 'darkroom', 'computer_lab'] as const
 const expectedArchiveAlumniNames = [
   '서재훈', '김수성', '설소영', '김민범', '윤동규', '노하윤', '박지우', '박준희',
@@ -52,12 +55,20 @@ const expectedArchiveFacilityKeys = ['studio_c_video', 'print_lab', 'portfolio_r
 const expectedFacultyRoles = [
   '조대연|full_time|primary', '윤태준|full_time|primary', '김사라|full_time|primary',
   '박재웅|adjunct|specialist', '정철호|adjunct|specialist', '곽동욱|adjunct|specialist',
+  '정한결|practitioner|specialist', '유별남|practitioner|specialist',
+  '김태현|practitioner|specialist', '김명우|practitioner|specialist',
 ] as const
 const expectedSpecialistLinks = [
   '윤태준|박재웅|video', '윤태준|박재웅|drone', '윤태준|박재웅|vr', '윤태준|박재웅|video_360',
   '윤태준|정철호|exhibition', '윤태준|정철호|curating', '윤태준|정철호|art_theory',
   '|곽동욱|commercial', '|곽동욱|fashion', '|곽동욱|product', '|곽동욱|beauty',
   '|곽동욱|brand', '|곽동욱|studio', '|곽동욱|lighting',
+  '윤태준|정한결|art_photo', '윤태준|정한결|ai', '윤태준|정한결|media_art', '윤태준|정한결|installation',
+  '조대연|유별남|documentary', '김사라|유별남|documentary',
+  '조대연|유별남|record', '조대연|유별남|photo_story',
+  '조대연|김태현|documentary', '김사라|김태현|documentary',
+  '윤태준|김태현|video', '윤태준|김태현|art_photo',
+  '윤태준|김명우|ai', '윤태준|김명우|video', '윤태준|김명우|media_art', '윤태준|김명우|installation',
 ] as const
 const expectedDuplicateCodes = new Set([
   'LEN-8LENS-01', 'DRN-DJI-01', 'DRN-DJI2-01', 'ETC-360-01', 'ETC-DJI-01',
@@ -84,6 +95,7 @@ const httpsUrlSchema = z.url().max(500).refine((value) => {
   }
 }, 'source URL must use HTTPS')
 const sourceDateSchema = z.literal(SOURCE_DATE)
+const facultySourceDateSchema = z.enum([SOURCE_DATE, '2026-07-20'])
 const draftSchema = z.literal('draft')
 
 const curriculumRecordSchema = z.object({
@@ -110,10 +122,10 @@ const platformTagSchema = z.object({
 }).strict()
 
 const contactVisibilitySchema = z.object({
-  office: z.literal('admin_only'),
-  phone: z.literal('admin_only'),
-  email: z.literal('admin_only'),
-  website: z.literal('admin_only'),
+  office: z.enum(['admin_only', 'hidden']),
+  phone: z.enum(['admin_only', 'hidden']),
+  email: z.enum(['admin_only', 'hidden']),
+  website: z.enum(['admin_only', 'hidden']),
 }).strict()
 
 const facultyRecordSchema = z.object({
@@ -129,8 +141,8 @@ const facultyRecordSchema = z.object({
   contactVisibility: contactVisibilitySchema,
   expertiseSummary: z.string().trim().min(1).max(1000),
   profile: z.string().trim().min(1).max(8000),
-  education: z.array(z.string().trim().min(1)).min(1),
-  careers: z.array(z.string().trim().min(1)).min(1),
+  education: z.array(z.string().trim().min(1)),
+  careers: z.array(z.string().trim().min(1)),
   teachingFields: z.array(z.string().trim().min(1)).min(1),
   studentProjects: z.array(z.string().trim().min(1)).min(1),
   careerPaths: z.array(z.string().trim().min(1)),
@@ -140,7 +152,7 @@ const facultyRecordSchema = z.object({
   status: draftSchema,
   weeklyCapacity: z.number().int().min(0).max(32767),
   priority: z.number().int().min(0).max(32767),
-  sourceDate: sourceDateSchema,
+  sourceDate: facultySourceDateSchema,
   lastVerifiedAt: z.null(),
 }).strict()
 
@@ -419,8 +431,8 @@ export const parseContentSeedInputs = (input: RawContentSeedInputs): ParsedConte
   if (facultyRoles.some((role, index) => role !== expectedFacultyRoles[index])) {
     throw new Error('faculty role manifest differs from the approved guide')
   }
-  if (facultyInput.specialistLinks.length !== 14) {
-    throw new Error('faculty link seed must contain exactly 14 records')
+  if (facultyInput.specialistLinks.length !== 30) {
+    throw new Error('faculty link seed must contain exactly 30 records')
   }
   const facultyNames = new Set(facultyInput.faculty.map(person => person.name))
   for (const link of facultyInput.specialistLinks) {

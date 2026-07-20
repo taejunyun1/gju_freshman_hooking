@@ -1,6 +1,6 @@
 begin;
 
-select plan(60);
+select plan(61);
 
 select is((select count(*)::integer from public.resources), 201, 'content seed and current project catalog have 201 resources');
 select is((select count(*)::integer from public.resources where type = 'course'), 41, '41 courses are seeded');
@@ -66,23 +66,24 @@ select is(
   'all four department facilities preserve the confirmed timestamp and inquiry note'
 );
 
-select is((select count(*)::integer from public.faculty), 6, 'six faculty profiles are seeded');
+select is((select count(*)::integer from public.faculty), 10, 'ten faculty profiles are seeded');
 select is((select count(*)::integer from public.faculty where employment_type = 'full_time' and consultation_role = 'primary'), 3, 'three full-time primary faculty are seeded');
 select is((select count(*)::integer from public.faculty where employment_type = 'adjunct' and consultation_role = 'specialist'), 3, 'three adjunct specialists are seeded');
-select is((select count(*)::integer from public.faculty where status = 'draft'), 6, 'all faculty remain draft');
+select is((select count(*)::integer from public.faculty where employment_type = 'practitioner' and consultation_role = 'specialist' and title = '시간강사'), 4, 'four time instructors are practitioner specialists');
+select is((select count(*)::integer from public.faculty where status = 'draft'), 10, 'all faculty remain draft');
 select is(
   (select count(*)::integer from public.faculty
    where contact_visibility = '{"office":"admin_only","phone":"admin_only","email":"admin_only","website":"admin_only"}'::jsonb),
   6,
-  'every faculty contact field remains admin only'
+  'six pre-existing faculty contact profiles remain admin only'
 );
 select ok(
   not exists (select 1 from public.faculty_tags where weight not between 0 and 3),
   'all derived faculty tag weights remain in the schema range'
 );
 select is((select count(*)::integer from public.resource_tags), 1250, 'all derived resource and project-catalog tags are linked without silent row loss');
-select is((select count(*)::integer from public.faculty_tags), 174, 'all deduplicated faculty tags are linked without silent row loss');
-select is((select count(*)::integer from public.faculty_specialist_links), 14, '14 specialist tag links are seeded');
+select is((select count(*)::integer from public.faculty_tags), 224, 'all deduplicated faculty tags are linked without silent row loss');
+select is((select count(*)::integer from public.faculty_specialist_links), 30, '30 specialist tag links are seeded');
 select is(
   (select count(*)::integer
    from public.faculty_specialist_links link
@@ -122,10 +123,10 @@ select is(
    where jsonb_typeof(profile_sections -> 'education') = 'array'
      and jsonb_typeof(profile_sections -> 'teachingFields') = 'array'
      and jsonb_typeof(profile_sections -> 'studentProjects') = 'array'),
-  6,
+  10,
   'all faculty retain structured education, teaching, and project sections'
 );
-select is((select count(*)::integer from public.faculty where last_verified_at is null), 6, 'unverified faculty dates are not fabricated');
+select is((select count(*)::integer from public.faculty where last_verified_at is null), 10, 'unverified faculty dates are not fabricated');
 
 select is(
   (select count(*)::integer from public.resources where metadata ->> 'seedKey' like 'archive:%'),

@@ -456,6 +456,111 @@
       "priority": 0,
       "sourceDate": "2026-07-14",
       "lastVerifiedAt": null
+    },
+    {
+      "name": "정한결",
+      "title": "시간강사",
+      "employmentType": "practitioner",
+      "consultationRole": "specialist",
+      "recommendationRole": "윤태준 교수 총괄 아래 예술사진·AI 기반 창작 연계",
+      "office": null,
+      "phone": null,
+      "email": null,
+      "website": null,
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "expertiseSummary": "예술사진·AI·기술적 이미지·미디어아트",
+      "profile": "사진 매체를 기반으로 사회적 언어, 이데올로기 구조와 주변부 존재의 서사를 탐구하는 시각예술가다. 기록에 퍼포먼스 등 실험적 방식을 결합해 광주에서 작업한다.",
+      "education": [],
+      "careers": ["2022 5·18기념문화센터 기획전 《길 위에서》 참여", "2025 예술공간 집 기획전 《Technically Speaking》 참여", "광주시립미술관 청년예술센터 입주작가", "대안 문화예술단체 디디에프(DDF) 대표", "충장로5가 ‘사색(四色)의 골목’ 문화예술공간 조성 프로젝트"],
+      "teachingFields": ["예술사진", "사회적 언어와 이미지", "AI·기술적 이미지", "미디어아트", "설치·퍼포먼스 기반 사진"],
+      "studentProjects": ["예술사진 연작", "AI·기술 이미지 실험", "사진·퍼포먼스 결합 프로젝트"],
+      "careerPaths": [],
+      "institutionProjects": [],
+      "platformTags": [{ "tagKey": "art_photo", "tagLabel": "예술사진" }, { "tagKey": "ai", "tagLabel": "AI" }, { "tagKey": "media_art", "tagLabel": "미디어아트" }, { "tagKey": "installation", "tagLabel": "설치" }],
+      "status": "draft",
+      "weeklyCapacity": 0,
+      "priority": 0,
+      "sourceDate": "2026-07-20",
+      "lastVerifiedAt": null
+    },
+    {
+      "name": "유별남",
+      "title": "시간강사",
+      "employmentType": "practitioner",
+      "consultationRole": "specialist",
+      "recommendationRole": "조대연·김사라 교수 총괄 아래 다큐멘터리 기록 연계",
+      "office": null,
+      "phone": null,
+      "email": null,
+      "website": "https://www.yoobeylnam.com/",
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "expertiseSummary": "다큐멘터리 사진·포토스토리·사람과 자연의 기록",
+      "profile": "사진가로서 사람들이 찾지 않는 곳에서 만난 사람·자연·장소의 장면을 사진에 담고, 전시와 출판을 통해 사진의 이야기를 나눈다. 다큐멘터리 사진의 시선과 포토스토리 작업을 보완한다.",
+      "education": [],
+      "careers": [],
+      "teachingFields": ["다큐멘터리 사진", "포토스토리", "장소와 사람의 기록", "사진 프로젝트 편집"],
+      "studentProjects": ["사람과 장소를 기록하는 사진 연작", "장기 포토스토리", "사진집·전시 구성"],
+      "careerPaths": [],
+      "institutionProjects": [],
+      "majorWorks": ["빗개", "AFTER NIGHTFALL", "CITY", "K2", "NEVER STOP"],
+      "platformTags": [{ "tagKey": "documentary", "tagLabel": "다큐멘터리" }, { "tagKey": "record", "tagLabel": "기록" }, { "tagKey": "photo_story", "tagLabel": "포토스토리" }],
+      "status": "draft",
+      "weeklyCapacity": 0,
+      "priority": 0,
+      "sourceDate": "2026-07-20",
+      "lastVerifiedAt": null
+    },
+    {
+      "name": "김태현",
+      "title": "시간강사",
+      "employmentType": "practitioner",
+      "consultationRole": "specialist",
+      "recommendationRole": "전임교원 총괄 아래 다큐멘터리·영상 제작 연계",
+      "office": null,
+      "phone": null,
+      "email": null,
+      "website": "https://studio.underyourwater.com/",
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "expertiseSummary": "다큐멘터리·영상제작·예술사진",
+      "profile": "카메라를 성실한 재현을 돕는 조력자이자 이미지를 특정한 의미에 가두는 기계로 인식한다. 현실의 충실한 재현을 지향하며 다큐멘터리적 태도로 사진과 영상 작업을 한다. 서울에서 스튜디오 물밑을 운영한다.",
+      "education": ["2025 한국예술종합학교 영상원 방송영상과 다큐멘터리 전공 예술전문사 재학", "2017 중앙대학교 공연예술창작학부 사진전공 학사", "2017 중앙대학교 문화콘텐츠융합전공 학사"],
+      "careers": ["2020–2025 KBS 창원총국 촬영감독", "스튜디오 물밑 운영"],
+      "teachingFields": ["다큐멘터리 사진", "다큐멘터리 영상", "촬영·편집", "예술사진"],
+      "studentProjects": ["다큐멘터리 사진·영상 프로젝트", "인터뷰 기반 영상", "사진·영상 포트폴리오"],
+      "careerPaths": [],
+      "institutionProjects": [],
+      "platformTags": [{ "tagKey": "documentary", "tagLabel": "다큐멘터리" }, { "tagKey": "video", "tagLabel": "영상" }, { "tagKey": "art_photo", "tagLabel": "예술사진" }],
+      "status": "draft",
+      "weeklyCapacity": 0,
+      "priority": 0,
+      "sourceDate": "2026-07-20",
+      "lastVerifiedAt": null
+    },
+    {
+      "name": "김명우",
+      "title": "시간강사",
+      "employmentType": "practitioner",
+      "consultationRole": "specialist",
+      "recommendationRole": "윤태준 교수 총괄 아래 AI 영상·미디어아트 연계",
+      "office": null,
+      "phone": null,
+      "email": null,
+      "website": null,
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "expertiseSummary": "AI 영상·미디어아트·영상설치",
+      "profile": "판화·미디어·입체미술을 바탕으로 비디오아트 작업을 이어온 미디어아트 작가다. 급변하는 미디어 환경과 디지털 기기가 인간의 삶에 미치는 영향을 영상과 설치로 탐구하며, 디지털 추상 이미지와 현실의 경계를 다룬다.",
+      "education": ["조선대학교·중앙대학교·국민대학교에서 판화·미디어·입체미술 전공"],
+      "careers": ["2016 제29회 광주광역시미술대전 미디어 대상", "2022 광주시립미술관 국제레지던시", "2020 광주문화재단 미디어아트 레지던시"],
+      "teachingFields": ["AI 영상", "비디오아트", "미디어아트", "영상설치", "디지털 이미지"],
+      "studentProjects": ["AI 영상 실험", "비디오아트·설치 프로젝트", "미디어아트 포트폴리오"],
+      "careerPaths": [],
+      "institutionProjects": [],
+      "platformTags": [{ "tagKey": "ai", "tagLabel": "AI" }, { "tagKey": "video", "tagLabel": "영상" }, { "tagKey": "media_art", "tagLabel": "미디어아트" }, { "tagKey": "installation", "tagLabel": "설치" }],
+      "status": "draft",
+      "weeklyCapacity": 0,
+      "priority": 0,
+      "sourceDate": "2026-07-20",
+      "lastVerifiedAt": null
     }
   ],
   "specialistLinks": [
@@ -570,6 +675,134 @@
       "tagLabel": "조명",
       "priority": 100,
       "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 전임교원을 중심으로 진행하고, 광고·패션·제품사진 분야의 전문적인 실무지도와 포트폴리오 제작이 필요한 경우 곽동욱 겸임교수를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "정한결",
+      "tagKey": "art_photo",
+      "tagLabel": "예술사진",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 예술사진·AI 기반 창작과 기술적 이미지 실험이 필요한 경우 정한결 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "정한결",
+      "tagKey": "ai",
+      "tagLabel": "AI",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 예술사진·AI 기반 창작과 기술적 이미지 실험이 필요한 경우 정한결 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "정한결",
+      "tagKey": "media_art",
+      "tagLabel": "미디어아트",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 예술사진·AI 기반 창작과 기술적 이미지 실험이 필요한 경우 정한결 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "정한결",
+      "tagKey": "installation",
+      "tagLabel": "설치",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 예술사진·AI 기반 창작과 기술적 이미지 실험이 필요한 경우 정한결 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "조대연",
+      "specialistFacultyName": "유별남",
+      "tagKey": "documentary",
+      "tagLabel": "다큐멘터리",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 조대연 교수를 중심으로 진행하고, 다큐멘터리 사진의 시선과 포토스토리 작업이 필요한 경우 유별남 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "김사라",
+      "specialistFacultyName": "유별남",
+      "tagKey": "documentary",
+      "tagLabel": "다큐멘터리",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 김사라 교수를 중심으로 진행하고, 다큐멘터리 사진의 시선과 포토스토리 작업이 필요한 경우 유별남 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "조대연",
+      "specialistFacultyName": "유별남",
+      "tagKey": "record",
+      "tagLabel": "기록",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 조대연 교수를 중심으로 진행하고, 사람과 장소의 기록과 장기 포토스토리 작업이 필요한 경우 유별남 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "조대연",
+      "specialistFacultyName": "유별남",
+      "tagKey": "photo_story",
+      "tagLabel": "포토스토리",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 조대연 교수를 중심으로 진행하고, 사람과 장소의 기록과 장기 포토스토리 작업이 필요한 경우 유별남 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "조대연",
+      "specialistFacultyName": "김태현",
+      "tagKey": "documentary",
+      "tagLabel": "다큐멘터리",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 조대연 교수를 중심으로 진행하고, 다큐멘터리 사진·영상의 촬영과 편집이 필요한 경우 김태현 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "김사라",
+      "specialistFacultyName": "김태현",
+      "tagKey": "documentary",
+      "tagLabel": "다큐멘터리",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 김사라 교수를 중심으로 진행하고, 다큐멘터리 사진·영상의 촬영과 편집이 필요한 경우 김태현 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김태현",
+      "tagKey": "video",
+      "tagLabel": "영상",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 다큐멘터리적 태도의 영상 제작과 예술사진 작업이 필요한 경우 김태현 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김태현",
+      "tagKey": "art_photo",
+      "tagLabel": "예술사진",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, 다큐멘터리적 태도의 영상 제작과 예술사진 작업이 필요한 경우 김태현 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김명우",
+      "tagKey": "ai",
+      "tagLabel": "AI",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, AI 영상·미디어아트·영상설치 작업이 필요한 경우 김명우 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김명우",
+      "tagKey": "video",
+      "tagLabel": "영상",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, AI 영상·미디어아트·영상설치 작업이 필요한 경우 김명우 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김명우",
+      "tagKey": "media_art",
+      "tagLabel": "미디어아트",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, AI 영상·미디어아트·영상설치 작업이 필요한 경우 김명우 시간강사를 연계한다."
+    },
+    {
+      "primaryFacultyName": "윤태준",
+      "specialistFacultyName": "김명우",
+      "tagKey": "installation",
+      "tagLabel": "설치",
+      "priority": 100,
+      "explanationTemplate": "학생의 주요 상담과 학습경로 설계는 윤태준 교수를 중심으로 진행하고, AI 영상·미디어아트·영상설치 작업이 필요한 경우 김명우 시간강사를 연계한다."
     }
   ]
 }

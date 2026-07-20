@@ -35,6 +35,10 @@ const priorities = new Map([
   ['박재웅', 90],
   ['정철호', 80],
   ['곽동욱', 70],
+  ['정한결', 60],
+  ['유별남', 50],
+  ['김태현', 40],
+  ['김명우', 30],
 ])
 
 /** Mirrors migration 202607180026, including the production-only contemporary_art transform. */
@@ -186,6 +190,26 @@ describe('canonical faculty recommendation balance', () => {
       for (const distributionKey of [1, 2, 3, 197, Number.MAX_SAFE_INTEGER]) {
         expect(recommendation(path.selections, distributionKey).primary.name).toBe(path.professor)
       }
+    }
+  })
+
+  it('keeps professors as primary and backup while linking time instructors to declared evidence', () => {
+    const cases: Array<{ name: string, evidence: FacultyStudentEvidence }> = [
+      { name: '정한결', evidence: { trackScores: { documentary: 0, art_photo: 100, commercial: 0, video: 0 }, interestVector: { art_photo: 1, ai: 1, media_art: 1, installation: 1 }, selectedLabels: { art_photo: '예술사진', ai: 'AI 이미지', media_art: '미디어아트', installation: '설치' } } },
+      { name: '유별남', evidence: { trackScores: { documentary: 100, art_photo: 0, commercial: 0, video: 0 }, interestVector: { documentary: 1, record: 1, photo_story: 1 }, selectedLabels: { documentary: '다큐멘터리', record: '기록', photo_story: '포토스토리' } } },
+      { name: '김태현', evidence: { trackScores: { documentary: 100, art_photo: 0, commercial: 0, video: 0 }, interestVector: { documentary: 1, video: 1, art_photo: 1 }, selectedLabels: { documentary: '다큐멘터리', video: '영상', art_photo: '예술사진' } } },
+      { name: '김태현', evidence: { trackScores: { documentary: 0, art_photo: 0, commercial: 0, video: 100 }, interestVector: { video: 1, documentary: 1, art_photo: 1 }, selectedLabels: { video: '영상', documentary: '다큐멘터리', art_photo: '예술사진' } } },
+      { name: '김태현', evidence: { trackScores: { documentary: 0, art_photo: 100, commercial: 0, video: 0 }, interestVector: { art_photo: 1, documentary: 1, video: 1 }, selectedLabels: { art_photo: '예술사진', documentary: '다큐멘터리', video: '영상' } } },
+      { name: '김명우', evidence: { trackScores: { documentary: 0, art_photo: 100, commercial: 0, video: 0 }, interestVector: { ai: 1, media_art: 1, video: 1, installation: 1 }, selectedLabels: { ai: 'AI 이미지', media_art: '미디어아트', video: '영상', installation: '설치' } } },
+    ]
+
+    for (const testCase of cases) {
+      const result = recommendationForEvidence(testCase.evidence, 1)
+
+      expect(result.primary.title).toBe('교수')
+      expect(result.backup.title).toBe('교수')
+      expect(result.specialists.map(person => person.name)).toContain(testCase.name)
+      expect([result.primary.name, result.backup.name]).not.toContain(testCase.name)
     }
   })
 

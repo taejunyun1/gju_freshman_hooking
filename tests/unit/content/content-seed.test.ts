@@ -127,26 +127,32 @@ describe('verified department content seed', () => {
     }
   })
 
-  it('preserves six complete faculty profiles with non-public contacts', () => {
+  it('preserves the four supporting time-instructor identities and their non-primary roles', () => {
     const { faculty } = parseContentSeedInputs(canonicalInput())
 
-    expect(faculty.map(person => person.name))
-      .toEqual(['조대연', '윤태준', '김사라', '박재웅', '정철호', '곽동욱'])
+    expect(faculty.filter(person => person.title === '시간강사').map(person => person.name))
+      .toEqual(['정한결', '유별남', '김태현', '김명우'])
     expect(faculty.filter(person => person.employmentType === 'full_time')).toHaveLength(3)
     expect(faculty.filter(person => person.consultationRole === 'primary')).toHaveLength(3)
-    expect(faculty.filter(person => person.consultationRole === 'specialist')).toHaveLength(3)
+    expect(faculty.filter(person => person.consultationRole === 'specialist')).toHaveLength(7)
+    expect(faculty.filter(person => person.title === '시간강사')
+      .every(person => person.employmentType === 'practitioner' && person.consultationRole === 'specialist'))
+      .toBe(true)
     expect(faculty.every(person => person.status === 'draft')).toBe(true)
-    expect(faculty.every(person => Object.values(person.contactVisibility)
+    expect(faculty.filter(person => person.title !== '시간강사').every(person => Object.values(person.contactVisibility)
       .every(visibility => visibility === 'admin_only'))).toBe(true)
+    expect(faculty.filter(person => person.title === '시간강사').every(person => Object.values(person.contactVisibility)
+      .every(visibility => visibility === 'hidden'))).toBe(true)
     expect(faculty.every(person => person.expertiseSummary.length > 0)).toBe(true)
     expect(faculty.every(person => person.profile.length > 0)).toBe(true)
-    expect(faculty.every(person => person.education.length > 0)).toBe(true)
-    expect(faculty.every(person => person.careers.length > 0)).toBe(true)
+    expect(faculty.filter(person => person.name !== '정한결' && person.name !== '유별남')
+      .every(person => person.education.length > 0)).toBe(true)
+    expect(faculty.filter(person => person.name !== '유별남').every(person => person.careers.length > 0)).toBe(true)
     expect(faculty.every(person => person.teachingFields.length > 0)).toBe(true)
     expect(faculty.every(person => person.studentProjects.length > 0)).toBe(true)
     expect(faculty.every(person => person.platformTags.length > 0)).toBe(true)
-    expect(faculty.map(person => person.platformTags.length)).toEqual([8, 12, 9, 7, 6, 8])
-    expect(faculty.reduce((total, person) => total + person.platformTags.length, 0)).toBe(50)
+    expect(faculty.map(person => person.platformTags.length)).toEqual([8, 12, 9, 7, 6, 8, 4, 3, 3, 4])
+    expect(faculty.reduce((total, person) => total + person.platformTags.length, 0)).toBe(64)
     expect(faculty.find(person => person.name === '윤태준')).toMatchObject({
       expertiseSummary: '현대예술·예술사진·영상·AI·기술적 이미지',
     })
@@ -162,7 +168,7 @@ describe('verified department content seed', () => {
     expect(Object.fromEntries(['track', 'activity', 'result', 'specialist'].map(category => [
       category,
       seed.facultyTags.filter(tag => tag.source === 'platform' && tag.category === category).length,
-    ]))).toEqual({ track: 5, activity: 17, result: 7, specialist: 21 })
+    ]))).toEqual({ track: 5, activity: 17, result: 7, specialist: 35 })
     expect(seed.facultyTags.filter(tag => tag.source === 'teaching')
       .every(tag => tag.category === 'activity' && tag.weight === 2 && !tag.isPrimary)).toBe(true)
     expect(seed.facultyTags.filter(tag => tag.source === 'project')
@@ -171,7 +177,7 @@ describe('verified department content seed', () => {
       .every(tag => tag.category === 'career' && tag.weight === 3 && !tag.isPrimary)).toBe(true)
     expect(seed.facultyTags.filter(tag => tag.facultyName === '박재웅' && tag.source === 'platform')
       .every(tag => tag.category === 'specialist')).toBe(true)
-    expect(seed.facultyTags).toHaveLength(174)
+    expect(seed.facultyTags).toHaveLength(224)
     expect(seed.facultyTags.some(tag => tag.tagKey === 'technical_image')).toBe(false)
     expect(seed.facultyTags.filter(tag => tag.facultyName === '윤태준'
       && tag.category === 'result'
@@ -185,7 +191,7 @@ describe('verified department content seed', () => {
       && tag.tagLabel === '영상 프레임과 컷'
       && tag.tagKey === 'framing')).toBe(true)
 
-    expect(seed.specialistLinks).toHaveLength(14)
+    expect(seed.specialistLinks).toHaveLength(30)
     expect(seed.specialistLinks.every(link => link.priority === 100)).toBe(true)
     expect(seed.specialistLinks.filter(link => link.primaryFacultyName === '윤태준'
       && link.specialistFacultyName === '박재웅').map(link => link.tagKey))
@@ -245,7 +251,7 @@ describe('verified department content seed', () => {
       'supabase/seed/curriculum-2026.json': '832a19636a0a24703903b0f2f769146879eb17231cb3edab81a5717dc8f00324',
       'supabase/seed/equipment-inventory-2026-07-14.json': 'efbef180c706b7412ab0ea6f51a920e698c3ec00c159d7449818dfaad60728eb',
       'supabase/seed/facilities-2026.json': '3b1fa7e941b88b0558a7decb4203082fdf5332adc3dbefdfcfdaf3cf0674e48c',
-      'supabase/seed/faculty-2026.json': '6d1fad7509cf88559e2101b96263fb62fe7f618a5f5e034f86acc9a0b6aeeb00',
+      'supabase/seed/faculty-2026.json': '633202c89ba1b9956482ab38c914c666a5a5a76c0ea8023738670b8b67c5c803',
     }
 
     for (const [path, expected] of Object.entries(expectedHashes)) {
@@ -413,17 +419,17 @@ describe('verified department content seed', () => {
       careers: 17,
       extracurricular: 5,
       projects: 5,
-      faculty: 6,
+      faculty: 10,
       verifiedEquipmentItems: 128,
       resources: 158,
       equipmentGroups: 83,
       publicEquipmentGroups: 72,
       adminOnlyEquipmentGroups: 11,
-      specialistLinks: 14,
+      specialistLinks: 30,
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:ffe1638a4680a07452ac685d13f2c4cedf2dc51912650ed4e8fbbdf676831ee2',
+      'sha256:11918b8b8bf1f687725d549f746780d1c91a792d274b269e18f3f2dff7ebc7ce',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')
