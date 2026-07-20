@@ -126,7 +126,7 @@ select is(
   10,
   'all faculty retain structured education, teaching, and project sections'
 );
-select is((select count(*)::integer from public.faculty where last_verified_at is null), 10, 'unverified faculty dates are not fabricated');
+select is((select count(*)::integer from public.faculty where last_verified_at is null), 8, 'only the two supplied public websites retain verification timestamps');
 
 select is(
   (select count(*)::integer from public.resources where metadata ->> 'seedKey' like 'archive:%'),

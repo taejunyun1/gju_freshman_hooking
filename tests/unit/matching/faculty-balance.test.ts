@@ -53,13 +53,13 @@ const activeFaculty = (): FacultyRecommendationCandidate[] => contentSeed.facult
   weeklyCapacity: person.consultationRole === 'primary' ? 4 : 0,
   openAssignedCount: 0,
   priority: priorities.get(person.name)!,
-  contacts: {},
-  contactVisibility: {
-    office: 'admin_only',
-    phone: 'admin_only',
-    email: 'admin_only',
-    website: 'admin_only',
-  },
+  contacts: Object.fromEntries(Object.entries({
+    office: person.office,
+    phone: person.phone,
+    email: person.email,
+    website: person.website,
+  }).filter((entry): entry is [string, string] => entry[1] !== null)),
+  contactVisibility: person.contactVisibility,
   tags: contentSeed.facultyTags
     .filter(tag => tag.facultyName === person.name)
     .map(tag => ({
@@ -218,6 +218,24 @@ describe('canonical faculty recommendation balance', () => {
       expect(result.specialists.length).toBeLessThanOrEqual(2)
       expect([result.primary.name, result.backup.name]).not.toContain(testCase.name)
     }
+  })
+
+  it('returns only the two supplied public supporting-instructor websites', () => {
+    const documentary = recommendationForEvidence({
+      trackScores: { documentary: 100, art_photo: 0, commercial: 0, video: 0 },
+      interestVector: { documentary: 1, record: 1, photo_story: 1 },
+      selectedLabels: { documentary: '다큐멘터리', record: '기록', photo_story: '포토스토리' },
+    }, 1)
+    expect(documentary.specialists.find(person => person.name === '유별남')?.publicContacts)
+      .toEqual({ website: 'https://www.yoobeylnam.com/' })
+
+    const video = recommendationForEvidence({
+      trackScores: { documentary: 0, art_photo: 0, commercial: 0, video: 100 },
+      interestVector: { video: 1, documentary: 1, art_photo: 1 },
+      selectedLabels: { video: '영상', documentary: '다큐멘터리', art_photo: '예술사진' },
+    }, 1)
+    expect(video.specialists.find(person => person.name === '김태현')?.publicContacts)
+      .toEqual({ website: 'https://studio.underyourwater.com/' })
   })
 
   it('does not dilute a professor expertise match when biography tags grow', () => {

@@ -7,11 +7,12 @@ import { z, ZodError } from 'zod'
 const SOURCE_DATE = '2026-07-14'
 const RESERVATION_URL = 'https://gjureserve.co.kr'
 const FACILITY_VERIFIED_AT = '2026-07-18T16:28:30+09:00'
+const FACULTY_PUBLIC_WEBSITE_VERIFIED_AT = '2026-07-20T00:00:00+09:00'
 const FACILITY_LOCATION_LABEL = '사진영상미디어학과'
 const FACILITY_OPERATION_NOTE = '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const COMPUTER_LAB_OPERATION_NOTE = '2020년형 iMac 및 RTX 4080급 그래픽카드 탑재 워크스테이션이 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:11918b8b8bf1f687725d549f746780d1c91a792d274b269e18f3f2dff7ebc7ce'
+const EXPECTED_CONTENT_REVISION = 'sha256:597e673e87ad120a3890630b84358dd921e1a880b40fff08caa68696b0e48bd2'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -125,7 +126,7 @@ const contactVisibilitySchema = z.object({
   office: z.enum(['admin_only', 'hidden']),
   phone: z.enum(['admin_only', 'hidden']),
   email: z.enum(['admin_only', 'hidden']),
-  website: z.enum(['admin_only', 'hidden']),
+  website: z.enum(['admin_only', 'hidden', 'public']),
 }).strict()
 
 const facultyRecordSchema = z.object({
@@ -153,8 +154,37 @@ const facultyRecordSchema = z.object({
   weeklyCapacity: z.number().int().min(0).max(32767),
   priority: z.number().int().min(0).max(32767),
   sourceDate: facultySourceDateSchema,
-  lastVerifiedAt: z.null(),
-}).strict()
+  lastVerifiedAt: z.union([z.literal(FACULTY_PUBLIC_WEBSITE_VERIFIED_AT), z.null()]),
+}).strict().superRefine((faculty, context) => {
+  const allowedEmptyEducation = faculty.title === '시간강사'
+    && faculty.employmentType === 'practitioner'
+    && ['정한결', '유별남'].includes(faculty.name)
+  const allowedEmptyCareers = faculty.title === '시간강사'
+    && faculty.employmentType === 'practitioner'
+    && faculty.name === '유별남'
+  if (faculty.education.length === 0 && !allowedEmptyEducation) {
+    context.addIssue({ code: 'custom', path: ['education'], message: 'education evidence required' })
+  }
+  if (faculty.careers.length === 0 && !allowedEmptyCareers) {
+    context.addIssue({ code: 'custom', path: ['careers'], message: 'career evidence required' })
+  }
+
+  const allowedPublicWebsite = faculty.title === '시간강사'
+    && faculty.employmentType === 'practitioner'
+    && faculty.consultationRole === 'specialist'
+    && ((faculty.name === '유별남' && faculty.website === 'https://www.yoobeylnam.com/')
+      || (faculty.name === '김태현' && faculty.website === 'https://studio.underyourwater.com/'))
+  if (faculty.contactVisibility.website === 'public' && !allowedPublicWebsite) {
+    context.addIssue({ code: 'custom', path: ['contactVisibility', 'website'], message: 'unverified public website' })
+  }
+  if (faculty.contactVisibility.website === 'public'
+    && faculty.lastVerifiedAt !== FACULTY_PUBLIC_WEBSITE_VERIFIED_AT) {
+    context.addIssue({ code: 'custom', path: ['lastVerifiedAt'], message: 'website verification required' })
+  }
+  if (faculty.contactVisibility.website !== 'public' && faculty.lastVerifiedAt !== null) {
+    context.addIssue({ code: 'custom', path: ['lastVerifiedAt'], message: 'unexpected verification timestamp' })
+  }
+})
 
 const specialistLinkSchema = z.object({
   primaryFacultyName: z.string().trim().min(1).nullable(),
@@ -974,6 +1004,7 @@ export const generateContentSeedSql = (parsed: ParsedContentSeedInputs) => {
     weekly_capacity: person.weeklyCapacity,
     priority: person.priority,
     source_date: person.sourceDate,
+    last_verified_at: person.lastVerifiedAt,
   }))
   const facultyTagManifest = seed.facultyTags.map(tag => ({
     faculty_name: tag.facultyName,
@@ -1060,16 +1091,16 @@ join public.resources as resource
 insert into public.faculty (
   name, title, employment_type, consultation_role, office, phone, email, website,
   contact_visibility, expertise_summary, bio, profile_sections, status,
-  weekly_capacity, priority, source_date
+  weekly_capacity, priority, source_date, last_verified_at
 )
 select name, title, employment_type, consultation_role, office, phone, email, website,
   contact_visibility, expertise_summary, bio, profile_sections, status,
-  weekly_capacity, priority, source_date
+  weekly_capacity, priority, source_date, last_verified_at
 from pg_catalog.jsonb_to_recordset(${sqlJson(facultyManifest)}) as seed (
   name text, title text, employment_type text, consultation_role text, office text,
   phone text, email text, website text, contact_visibility jsonb, expertise_summary text,
   bio text, profile_sections jsonb, status text, weekly_capacity smallint,
-  priority smallint, source_date date
+  priority smallint, source_date date, last_verified_at timestamptz
 );
 
 insert into public.faculty_tags (

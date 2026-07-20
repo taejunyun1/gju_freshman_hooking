@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(21);
 
 select has_function(
   'public', 'activate_verified_2026_content', array[]::text[],
@@ -32,6 +32,49 @@ select is(
      and status = 'active'),
   6,
   'all six approved faculty are active'
+);
+select is(
+  (select count(*)::integer from public.faculty
+   where name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
+     and status = 'active' and employment_type = 'practitioner'
+     and consultation_role = 'specialist' and weekly_capacity = 0),
+  4,
+  'all four supporting time instructors are activated with zero counseling capacity'
+);
+select is(
+  (select count(*)::integer
+   from public.faculty_specialist_links link
+   join public.faculty specialist on specialist.id = link.specialist_faculty_id
+   where specialist.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])),
+  16,
+  'all sixteen supporting-instructor specialist links are available after activation'
+);
+select is(
+  (select count(*)::integer from public.faculty
+   where name = any (array['유별남', '김태현']::text[])
+     and website like 'https://%'
+     and contact_visibility ->> 'website' = 'public'
+     and contact_visibility ->> 'office' = 'hidden'
+     and contact_visibility ->> 'phone' = 'hidden'
+     and contact_visibility ->> 'email' = 'hidden'
+     and last_verified_at is not null),
+  2,
+  'only the supplied HTTPS websites are published with other contact fields hidden'
+);
+select is(
+  (select count(*)::integer from public.faculty
+   where name = any (array['박재웅', '정철호', '곽동욱']::text[])
+     and status = 'active' and employment_type = 'adjunct'
+     and consultation_role = 'specialist' and weekly_capacity = 0),
+  3,
+  'the three existing adjunct specialists retain their established semantic roles'
+);
+select is(
+  (select count(*)::integer from public.faculty
+   where name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
+     and (office is not null or phone is not null or email is not null)),
+  0,
+  'supporting instructors do not publish invented office, phone, or email contacts'
 );
 select is(
   (select count(*)::integer from public.faculty

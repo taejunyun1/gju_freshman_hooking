@@ -493,7 +493,7 @@
       "phone": null,
       "email": null,
       "website": "https://www.yoobeylnam.com/",
-      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "public" },
       "expertiseSummary": "다큐멘터리 사진·포토스토리·사람과 자연의 기록",
       "profile": "사진가로서 사람들이 찾지 않는 곳에서 만난 사람·자연·장소의 장면을 사진에 담고, 전시와 출판을 통해 사진의 이야기를 나눈다. 다큐멘터리 사진의 시선과 포토스토리 작업을 보완한다.",
       "education": [],
@@ -508,7 +508,7 @@
       "weeklyCapacity": 0,
       "priority": 0,
       "sourceDate": "2026-07-20",
-      "lastVerifiedAt": null
+      "lastVerifiedAt": "2026-07-20T00:00:00+09:00"
     },
     {
       "name": "김태현",
@@ -520,7 +520,7 @@
       "phone": null,
       "email": null,
       "website": "https://studio.underyourwater.com/",
-      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "hidden" },
+      "contactVisibility": { "office": "hidden", "phone": "hidden", "email": "hidden", "website": "public" },
       "expertiseSummary": "다큐멘터리·영상제작·예술사진",
       "profile": "카메라를 성실한 재현을 돕는 조력자이자 이미지를 특정한 의미에 가두는 기계로 인식한다. 현실의 충실한 재현을 지향하며 다큐멘터리적 태도로 사진과 영상 작업을 한다. 서울에서 스튜디오 물밑을 운영한다.",
       "education": ["2025 한국예술종합학교 영상원 방송영상과 다큐멘터리 전공 예술전문사 재학", "2017 중앙대학교 공연예술창작학부 사진전공 학사", "2017 중앙대학교 문화콘텐츠융합전공 학사"],
@@ -534,7 +534,7 @@
       "weeklyCapacity": 0,
       "priority": 0,
       "sourceDate": "2026-07-20",
-      "lastVerifiedAt": null
+      "lastVerifiedAt": "2026-07-20T00:00:00+09:00"
     },
     {
       "name": "김명우",

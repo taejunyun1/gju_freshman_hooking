@@ -144,8 +144,17 @@ describe('verified department content seed', () => {
     expect(faculty.every(person => person.status === 'draft')).toBe(true)
     expect(faculty.filter(person => person.title !== '시간강사').every(person => Object.values(person.contactVisibility)
       .every(visibility => visibility === 'admin_only'))).toBe(true)
-    expect(faculty.filter(person => person.title === '시간강사').every(person => Object.values(person.contactVisibility)
-      .every(visibility => visibility === 'hidden'))).toBe(true)
+    expect(faculty.filter(person => person.title === '시간강사').map(person => ({
+      name: person.name,
+      website: person.website,
+      visibility: person.contactVisibility,
+      lastVerifiedAt: person.lastVerifiedAt,
+    }))).toEqual([
+      { name: '정한결', website: null, visibility: { office: 'hidden', phone: 'hidden', email: 'hidden', website: 'hidden' }, lastVerifiedAt: null },
+      { name: '유별남', website: 'https://www.yoobeylnam.com/', visibility: { office: 'hidden', phone: 'hidden', email: 'hidden', website: 'public' }, lastVerifiedAt: '2026-07-20T00:00:00+09:00' },
+      { name: '김태현', website: 'https://studio.underyourwater.com/', visibility: { office: 'hidden', phone: 'hidden', email: 'hidden', website: 'public' }, lastVerifiedAt: '2026-07-20T00:00:00+09:00' },
+      { name: '김명우', website: null, visibility: { office: 'hidden', phone: 'hidden', email: 'hidden', website: 'hidden' }, lastVerifiedAt: null },
+    ])
     expect(faculty.every(person => person.expertiseSummary.length > 0)).toBe(true)
     expect(faculty.every(person => person.profile.length > 0)).toBe(true)
     expect(faculty.filter(person => person.name !== '정한결' && person.name !== '유별남')
@@ -163,7 +172,7 @@ describe('verified department content seed', () => {
     expect(faculty.find(person => person.name === '곽동욱')?.careerPaths).toEqual([])
   })
 
-  it('derives locked faculty weights and the fourteen priority specialist links', () => {
+  it('derives locked faculty weights and the thirty priority specialist links', () => {
     const seed = deriveContentSeed(parseContentSeedInputs(canonicalInput()))
 
     expect(seed.facultyTags.filter(tag => tag.source === 'platform')
@@ -205,6 +214,78 @@ describe('verified department content seed', () => {
     expect(seed.specialistLinks.filter(link => link.primaryFacultyName === null
       && link.specialistFacultyName === '곽동욱').map(link => link.tagKey))
       .toEqual(['commercial', 'fashion', 'product', 'beauty', 'brand', 'studio', 'lighting'])
+  })
+
+  it('allows missing education or career evidence only for the documented supporting profiles', () => {
+    const input = canonicalInput()
+    const facultyInput = input.faculty as { faculty: Array<Record<string, unknown>> }
+    const yoon = facultyInput.faculty.find(person => person.name === '윤태준')!
+    yoon.education = []
+    expect(() => parseContentSeedInputs(input)).toThrow()
+
+    const supportingInput = canonicalInput()
+    const supportingFaculty = supportingInput.faculty as { faculty: Array<Record<string, unknown>> }
+    expect(supportingFaculty.faculty.find(person => person.name === '정한결')?.education).toEqual([])
+    expect(supportingFaculty.faculty.find(person => person.name === '유별남')?.education).toEqual([])
+    expect(supportingFaculty.faculty.find(person => person.name === '유별남')?.careers).toEqual([])
+    expect(() => parseContentSeedInputs(supportingInput)).not.toThrow()
+  })
+
+  it('keeps the populated-database forward migration aligned with the canonical supporting data', () => {
+    const seed = deriveContentSeed(parseContentSeedInputs(canonicalInput()))
+    const names = new Set(['정한결', '유별남', '김태현', '김명우'])
+    const migration = readFileSync(
+      'supabase/migrations/202607200033_supporting_instructors_release.sql',
+      'utf8',
+    )
+    const expectedFaculty = seed.faculty.filter(person => names.has(person.name)).map(person => ({
+      name: person.name,
+      title: person.title,
+      employment_type: person.employmentType,
+      consultation_role: person.consultationRole,
+      office: person.office,
+      phone: person.phone,
+      email: person.email,
+      website: person.website,
+      contact_visibility: person.contactVisibility,
+      expertise_summary: person.expertiseSummary,
+      bio: person.profile,
+      profile_sections: {
+        recommendationRole: person.recommendationRole,
+        education: person.education,
+        careers: person.careers,
+        teachingFields: person.teachingFields,
+        studentProjects: person.studentProjects,
+        careerPaths: person.careerPaths,
+        institutionProjects: person.institutionProjects,
+        majorWorks: person.majorWorks ?? [],
+      },
+      status: 'active',
+      weekly_capacity: 0,
+      priority: 0,
+      source_date: person.sourceDate,
+      last_verified_at: person.lastVerifiedAt,
+    }))
+    const expectedTags = seed.facultyTags.filter(tag => names.has(tag.facultyName)).map(tag => ({
+      faculty_name: tag.facultyName,
+      tag_key: tag.tagKey,
+      tag_label: tag.tagLabel,
+      category: tag.category,
+      weight: tag.weight,
+      is_primary: tag.isPrimary,
+    }))
+    const expectedLinks = seed.specialistLinks.filter(link => names.has(link.specialistFacultyName))
+      .map(link => ({
+        primary_faculty_name: link.primaryFacultyName,
+        specialist_faculty_name: link.specialistFacultyName,
+        tag_key: link.tagKey,
+        priority: link.priority,
+        explanation_template: link.explanationTemplate,
+      }))
+
+    expect(migration.match(/\$faculty\$(.*?)\$faculty\$/u)?.[1]).toBe(JSON.stringify(expectedFaculty))
+    expect(migration.match(/\$tags\$(.*?)\$tags\$/u)?.[1]).toBe(JSON.stringify(expectedTags))
+    expect(migration.match(/\$links\$(.*?)\$links\$/u)?.[1]).toBe(JSON.stringify(expectedLinks))
   })
 
   it('preserves all 144 inventory identities and locked quality states', () => {
@@ -254,7 +335,7 @@ describe('verified department content seed', () => {
       'supabase/seed/curriculum-2026.json': '832a19636a0a24703903b0f2f769146879eb17231cb3edab81a5717dc8f00324',
       'supabase/seed/equipment-inventory-2026-07-14.json': 'efbef180c706b7412ab0ea6f51a920e698c3ec00c159d7449818dfaad60728eb',
       'supabase/seed/facilities-2026.json': '3b1fa7e941b88b0558a7decb4203082fdf5332adc3dbefdfcfdaf3cf0674e48c',
-      'supabase/seed/faculty-2026.json': '633202c89ba1b9956482ab38c914c666a5a5a76c0ea8023738670b8b67c5c803',
+      'supabase/seed/faculty-2026.json': 'e4a6b371e0ddada905341743464eff98b532d7d2d6efe092657640e4699179b3',
     }
 
     for (const [path, expected] of Object.entries(expectedHashes)) {
@@ -432,7 +513,7 @@ describe('verified department content seed', () => {
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:11918b8b8bf1f687725d549f746780d1c91a792d274b269e18f3f2dff7ebc7ce',
+      'sha256:597e673e87ad120a3890630b84358dd921e1a880b40fff08caa68696b0e48bd2',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')
