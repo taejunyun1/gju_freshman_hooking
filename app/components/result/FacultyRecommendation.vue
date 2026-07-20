@@ -24,7 +24,7 @@ defineProps<{
     </section>
 
     <section class="faculty-recommendation__group faculty-recommendation__group--specialists">
-      <h3 data-faculty-role>함께 연결되는 전문분야</h3>
+      <h3 data-faculty-role>함께 연결되는 실무·창작 강사</h3>
       <div
         v-if="faculty.specialists.length > 0"
         class="faculty-recommendation__specialist-list"
@@ -33,6 +33,7 @@ defineProps<{
           v-for="person in faculty.specialists"
           :key="person.id"
           :person="person"
+          :compact="true"
         />
       </div>
       <ResultExampleGrid :track="track" kind="specialty" />

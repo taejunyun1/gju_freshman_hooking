@@ -2,9 +2,12 @@
 import { computed } from 'vue'
 import type { FacultyResult } from '../../../shared/types/result'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   person: FacultyResult
-}>()
+  compact?: boolean
+}>(), {
+  compact: false,
+})
 
 const hasContacts = computed(() => Object.keys(props.person.publicContacts).length > 0)
 </script>
@@ -12,6 +15,7 @@ const hasContacts = computed(() => Object.keys(props.person.publicContacts).leng
 <template>
   <article
     class="faculty-card"
+    :class="{ 'faculty-card--compact': compact }"
     :data-faculty-person="person.id"
   >
     <div class="faculty-card__heading">
@@ -133,5 +137,21 @@ const hasContacts = computed(() => Object.keys(props.person.publicContacts).leng
 .faculty-card__contacts a:focus-visible {
   outline: 3px solid var(--color-sequence);
   outline-offset: 3px;
+}
+
+.faculty-card--compact {
+  padding: 0.8rem;
+}
+
+.faculty-card--compact .faculty-card__heading h4 {
+  font-size: 1rem;
+}
+
+.faculty-card--compact .faculty-card__expertise {
+  font-size: 0.8125rem;
+}
+
+.faculty-card--compact .faculty-card__reason {
+  font-size: 0.75rem;
 }
 </style>
