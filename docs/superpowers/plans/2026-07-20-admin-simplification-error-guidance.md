@@ -407,7 +407,45 @@
 
 ---
 
-### Task 4: 통합 검증과 배포
+### Task 4: 졸업생 진로 사례를 핵심 두 건과 작은 후속 목록으로 정리
+
+**Files:**
+- Create: `app/components/result/CareerRecommendations.vue`
+- Modify: `app/components/result/ResultTimeline.vue`
+- Modify: `tests/unit/components/ResultTimeline.test.ts`
+- Modify: `tests/e2e/results.spec.ts`
+
+**Interfaces:**
+- Input: `readonly CareerResultResource[]`
+- Output: 추천 순서를 보존한 핵심 카드 2건, 작은 후속 항목 최대 2건, 검증된 노션 아카이브 링크
+- DB와 결과 스냅숏 스키마는 변경하지 않는다.
+
+- [ ] **Step 1: 정보 위계 테스트를 먼저 추가한다**
+
+  네 건의 진로 사례에서 핵심 카드가 정확히 두 건, 작은 후속 항목이 두 건인지 검사한다. 추천 순서, 외부 링크 URL, `target="_blank"`, `rel="noopener noreferrer"`, 새 창 안내를 검증한다.
+
+- [ ] **Step 2: 작은 전용 컴포넌트로 구현한다**
+
+  첫 두 사례는 기존 `ResourceCard`를 재사용하고 나머지는 제목 중심의 작은 링크 목록으로 표시한다. 노션 아카이브 URL은 컴포넌트의 검증된 상수 하나로 유지한다.
+
+- [ ] **Step 3: 결과 화면과 반응형 E2E를 검증한다**
+
+  Run: `corepack pnpm exec vitest run --project unit tests/unit/components/ResultTimeline.test.ts`
+
+  Run: `corepack pnpm exec playwright test tests/e2e/results.spec.ts --project=chromium`
+
+  Expected: 핵심 2건·작은 후속 목록·외부 링크가 표시되고 390px 화면에서 가로 넘침이 없다.
+
+- [ ] **Step 4: 커밋한다**
+
+  ```bash
+  git add app/components/result/CareerRecommendations.vue app/components/result/ResultTimeline.vue tests/unit/components/ResultTimeline.test.ts tests/e2e/results.spec.ts
+  git commit -m "feat: 2026-07-20 졸업생 진로 사례 위계 정리"
+  ```
+
+---
+
+### Task 5: 통합 검증과 배포
 
 **Files:**
 - Modify: `.superpowers/sdd/progress.md` (gitignored 진행 장부)
