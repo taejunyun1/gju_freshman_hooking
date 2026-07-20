@@ -185,10 +185,11 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
     const cycles = z.array(admissionCycleSchema).parse(await rpcData(rpc, 'list_admission_cycles_v1'))
     const cycle = cycles.find(candidate => candidate.id === parsed.data.cycleId && candidate.status === 'current')
     if (!cycle) throw new AppError('ROSTER_CONFLICT')
-    const rows = await Promise.all(parsed.data.rows.map(row => protectRow(row, cycle.year, keyring)))
+    const canonicalRows = stableRows(parsed.data.rows)
+    const rows = await Promise.all(canonicalRows.map(row => protectRow(row, cycle.year, keyring)))
     const data = await rpcData(rpc, 'apply_applicant_roster_v1', {
       p_cycle_id: parsed.data.cycleId, p_expected_version: parsed.data.expectedVersion,
-      p_admin_user_id: context.adminUserId, p_request_digest: await requestDigest(parsed.data.cycleId, parsed.data.expectedVersion, parsed.data.rows),
+      p_admin_user_id: context.adminUserId, p_request_digest: await requestDigest(parsed.data.cycleId, parsed.data.expectedVersion, canonicalRows),
       p_request_id: parsed.data.idempotencyKey, p_rows: rows,
     })
     throwResultError(data, diagnoseProtectedRosterRows(rows))
@@ -199,7 +200,7 @@ export const createApplicantRosterService = ({ keyring, rpc }: ApplicantRosterDe
       hmac: z.string().regex(/^[0-9a-f]{64}$/iu), generation: z.number().int().positive(),
     }).strict()).safeParse(added)
     if (!additions.success || additions.data.length !== result.data.counts.add) throw new Error('ROSTER_STORE_INVALID')
-    const protectedRowsByPhoneHmac = new Map(rows.map((protectedRow, index) => [protectedRow.phoneHmac, parsed.data.rows[index]!]))
+    const protectedRowsByPhoneHmac = new Map(rows.map((protectedRow, index) => [protectedRow.phoneHmac, canonicalRows[index]!]))
     const credentials = await Promise.all(additions.data.map(async addition => {
       const row = protectedRowsByPhoneHmac.get(addition.hmac)
       if (!row) throw new Error('ROSTER_STORE_INVALID')

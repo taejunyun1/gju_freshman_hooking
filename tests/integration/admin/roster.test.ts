@@ -136,6 +136,40 @@ describe('applicant roster service', () => {
     expect(result.credentials[0]).toMatchObject({ name: '새 지원자', phone: '01012349999' })
   })
 
+  it('uses canonical protected row ordering when a mixed roster apply is retried with reordered rows', async () => {
+    const existingRow = row
+    const addedRow = { ...row, name: '새 지원자', phone: '010-1234-9999' }
+    const applyPayloads: Array<Record<string, unknown>> = []
+    const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
+      if (name === 'list_admission_cycles_v1') return { data: [currentCycle], error: null }
+      applyPayloads.push(args!)
+      const rows = args!.p_rows as Array<Record<string, unknown>>
+      // Model the audit-compaction replay, which restores additions by their
+      // original protected-row position.
+      return { data: {
+        kind: 'success', cycleId, previousVersion: 4, rosterVersion: 5,
+        counts: { add: 1, update: 1, inactive: 0, unchanged: 0 },
+        added: [{ hmac: rows[1]!.phoneHmac, generation: 1 }], credentials: [],
+      }, error: null }
+    })
+    const service = createApplicantRosterService({ keyring, rpc })
+
+    const first = await service.apply({
+      cycleId, expectedVersion: 4, idempotencyKey: requestId, rows: [addedRow, existingRow],
+    }, { adminUserId, requestId })
+    const retry = await service.apply({
+      cycleId, expectedVersion: 4, idempotencyKey: requestId, rows: [existingRow, addedRow],
+    }, { adminUserId, requestId })
+
+    const protectedPhoneOrder = (payload: Record<string, unknown>) => (
+      (payload.p_rows as Array<Record<string, unknown>>).map(protectedRow => protectedRow.phoneHmac)
+    )
+    expect(protectedPhoneOrder(applyPayloads[0]!)).toEqual(protectedPhoneOrder(applyPayloads[1]!))
+    expect(applyPayloads[0]!.p_request_digest).toBe(applyPayloads[1]!.p_request_digest)
+    expect(first.credentials).toMatchObject([{ name: '새 지원자', phone: '01012349999' }])
+    expect(retry.credentials).toMatchObject([{ name: '새 지원자', phone: '01012349999' }])
+  })
+
   it('requires cycleId when regenerating current credentials', async () => {
     const [name, phone] = await Promise.all([
       protectApplicantName('윤 태준', keyring.nameHmacKey, keyring.piiEncryptionKey),
