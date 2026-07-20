@@ -273,6 +273,6 @@ test('downloads and decodes the real 1,001-row private workbook in Chromium', as
       track: 'video',
     },
   })
-  expect(students.getCell('M2').value).toBe('상담 신청자')
+  expect(students.getCell('M2').value).toBe('설문 완료자 (상담 미신청)')
   await expect(page.locator('[aria-live="polite"]')).toContainText(download.suggestedFilename())
 })
