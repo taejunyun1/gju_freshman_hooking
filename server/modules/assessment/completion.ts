@@ -22,7 +22,6 @@ import type {
 import {
   createAbsoluteDeadline,
   defaultDeadlineRunner,
-  isDeadlineExceeded,
   type AbsoluteDeadline,
   type DeadlineRunner,
 } from '../../utils/absolute-deadline'
