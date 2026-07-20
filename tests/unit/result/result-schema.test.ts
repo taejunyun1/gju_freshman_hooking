@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { decodeResultSnapshot } from '../../../shared/schemas/result'
+import { decodeResultSnapshot, resultResourcesSchema } from '../../../shared/schemas/result'
 import type { ResultSnapshotCore } from '../../../shared/types/result'
 import {
   buildCareerNarrativeBrief,
@@ -222,6 +222,15 @@ const makeDenseKoreanSnapshot = (fillLength: number) => {
 }
 
 describe('result snapshot decoder', () => {
+  it('allows the canonical result to retain five foundations and four pathway courses', () => {
+    const snapshot = makeValidSnapshot()
+    const courses = [
+      course(101, 1), course(102, 1), course(103, 2), course(104, 2), course(105, 2),
+      course(106, 3), course(107, 3), course(108, 4), course(109, 4),
+    ]
+    snapshot.resources.course = courses
+    expect(() => resultResourcesSchema.parse(snapshot.resources)).not.toThrow()
+  })
   it('accepts every public equipment category, rejects unknown values, and preserves old snapshots', () => {
     for (const category of ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const) {
       const snapshot = clone(makeValidSnapshot())

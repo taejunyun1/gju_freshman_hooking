@@ -156,6 +156,23 @@ const resourceCandidates = (): ResourceCandidate[] => [
     metadata: {},
     tags: [tag('commercial')],
   },
+  ...([
+    ['커머셜 포토그라피 기초 워크숍', 3, '1학기'],
+    ['커머셜 포토그라피 심화 워크숍', 3, '2학기'],
+    ['커머셜 포토그라피 세미나', 4, '1학기'],
+    ['커머셜 포토그라피 랩', 4, '2학기'],
+  ] as const).map(([title, gradeYear, term], index): ResourceCandidate => ({
+    id: 108 + index,
+    type: 'course',
+    title,
+    summary: `${title}의 검증된 고급 교과입니다.`,
+    status: 'active',
+    visibility: 'public',
+    priority: 30,
+    sourceDate: '2026-07-14',
+    metadata: { gradeYear, term, credits: 3, goalSummary: '상업사진 심화 과정을 익히는' },
+    tags: [tag('unmatched_pathway')],
+  })),
 ]
 
 const fullEnvironmentResourceCandidates = (): ResourceCandidate[] => {
@@ -171,14 +188,14 @@ const fullEnvironmentResourceCandidates = (): ResourceCandidate[] => {
       : candidate),
     ...([2, 3, 4] as const).map((gradeYear, index): ResourceCandidate => ({
       ...baseCourse,
-      id: 108 + index,
+      id: 120 + index,
       title: `${gradeYear}학년 사진 실습`,
       metadata: { ...baseCourse.metadata, gradeYear },
       tags: [tag((['studio', 'portfolio', 'photography'] as const)[index]!)],
     })),
     {
       ...baseEquipment,
-      id: 111,
+      id: 123,
       title: '교환 렌즈 세트',
       metadata: { ...baseEquipment.metadata, category: 'lens' },
     },
@@ -396,7 +413,7 @@ describe('assessment completion service', () => {
       campaignId: null,
       idempotencyKey,
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
-      environmentScore: 51.3,
+      environmentScore: 63.8,
       narrativeGenerationId: generationId,
     })
     expect(persisted.responses).toEqual([
@@ -441,15 +458,15 @@ describe('assessment completion service', () => {
       ],
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
       rankedTracks: ['commercial', 'art_photo', 'video', 'documentary'],
-      environmentScore: 51.3,
+      environmentScore: 63.8,
     })
     expect(snapshot.learningPath.map(({ year, resources }) => [year, resources.map(({ id }) => id)]))
-      .toEqual([[1, [101]], [2, []], [3, []], [4, []]])
+      .toEqual([[1, [101]], [2, []], [3, [108, 109]], [4, [110, 111]]])
     expect(Object.fromEntries(Object.entries(snapshot.resources).map(([type, resources]) => [
       type,
       resources.map(({ id }) => id),
     ]))).toEqual({
-      course: [101],
+      course: [101, 108, 109, 110, 111],
       equipment: [102],
       facility: [103],
       extracurricular: [],
@@ -458,6 +475,10 @@ describe('assessment completion service', () => {
       career: [106],
       support: [107],
     })
+    expect(snapshot.resources.course.slice(1).every(course => (
+      course.connectionReason.includes('제품·패션·광고 이미지 만들기')
+    ))).toBe(true)
+    expect(snapshot.selectedInterests.some(interest => interest.key.includes('pathway_'))).toBe(false)
     expect(snapshot.faculty).toMatchObject({
       primary: { id: 203, role: 'primary' },
       backup: { id: 202, role: 'backup' },

@@ -94,6 +94,50 @@ const selected = (keys: readonly string[]) => keys.map(key => ({
 }))
 
 describe('resource matching', () => {
+  it.each([
+    ['art_photo', ['사물,데이터,이미지 워크숍', '사진과 장소 그리고 콘텍스트 워크숍', '예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']],
+    ['documentary', ['포토 스토리 워크숍', '포토에세이 워크숍', '다큐멘터리 세미나', '포스트 다큐멘터리 랩']],
+    ['video', ['영상 인터뷰 내러티브 워크숍', '영상 드론 콘텐츠 워크숍', '영상 콘텐츠 크리에이터 워크숍']],
+    ['commercial', ['커머셜 포토그라피 기초 워크숍', '커머셜 포토그라피 심화 워크숍', '커머셜 포토그라피 세미나', '커머셜 포토그라피 랩']],
+  ] as const)('keeps foundations and completes only the %s primary-track pathway', (primaryTrack, titles) => {
+    const foundations = Array.from({ length: 5 }, (_, index) => course(index + 1, {
+      metadata: { gradeYear: index < 3 ? 1 : 2, term: index % 2 === 0 ? '1학기' : '2학기', credits: 3, goalSummary: '기초를 익히는' },
+      tags: [tag(`foundation_${index + 1}`)],
+    }))
+    const pathway = titles.map((title, index) => course(index + 10, {
+      title,
+      metadata: { gradeYear: index < (primaryTrack === 'video' ? 3 : 2) ? 3 : 4, term: index % 2 === 0 ? '1학기' : '2학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+      tags: [tag('unmatched_pathway')],
+    }))
+    const otherTrackCourse = course(99, {
+      title: '다른 트랙 고급 교과',
+      metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '다른 심화 과정을 익히는' },
+      tags: [tag('other_track')],
+    })
+    const ranked = rankResources({
+      primaryTrack,
+      interestVector: Object.fromEntries([
+        ...foundations.map(item => [item.tags[0]!.key, 1]),
+        ['other_track', 1],
+      ]),
+      selectedInterests: [
+        ...foundations.map(item => ({ key: item.tags[0]!.key, label: `${item.title} 선택` })),
+        { key: 'other_track', label: '다른 트랙 선택' },
+      ],
+      candidates: [...foundations, ...pathway, otherTrackCourse],
+    })
+
+    expect(ranked.course.map(item => item.title)).toEqual([
+      ...foundations.map(item => item.title),
+      ...titles,
+    ])
+    expect(ranked.course.filter(item => item.title === '다른 트랙 고급 교과')).toEqual([])
+    for (const title of titles) {
+      expect(ranked.course.find(item => item.title === title)?.connectionReason)
+        .toContain('교과 1 선택')
+    }
+  })
+
   it('uses exact affinity and locked sort keys while exposing one decimal', () => {
     const interests = { a: 0.5, b: 0.5, c: 0.5, d: 0.5, raw_high: 0.5004, raw_low: 0.5 }
     const ranked = rankResources({

@@ -42,6 +42,7 @@ import {
 } from '../matching/reasons'
 import {
   rankResources,
+  withPrimaryTrackPathway,
   type ResourceCandidate,
 } from '../matching/resources'
 import { computeEnvironmentScore } from '../matching/environment-score'
@@ -619,15 +620,22 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
 
       const candidates = await deadline.run(dependencies.loadResourceCandidates)
       assertResourceCandidates(candidates)
-      const preparedResources = prepareResourceCandidates({
+      const matchingInput = withPrimaryTrackPathway({
         candidates,
         interestVector: scored.interestVector,
         selectedInterests: matchingEvidence,
+        primaryTrack: scored.rankedTracks[0]!,
+      })
+      const preparedResources = prepareResourceCandidates({
+        candidates: matchingInput.candidates,
+        interestVector: matchingInput.interestVector,
+        selectedInterests: matchingInput.selectedInterests,
       })
       const rawRanked = rankResources({
         candidates: preparedResources.candidates,
-        interestVector: scored.interestVector,
-        selectedInterests: matchingEvidence,
+        interestVector: matchingInput.interestVector,
+        selectedInterests: matchingInput.selectedInterests,
+        primaryTrack: matchingInput.primaryTrack,
       })
       const ranked = {
         ...rawRanked,

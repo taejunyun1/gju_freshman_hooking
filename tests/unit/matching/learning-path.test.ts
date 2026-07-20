@@ -60,6 +60,15 @@ describe('four-year learning path', () => {
     expect(first[3].resources).toEqual([])
   })
 
+  it('orders courses in the same year by confirmed term before affinity', () => {
+    const path = buildLearningPath([
+      { ...course(1, 3, 100), displayMetadata: { gradeYear: 3, term: '2학기', credits: 3 } },
+      { ...course(2, 3, 10), displayMetadata: { gradeYear: 3, term: '1학기', credits: 3 } },
+    ])
+
+    expect(path[2].resources.map(item => item.id)).toEqual([2, 1])
+  })
+
   it('rejects an invalid confirmed grade year', () => {
     const invalidYear = {
       ...course(1, 1, 80),

@@ -16,6 +16,7 @@ import {
   type StudentWorkResultResource,
   type SupportResultResource,
 } from '../../../shared/types/result'
+import type { TrackKey } from '../../../shared/types/domain'
 import {
   renderConnectionReason,
   type ResourceMatchTag,
@@ -82,6 +83,7 @@ export interface RankResourcesInput {
   readonly interestVector: Readonly<Record<string, number>>
   readonly selectedInterests: readonly SelectedInterestEvidence[]
   readonly candidates: readonly ResourceCandidate[]
+  readonly primaryTrack?: TrackKey
 }
 
 export interface ResourceCategoryFits {
@@ -116,6 +118,59 @@ const allowedTypes = new Set<ResultResource['type']>([
 const tagKeyPattern = /^[a-z][a-z0-9_]{0,63}$/u
 const verifiedAtSchema = z.iso.datetime({ offset: true }).max(32)
 const equipmentCategorySet = new Set<unknown>(equipmentCategories)
+
+export const primaryTrackPathwayTitles: Readonly<Record<TrackKey, readonly string[]>> = Object.freeze({
+  art_photo: Object.freeze([
+    '사물,데이터,이미지 워크숍',
+    '사진과 장소 그리고 콘텍스트 워크숍',
+    '예술창작 프로젝트 세미나',
+    '예술창작 프로젝트 랩',
+  ]),
+  documentary: Object.freeze([
+    '포토 스토리 워크숍',
+    '포토에세이 워크숍',
+    '다큐멘터리 세미나',
+    '포스트 다큐멘터리 랩',
+  ]),
+  video: Object.freeze([
+    '영상 인터뷰 내러티브 워크숍',
+    '영상 드론 콘텐츠 워크숍',
+    '영상 콘텐츠 크리에이터 워크숍',
+  ]),
+  commercial: Object.freeze([
+    '커머셜 포토그라피 기초 워크숍',
+    '커머셜 포토그라피 심화 워크숍',
+    '커머셜 포토그라피 세미나',
+    '커머셜 포토그라피 랩',
+  ]),
+})
+
+const pathwayEvidenceKey = (track: TrackKey): string => `pathway_${track}`
+
+export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResourcesInput => {
+  if (input.primaryTrack === undefined) return input
+
+  const evidenceKey = pathwayEvidenceKey(input.primaryTrack)
+  const pathwayTitles = new Set(primaryTrackPathwayTitles[input.primaryTrack])
+  const label = input.selectedInterests[0]?.label
+  if (label === undefined) throw new Error('Selected interest label evidence is required')
+
+  return {
+    ...input,
+    interestVector: input.interestVector[evidenceKey] === undefined
+      ? { ...input.interestVector, [evidenceKey]: 1 }
+      : input.interestVector,
+    selectedInterests: input.selectedInterests.some(item => item.key === evidenceKey)
+      ? input.selectedInterests
+      : [...input.selectedInterests, { key: evidenceKey, label }],
+    candidates: input.candidates.map((candidate): ResourceCandidate => (
+      candidate.type !== 'course' || !pathwayTitles.has(candidate.title)
+        || candidate.tags.some(tag => tag.key === evidenceKey)
+        ? candidate
+        : { ...candidate, tags: [...candidate.tags, { key: evidenceKey, weight: 3, isPrimary: true }] }
+    )),
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -540,17 +595,18 @@ const isCurrentProject = (candidate: RankedCandidate): boolean => (
 )
 
 export const rankResources = (input: RankResourcesInput): RankedResources => {
-  assertInterestVector(input.interestVector)
-  assertSelectedInterests(input.selectedInterests)
-  assertCandidateIntegrity(input.candidates)
+  const matchingInput = withPrimaryTrackPathway(input)
+  assertInterestVector(matchingInput.interestVector)
+  assertSelectedInterests(matchingInput.selectedInterests)
+  assertCandidateIntegrity(matchingInput.candidates)
 
-  const ranked = input.candidates
+  const ranked = matchingInput.candidates
     .filter(isValidCandidate)
     .map((candidate): RankedCandidate | null => {
-      const rawAffinity = affinity(input.interestVector, candidate.tags)
+      const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
       if (rawAffinity <= 0) return null
       const tag = primaryTag(candidate.tags)
-      const result = toResultResource(candidate, rawAffinity, tag, input)
+      const result = toResultResource(candidate, rawAffinity, tag, matchingInput)
       if (result === null) return null
       return {
         candidate,
@@ -562,8 +618,21 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .filter((candidate): candidate is RankedCandidate => candidate !== null)
     .sort(compareRankedCandidates)
 
-  const course = selectDiverse(ranked.filter(item => item.candidate.type === 'course'), 5)
-  const capabilityEvidence = selectCapabilityEvidence(ranked, input.interestVector)
+  const courseCandidates = ranked.filter((item): item is RankedCandidate & {
+    candidate: Extract<ResourceCandidate, { type: 'course' }>
+  } => item.candidate.type === 'course')
+  const course = matchingInput.primaryTrack === undefined
+    ? selectDiverse(courseCandidates, 5)
+    : Object.freeze([
+        ...selectDiverse(courseCandidates.filter(item => (
+          item.candidate.metadata.gradeYear <= 2
+        )), 5),
+        ...courseCandidates.filter(item => (
+          primaryTrackPathwayTitles[matchingInput.primaryTrack!].includes(item.candidate.title)
+          && item.candidate.metadata.gradeYear >= 3
+        )),
+      ])
+  const capabilityEvidence = selectCapabilityEvidence(ranked, matchingInput.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
   const experienceProjects = selectDiverse(ranked.filter(item => (
     item.candidate.type === 'project' && !isCurrentProject(item)

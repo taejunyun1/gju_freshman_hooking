@@ -12,8 +12,14 @@ const isGradeYear = (value: unknown): value is 1 | 2 | 3 | 4 => (
   value === 1 || value === 2 || value === 3 || value === 4
 )
 
+const termOrder = (term: string): number => (
+  term === '1학기' ? 1 : term === '2학기' ? 2 : 3
+)
+
 const compareCourses = (left: CourseResultResource, right: CourseResultResource): number => (
-  right.affinity - left.affinity
+  termOrder(left.displayMetadata.term) - termOrder(right.displayMetadata.term)
+  || left.displayMetadata.term.localeCompare(right.displayMetadata.term, 'ko')
+  || right.affinity - left.affinity
   || right.sourceDate.localeCompare(left.sourceDate, 'en')
   || left.id - right.id
 )
