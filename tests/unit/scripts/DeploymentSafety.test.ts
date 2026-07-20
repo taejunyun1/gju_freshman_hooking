@@ -512,20 +512,18 @@ describe('deployment and E2E safety contracts', () => {
 
   it('arms counseling prospect cleanup before creating dependent fixtures', () => {
     const counselingE2e = readFileSync('tests/e2e/counseling.spec.ts', 'utf8')
-    const studentSupport = readFileSync('tests/e2e/support/student.ts', 'utf8')
-    const callbackInvocation = 'await onRegistered?.({ nickname })'
-    const loginNavigation = "await page.goto('/login')"
-    const counselingCallback = 'async ({ nickname: registeredNickname }) => {'
-    const prospectAssignment = 'fixture.prospectId = await findProspectId(client, registeredNickname)'
+    const rosterProvision = 'localRosterFixture = provisionLocalRosterStudent(phone)'
+    const prospectAssignment = 'fixture.prospectId = localRosterFixture.prospectId'
+    const studentLogin = 'await registerAndLoginStudent(page, phone, undefined, {'
     const facultyCreation = 'const faculty = await createFaculty(suffix)'
     const resultCreation = 'createOwnedResult(client, fixture.prospectId, faculty)'
 
-    expect(studentSupport).toContain(callbackInvocation)
-    expect(studentSupport).toContain(loginNavigation)
-    expect(studentSupport.indexOf(callbackInvocation)).toBeLessThan(studentSupport.indexOf(loginNavigation))
-    expect(counselingE2e).toContain(counselingCallback)
+    expect(counselingE2e).toContain(rosterProvision)
     expect(counselingE2e).toContain(prospectAssignment)
+    expect(counselingE2e).toContain(studentLogin)
     expect(counselingE2e).toContain(resultCreation)
+    expect(counselingE2e.indexOf(rosterProvision)).toBeLessThan(counselingE2e.indexOf(prospectAssignment))
+    expect(counselingE2e.indexOf(prospectAssignment)).toBeLessThan(counselingE2e.indexOf(studentLogin))
     expect(counselingE2e.indexOf(prospectAssignment)).toBeLessThan(counselingE2e.indexOf(facultyCreation))
   })
 

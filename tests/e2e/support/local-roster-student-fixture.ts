@@ -11,7 +11,9 @@ const databaseContainer = `supabase_db_${projectId}`
 
 export type LocalRosterStudentFixture = {
   cleanup: () => void
+  nickname: string
   password: string
+  prospectId: number
 }
 
 type LocalRosterStudentFixtureHooks = {
@@ -60,20 +62,24 @@ const digest = (domain: string, value: string, key: Buffer): string => createHma
   .update(`${domain}\0${value}`, 'utf8')
   .digest('hex')
 
-const protectApplicantName = (name: string): { ciphertext: string, hmac: string, iv: string } => {
+const encryptPii = (value: string): { ciphertext: string, iv: string } => {
   const iv = randomBytes(12)
   const cipher = createCipheriv('aes-256-gcm', secret('NUXT_PHONE_ENCRYPTION_KEY'), iv)
   const ciphertext = Buffer.concat([
-    cipher.update(name, 'utf8'),
+    cipher.update(value, 'utf8'),
     cipher.final(),
     cipher.getAuthTag(),
   ])
   return {
     ciphertext: ciphertext.toString('hex'),
-    hmac: digest('name-compare-v1', name, secret('NUXT_NAME_HMAC_KEY')),
     iv: iv.toString('hex'),
   }
 }
+
+const protectApplicantName = (name: string): { ciphertext: string, hmac: string, iv: string } => ({
+  ...encryptPii(name),
+  hmac: digest('name-compare-v1', name, secret('NUXT_NAME_HMAC_KEY')),
+})
 
 const passwordForPhone = (phone: string): string => `${phone.slice(-4)}AA`
 
@@ -98,6 +104,7 @@ export const provisionLocalRosterStudent = (
   const nickname = `visual-e2e-${phoneHmac.slice(0, 20)}`
   const applicantName = '로컬 시각 QA 지원자'
   const protectedName = protectApplicantName(applicantName)
+  const protectedPhone = encryptPii(phone)
   const currentCycle = runDatabaseSql(String.raw`
 select id::text || '|' || password_key_version::text
 from public.admission_cycles
@@ -149,8 +156,8 @@ with inserted_prospect as (
   ) values (
     '${nickname}',
     pg_catalog.decode('${phoneHmac}', 'hex'),
-    pg_catalog.decode(repeat('00', 16), 'hex'),
-    pg_catalog.decode(repeat('00', 12), 'hex'),
+    pg_catalog.decode('${protectedPhone.ciphertext}', 'hex'),
+    pg_catalog.decode('${protectedPhone.iv}', 'hex'),
     '로컬 시각 QA 고교', 'high3', 'other', '${cycleId}'::uuid,
     pg_catalog.decode('${protectedName.hmac}', 'hex'),
     pg_catalog.decode('${protectedName.ciphertext}', 'hex'),
@@ -194,14 +201,15 @@ commit;
         and credential.password_generation = 1
         and extensions.crypt(pg_catalog.encode(pg_catalog.decode('${passwordDigest}', 'hex'), 'hex'), credential.password_bcrypt) = credential.password_bcrypt
       limit 1;`, true)
-    if (!/^[1-9][0-9]*$/u.test(verification)) {
+    const prospectId = Number(verification)
+    if (!/^[1-9][0-9]*$/u.test(verification) || !Number.isSafeInteger(prospectId)) {
       throw new Error('로컬 시각 QA 학생 fixture 검증에 실패했습니다.')
     }
+
+    return { cleanup, nickname, password, prospectId }
   }
   catch (error) {
     cleanup()
     throw error
   }
-
-  return { cleanup, password }
 }

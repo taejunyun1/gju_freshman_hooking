@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { createHash, createHmac } from 'node:crypto'
+import { createDecipheriv, createHash, createHmac } from 'node:crypto'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   provisionLocalRosterStudent,
@@ -96,6 +96,32 @@ from public.admission_cycles where id = '${cycleId}'::uuid;
 
     const fixture = provisionLocalRosterStudent(phone)
     fixtures.push(fixture)
+
+    const storedProspectId = Number(sql(String.raw`
+select id from public.prospects
+where nickname = '${ownedNickname}'
+  and phone_hmac = pg_catalog.decode('${phoneHmac}', 'hex')
+  and is_test = true;
+`, true))
+    expect(fixture.nickname).toBe(ownedNickname)
+    expect(fixture.prospectId).toBe(storedProspectId)
+
+    const [ciphertextHex, ivHex] = sql(String.raw`
+select pg_catalog.encode(phone_ciphertext, 'hex') || '|' || pg_catalog.encode(phone_iv, 'hex')
+from public.prospects where id = ${storedProspectId};
+`, true).split('|')
+    const ciphertext = Buffer.from(ciphertextHex ?? '', 'hex')
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      Buffer.from(secret('phone-encryption'), 'base64url'),
+      Buffer.from(ivHex ?? '', 'hex'),
+    )
+    decipher.setAuthTag(ciphertext.subarray(-16))
+    const revealedPhone = Buffer.concat([
+      decipher.update(ciphertext.subarray(0, -16)),
+      decipher.final(),
+    ]).toString('utf8')
+    expect(revealedPhone).toBe(phone)
 
     const after = sql(String.raw`
 select id, year, status, roster_version, password_key_version, archived_at is null

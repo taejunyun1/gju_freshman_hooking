@@ -16,6 +16,10 @@ import type {
   ResultSnapshotCore,
 } from '../../shared/types/result'
 import { makeResultSnapshot } from '../fixtures/result'
+import {
+  provisionLocalRosterStudent,
+  type LocalRosterStudentFixture,
+} from './support/local-roster-student-fixture'
 import { registerAndLoginStudent, uniqueAssessmentPhone } from './support/student'
 
 type LocalRuntime = {
@@ -171,20 +175,6 @@ order by id;
   return faculty as [TestFaculty, TestFaculty, TestFaculty]
 }
 
-const findProspectId = async (
-  client: SupabaseClient,
-  nickname: string,
-): Promise<number> => {
-  const { data: prospect, error } = await client.from('prospects')
-    .select('id')
-    .eq('nickname', nickname)
-    .single()
-  if (error || typeof prospect?.id !== 'number') {
-    throw new Error('COUNSELING_E2E_PROSPECT_FIXTURE_FAILED')
-  }
-  return prospect.id
-}
-
 const createOwnedResult = async (
   client: SupabaseClient,
   prospectId: number,
@@ -290,11 +280,16 @@ test('student request becomes a completed assigned counseling case', async ({ br
   test.setTimeout(120_000)
   const client = serviceClient()
   const fixture: FixtureCleanup = { adminUserId: null, facultyIds: [], prospectId: null }
+  let localRosterFixture: LocalRosterStudentFixture | null = null
 
   try {
     const phone = uniqueAssessmentPhone(testInfo)
-    const { nickname } = await registerAndLoginStudent(page, phone, async ({ nickname: registeredNickname }) => {
-      fixture.prospectId = await findProspectId(client, registeredNickname)
+    localRosterFixture = provisionLocalRosterStudent(phone)
+    fixture.prospectId = localRosterFixture.prospectId
+    const { nickname } = await registerAndLoginStudent(page, phone, undefined, {
+      nickname: localRosterFixture.nickname,
+      password: localRosterFixture.password,
+      phone,
     })
     const suffix = randomUUID().slice(0, 8)
     const faculty = await createFaculty(suffix)
@@ -381,27 +376,44 @@ test('student request becomes a completed assigned counseling case', async ({ br
     await expect(priorStatus.getByRole('heading', { name: `${faculty[0].name} ${faculty[0].title}` })).toBeVisible()
   }
   finally {
-    await cleanup(client, fixture)
+    try {
+      await cleanup(client, fixture)
+    }
+    finally {
+      localRosterFixture?.cleanup()
+    }
   }
 })
 
-test('post-registration failure still removes the armed student fixture and session', async ({ page }, testInfo) => {
+test('failed PIN login after roster provisioning removes the student fixture and session', async ({ page }, testInfo) => {
   const client = serviceClient()
   const fixture: FixtureCleanup = { adminUserId: null, facultyIds: [], prospectId: null }
-  const expectedFailure = 'COUNSELING_E2E_EXPECTED_POST_REGISTRATION_FAILURE'
+  let localRosterFixture: LocalRosterStudentFixture | null = null
 
   try {
+    const phone = uniqueAssessmentPhone(testInfo)
+    localRosterFixture = provisionLocalRosterStudent(phone)
+    fixture.prospectId = localRosterFixture.prospectId
+    const wrongPassword = localRosterFixture.password === '0000AA' ? '9999AA' : '0000AA'
+
     await expect(registerAndLoginStudent(
       page,
-      uniqueAssessmentPhone(testInfo),
-      async ({ nickname }) => {
-        fixture.prospectId = await findProspectId(client, nickname)
-        throw new Error(expectedFailure)
+      phone,
+      undefined,
+      {
+        nickname: localRosterFixture.nickname,
+        password: wrongPassword,
+        phone,
       },
-    )).rejects.toThrow(expectedFailure)
+    )).rejects.toThrow()
   }
   finally {
-    await cleanup(client, fixture)
+    try {
+      await cleanup(client, fixture)
+    }
+    finally {
+      localRosterFixture?.cleanup()
+    }
   }
 
   expect(fixture.prospectId).not.toBeNull()
