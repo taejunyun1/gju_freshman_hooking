@@ -222,14 +222,16 @@ const makeDenseKoreanSnapshot = (fillLength: number) => {
 }
 
 describe('result snapshot decoder', () => {
-  it('allows the canonical result to retain five foundations and four pathway courses', () => {
+  it('allows ten courses for five foundations and five verified pathway courses, but rejects eleven', () => {
     const snapshot = makeValidSnapshot()
-    const courses = [
+    snapshot.resources.course = [
       course(101, 1), course(102, 1), course(103, 2), course(104, 2), course(105, 2),
-      course(106, 3), course(107, 3), course(108, 4), course(109, 4),
+      course(106, 3), course(107, 3), course(108, 3), course(109, 4), course(110, 4),
     ]
-    snapshot.resources.course = courses
     expect(() => resultResourcesSchema.parse(snapshot.resources)).not.toThrow()
+
+    snapshot.resources.course.push(course(111, 4))
+    expect(() => resultResourcesSchema.parse(snapshot.resources)).toThrow()
   })
   it('accepts every public equipment category, rejects unknown values, and preserves old snapshots', () => {
     for (const category of ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const) {

@@ -247,7 +247,7 @@ export const resultResourceSchema = z.discriminatedUnion('type', [
 ])
 
 export const resultResourcesSchema = z.object({
-  course: z.array(courseResultResourceSchema).max(9),
+  course: z.array(courseResultResourceSchema).max(10),
   equipment: z.array(equipmentResultResourceSchema).max(4),
   facility: z.array(facilityResultResourceSchema).max(4),
   extracurricular: z.array(extracurricularResultResourceSchema).max(3),

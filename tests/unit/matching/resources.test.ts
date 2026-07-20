@@ -3,6 +3,7 @@ import { renderConnectionReason } from '../../../server/modules/matching/reasons
 import { resultResourceSchema } from '../../../shared/schemas/result'
 import { equipmentCategoryOf } from '../../../shared/utils/equipment-category'
 import {
+  primaryTrackPathwayCourses,
   rankResources,
   type ResourceCandidate,
 } from '../../../server/modules/matching/resources'
@@ -93,7 +94,116 @@ const selected = (keys: readonly string[]) => keys.map(key => ({
   label: `${key} 선택`,
 }))
 
+const exactPathwayCandidates = (
+  primaryTrack: 'video',
+  secondaryTrack: 'art_photo' | 'documentary' | 'commercial',
+): ResourceCandidate[] => {
+  const foundations = Array.from({ length: 5 }, (_, index) => course(index + 1, {
+    metadata: {
+      gradeYear: index < 3 ? 1 : 2,
+      term: index % 2 === 0 ? '1학기' : '2학기',
+      credits: 3,
+      goalSummary: '사진·영상 기초를 익히는',
+    },
+    tags: [tag(`foundation_${index + 1}`)],
+  }))
+  const pathway = [
+    ...primaryTrackPathwayCourses[primaryTrack],
+    ...primaryTrackPathwayCourses[secondaryTrack],
+  ].map((item, index) => course(index + 20, {
+    title: item.title,
+    metadata: {
+      gradeYear: item.gradeYear,
+      term: index % 2 === 0 ? '1학기' : '2학기',
+      credits: 3,
+      goalSummary: '전공 심화 과정을 익히는',
+    },
+    tags: [tag('unmatched_pathway')],
+  }))
+  return [...foundations, ...pathway]
+}
+
 describe('resource matching', () => {
+  it.each([
+    ['art_photo', ['예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']],
+    ['documentary', ['다큐멘터리 세미나', '포스트 다큐멘터리 랩']],
+    ['commercial', ['커머셜 포토그라피 세미나', '커머셜 포토그라피 랩']],
+  ] as const)('uses %s only for the video path year 4', (secondaryTrack, fourthYearTitles) => {
+    const candidates = exactPathwayCandidates('video', secondaryTrack)
+    const foundations = candidates.filter(candidate => (
+      candidate.type === 'course' && candidate.metadata.gradeYear <= 2
+    ))
+    const ranked = rankResources({
+      primaryTrack: 'video',
+      secondaryTrack,
+      interestVector: Object.fromEntries(foundations.map(item => [item.tags[0]!.key, 1])),
+      selectedInterests: [
+        ...foundations.map(item => ({ key: item.tags[0]!.key, label: `${item.title} 선택` })),
+        { key: 'video', label: '영상 촬영·편집' },
+        { key: secondaryTrack, label: `${secondaryTrack} 두 번째 관심` },
+      ],
+      candidates,
+    })
+
+    expect(ranked.course).toHaveLength(10)
+    expect(ranked.course.filter(item => item.displayMetadata.gradeYear === 3)
+      .map(item => item.title)).toEqual([
+      '영상 인터뷰 내러티브 워크숍',
+      '영상 드론 콘텐츠 워크숍',
+      '영상 콘텐츠 크리에이터 워크숍',
+    ])
+    expect(ranked.course.filter(item => item.displayMetadata.gradeYear === 4)
+      .map(item => item.title)).toEqual(fourthYearTitles)
+    expect(ranked.course.filter(item => item.displayMetadata.gradeYear === 4)
+      .every(item => item.connectionReason.includes(`${secondaryTrack} 두 번째 관심`))).toBe(true)
+    expect(JSON.stringify(ranked)).not.toContain('pathway_')
+  })
+
+  it('keeps video year 3 only without a secondary track and ignores secondary for non-video primary', () => {
+    const videoCandidates = exactPathwayCandidates('video', 'art_photo')
+    const video = rankResources({
+      primaryTrack: 'video',
+      interestVector: { selected: 1 },
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: videoCandidates,
+    })
+    expect(video.course.filter(item => item.displayMetadata.gradeYear === 4)).toEqual([])
+
+    const art = rankResources({
+      primaryTrack: 'art_photo',
+      secondaryTrack: 'documentary',
+      interestVector: { selected: 1 },
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: videoCandidates,
+    })
+    expect(art.course.filter(item => item.displayMetadata.gradeYear >= 3)
+      .map(item => item.title)).toEqual([
+      '사물,데이터,이미지 워크숍',
+      '사진과 장소 그리고 콘텍스트 워크숍',
+      '예술창작 프로젝트 세미나',
+      '예술창작 프로젝트 랩',
+    ])
+  })
+
+  it('does not force a secondary year-4 title stored with the wrong grade', () => {
+    const ranked = rankResources({
+      primaryTrack: 'video',
+      secondaryTrack: 'art_photo',
+      interestVector: {},
+      selectedInterests: [
+        { key: 'video', label: '영상 제작' },
+        { key: 'art_photo', label: '예술사진 창작' },
+      ],
+      candidates: [course(90, {
+        title: '예술창작 프로젝트 세미나',
+        metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '창작 프로젝트를 익히는' },
+        tags: [tag('unmatched_pathway')],
+      })],
+    })
+
+    expect(ranked.course).toEqual([])
+  })
+
   it('caps five foundations plus duplicate pathway titles at nine courses', () => {
     const foundations = Array.from({ length: 5 }, (_, index) => course(index + 1, {
       tags: [tag(`foundation_${index + 1}`)],

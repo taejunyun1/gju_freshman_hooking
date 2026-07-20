@@ -84,7 +84,9 @@ export interface RankResourcesInput {
   readonly selectedInterests: readonly SelectedInterestEvidence[]
   readonly candidates: readonly ResourceCandidate[]
   readonly primaryTrack?: TrackKey
+  readonly secondaryTrack?: TrackKey
   readonly syntheticPathwayCourseIds?: readonly number[]
+  readonly syntheticPathwayEvidenceKeys?: readonly string[]
 }
 
 export interface ResourceCategoryFits {
@@ -166,33 +168,82 @@ const matchesPathwayCourse = (
   && candidate.metadata.gradeYear === pathwayCourse.gradeYear
 )
 
+interface SelectedPathwayCourse {
+  readonly track: TrackKey
+  readonly course: PrimaryTrackPathwayCourse
+}
+
+const selectedPathwayCourses = (
+  primaryTrack: TrackKey,
+  secondaryTrack: TrackKey | undefined,
+): readonly SelectedPathwayCourse[] => Object.freeze([
+  ...primaryTrackPathwayCourses[primaryTrack].map(course => ({ track: primaryTrack, course })),
+  ...(primaryTrack === 'video'
+    && secondaryTrack !== undefined
+    && secondaryTrack !== primaryTrack
+    ? primaryTrackPathwayCourses[secondaryTrack]
+        .filter(course => course.gradeYear === 4)
+        .map(course => ({ track: secondaryTrack, course }))
+    : []),
+])
+
+const selectedLabelForTrack = (
+  selectedInterests: readonly SelectedInterestEvidence[],
+  track: TrackKey,
+): string => {
+  const label = selectedInterests.find(interest => interest.key === track)?.label
+    ?? selectedInterests[0]?.label
+  if (label === undefined) throw new Error('Selected interest label evidence is required')
+  return label
+}
+
 export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResourcesInput => {
   if (input.primaryTrack === undefined) return input
 
-  const evidenceKey = pathwayEvidenceKey(input.primaryTrack)
-  const pathwayCourses = primaryTrackPathwayCourses[input.primaryTrack]
-  const label = input.selectedInterests[0]?.label
-  if (label === undefined) throw new Error('Selected interest label evidence is required')
+  const selections = selectedPathwayCourses(input.primaryTrack, input.secondaryTrack)
+  const selectedTracks = [...new Set(selections.map(selection => selection.track))]
+  const evidenceByTrack = new Map(selectedTracks.map(track => [
+    track,
+    {
+      key: pathwayEvidenceKey(track),
+      label: selectedLabelForTrack(input.selectedInterests, track),
+    },
+  ]))
+  const interestVector = { ...input.interestVector }
+  const selectedInterests = [...input.selectedInterests]
+  for (const evidence of evidenceByTrack.values()) {
+    interestVector[evidence.key] ??= 1
+    if (!selectedInterests.some(item => item.key === evidence.key)) {
+      selectedInterests.push(evidence)
+    }
+  }
   const syntheticPathwayCourseIds = new Set(input.syntheticPathwayCourseIds)
+  const syntheticPathwayEvidenceKeys = new Set(input.syntheticPathwayEvidenceKeys)
 
   return {
     ...input,
-    interestVector: input.interestVector[evidenceKey] === undefined
-      ? { ...input.interestVector, [evidenceKey]: 1 }
-      : input.interestVector,
-    selectedInterests: input.selectedInterests.some(item => item.key === evidenceKey)
-      ? input.selectedInterests
-      : [...input.selectedInterests, { key: evidenceKey, label }],
+    interestVector,
+    selectedInterests,
     candidates: input.candidates.map((candidate): ResourceCandidate => {
-      if (candidate.type !== 'course' || !pathwayCourses.some(pathwayCourse => (
-        matchesPathwayCourse(candidate, pathwayCourse)
-      )) || candidate.tags.some(tag => tag.key === evidenceKey)) return candidate
+      if (candidate.type !== 'course') return candidate
+      const selection = selections.find(item => matchesPathwayCourse(candidate, item.course))
+      if (selection === undefined) return candidate
+      const evidenceKey = evidenceByTrack.get(selection.track)!.key
+      if (candidate.tags.some(tag => tag.key === evidenceKey)) return candidate
       syntheticPathwayCourseIds.add(candidate.id)
+      syntheticPathwayEvidenceKeys.add(evidenceKey)
       return { ...candidate, tags: [...candidate.tags, { key: evidenceKey, weight: 3, isPrimary: true }] }
     }),
     ...(syntheticPathwayCourseIds.size === 0
       ? {}
-      : { syntheticPathwayCourseIds: Object.freeze([...syntheticPathwayCourseIds].sort((left, right) => left - right)) }),
+      : {
+          syntheticPathwayCourseIds: Object.freeze(
+            [...syntheticPathwayCourseIds].sort((left, right) => left - right),
+          ),
+          syntheticPathwayEvidenceKeys: Object.freeze(
+            [...syntheticPathwayEvidenceKeys].sort(compareText),
+          ),
+        }),
   }
 }
 
@@ -624,9 +675,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
   assertSelectedInterests(matchingInput.selectedInterests)
   assertCandidateIntegrity(matchingInput.candidates)
   const syntheticPathwayCourseIds = new Set(matchingInput.syntheticPathwayCourseIds)
-  const syntheticEvidenceKey = matchingInput.primaryTrack === undefined
-    ? null
-    : pathwayEvidenceKey(matchingInput.primaryTrack)
+  const syntheticPathwayEvidenceKeys = new Set(matchingInput.syntheticPathwayEvidenceKeys)
 
   const ranked = matchingInput.candidates
     .filter(isValidCandidate)
@@ -634,7 +683,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
       const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
       if (rawAffinity <= 0) return null
       const tag = primaryTag(candidate.tags.filter(tag => !(
-        syntheticPathwayCourseIds.has(candidate.id) && tag.key === syntheticEvidenceKey
+        syntheticPathwayCourseIds.has(candidate.id) && syntheticPathwayEvidenceKeys.has(tag.key)
       )))
       const result = toResultResource(candidate, rawAffinity, tag, matchingInput)
       if (result === null) return null
@@ -651,16 +700,23 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
   const courseCandidates = ranked.filter((item): item is RankedCandidate & {
     candidate: Extract<ResourceCandidate, { type: 'course' }>
   } => item.candidate.type === 'course')
+  const pathwayCandidates = matchingInput.primaryTrack === undefined
+    ? []
+    : selectedPathwayCourses(
+        matchingInput.primaryTrack,
+        matchingInput.secondaryTrack,
+      ).flatMap(selection => (
+        courseCandidates.find(item => matchesPathwayCourse(item.candidate, selection.course)) ?? []
+      ))
+  const foundationCap = Math.min(5, Math.max(0, 10 - pathwayCandidates.length))
   const course = matchingInput.primaryTrack === undefined
     ? selectDiverse(courseCandidates, 5)
     : Object.freeze([
         ...selectDiverse(courseCandidates.filter(item => (
           item.candidate.metadata.gradeYear <= 2
-        )), 5),
-        ...primaryTrackPathwayCourses[matchingInput.primaryTrack!].flatMap(pathwayCourse => (
-          courseCandidates.find(item => matchesPathwayCourse(item.candidate, pathwayCourse)) ?? []
-        )),
-      ].slice(0, 9))
+        )), foundationCap),
+        ...pathwayCandidates,
+      ].slice(0, 10))
   const capabilityEvidence = selectCapabilityEvidence(ranked, matchingInput.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
   const experienceProjects = selectDiverse(ranked.filter(item => (
