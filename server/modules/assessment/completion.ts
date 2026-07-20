@@ -625,6 +625,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         interestVector: scored.interestVector,
         selectedInterests: matchingEvidence,
         primaryTrack: scored.rankedTracks[0]!,
+        secondaryTrack: scored.rankedTracks[1]!,
       })
       const preparedResources = prepareResourceCandidates({
         candidates: matchingInput.candidates,
@@ -636,7 +637,9 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         interestVector: matchingInput.interestVector,
         selectedInterests: matchingInput.selectedInterests,
         primaryTrack: matchingInput.primaryTrack,
+        secondaryTrack: matchingInput.secondaryTrack,
         syntheticPathwayCourseIds: matchingInput.syntheticPathwayCourseIds,
+        syntheticPathwayEvidenceKeys: matchingInput.syntheticPathwayEvidenceKeys,
       })
       const ranked = {
         ...rawRanked,

@@ -175,6 +175,63 @@ const resourceCandidates = (): ResourceCandidate[] => [
   })),
 ]
 
+const videoArtSelections = (): AssessmentSelections => ({
+  work: ['work.video_scene'],
+  result: ['result.photo_portfolio'],
+  style: ['style.solo'],
+  career: ['career.video'],
+  careerOther: null,
+})
+
+const videoArtResourceCandidates = (): ResourceCandidate[] => [
+  ...([
+    ['카메라와 영상 기초', 1, 'camera'],
+    ['영상 프레임과 컷', 1, 'video'],
+    ['포트폴리오 기초', 1, 'portfolio'],
+    ['개인 창작 기초', 2, 'art_photo'],
+    ['리서치와 이미지', 2, 'research'],
+  ] as const).map(([title, gradeYear, key], index): ResourceCandidate => ({
+    id: 130 + index,
+    type: 'course',
+    title,
+    summary: `${title} 교과입니다.`,
+    status: 'active',
+    visibility: 'public',
+    priority: 30 - index,
+    sourceDate: '2026-07-14',
+    metadata: {
+      gradeYear,
+      term: index % 2 === 0 ? '1학기' : '2학기',
+      credits: 3,
+      goalSummary: '기초 역량을 익히는',
+    },
+    tags: [tag(key)],
+  })),
+  ...([
+    ['영상 인터뷰 내러티브 워크숍', 3, '1학기'],
+    ['영상 드론 콘텐츠 워크숍', 3, '2학기'],
+    ['영상 콘텐츠 크리에이터 워크숍', 3, '2학기'],
+    ['예술창작 프로젝트 세미나', 4, '1학기'],
+    ['예술창작 프로젝트 랩', 4, '2학기'],
+  ] as const).map(([title, gradeYear, term], index): ResourceCandidate => ({
+    id: 140 + index,
+    type: 'course',
+    title,
+    summary: `${title} 교과입니다.`,
+    status: 'active',
+    visibility: 'public',
+    priority: 20 - index,
+    sourceDate: '2026-07-14',
+    metadata: {
+      gradeYear,
+      term,
+      credits: 3,
+      goalSummary: '전공 프로젝트를 완성하는',
+    },
+    tags: [tag('unmatched_pathway')],
+  })),
+]
+
 const fullEnvironmentResourceCandidates = (): ResourceCandidate[] => {
   const candidates = resourceCandidates()
   const baseCourse = candidates[0] as Extract<ResourceCandidate, { type: 'course' }>
@@ -343,6 +400,35 @@ const createSubmit = (
 })
 
 describe('assessment completion service', () => {
+  it('uses the second ranked art-photo interest for a video-first year 4 path', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => videoArtResourceCandidates(),
+      completeAssessment,
+    }))
+
+    await service.submitAssessment({
+      catalogRevision: revision,
+      selections: videoArtSelections(),
+      idempotencyKey,
+    }, context)
+
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    expect(snapshot.rankedTracks.slice(0, 2)).toEqual(['video', 'art_photo'])
+    expect(snapshot.learningPath[2].resources.map(course => course.title)).toEqual([
+      '영상 인터뷰 내러티브 워크숍',
+      '영상 드론 콘텐츠 워크숍',
+      '영상 콘텐츠 크리에이터 워크숍',
+    ])
+    expect(snapshot.learningPath[3].resources.map(course => course.title)).toEqual([
+      '예술창작 프로젝트 세미나',
+      '예술창작 프로젝트 랩',
+    ])
+    expect(snapshot.resources.course).toHaveLength(10)
+    expect(JSON.stringify(snapshot)).not.toContain('pathway_')
+  })
+
   it('stores and reads one evidence-based environment score for current results', async () => {
     const revision = await createAssessmentCatalogRevision(catalog())
     const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
