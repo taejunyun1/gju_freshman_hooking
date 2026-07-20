@@ -59,7 +59,7 @@ const submitLogin = async (): Promise<void> => {
       <div>
         <p data-department-brand class="login-page__eyebrow">{{ DEPARTMENT_SERVICE_BRAND }}</p>
         <h1 id="login-title">이어 보던 경로로<br>돌아갈게요</h1>
-        <p class="login-page__intro">광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 임시 비밀번호를 입력해 주세요.</p>
+        <p class="login-page__intro">광주대학교 사진영상미디어학과에서 받은 휴대전화 번호와 PIN을 입력해 주세요. 처음 접속하는 경우 PIN은 입학연도 두 자리와 휴대전화 끝 네 자리입니다.</p>
 
         <form
           class="login-form"
@@ -83,12 +83,14 @@ const submitLogin = async (): Promise<void> => {
             >
           </div>
           <div class="login-form__field">
-            <label for="password">임시 비밀번호</label>
+            <label for="password">PIN</label>
             <input
               id="password"
               v-model="form.password"
               name="password"
               type="password"
+              inputmode="numeric"
+              maxlength="6"
               autocomplete="current-password"
               required
             >
@@ -106,6 +108,12 @@ const submitLogin = async (): Promise<void> => {
           >
             {{ submitting ? '로그인 중…' : '내 경로 이어 보기' }}
           </button>
+          <NuxtLink
+            class="login-form__reset"
+            to="/password/reset"
+          >
+            초기 PIN을 잊으셨나요?
+          </NuxtLink>
           </fieldset>
         </form>
       </div>
@@ -262,6 +270,13 @@ const submitLogin = async (): Promise<void> => {
   font-family: var(--font-display);
   font-weight: 750;
   cursor: pointer;
+}
+
+.login-form__reset {
+  justify-self: start;
+  color: var(--color-primary-strong);
+  font-size: 0.8125rem;
+  text-underline-offset: 0.2em;
 }
 
 .login-form__submit:disabled { cursor: wait; opacity: 0.66; }

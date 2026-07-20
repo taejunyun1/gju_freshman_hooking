@@ -151,7 +151,7 @@ onMounted(loadHistory)
       >
         PHOTO:<span>NEXT</span>
       </NuxtLink>
-      <span>RESULT ARCHIVE / 03 MAX</span>
+      <span class="history-page__account-meta">RESULT ARCHIVE / 03 MAX · <NuxtLink to="/pin">PIN / ACCOUNT</NuxtLink></span>
     </header>
 
     <section class="history-page__intro">
@@ -259,7 +259,7 @@ onMounted(loadHistory)
 
 .history-page__brand span { color: var(--color-sequence); }
 
-.history-page__masthead > span,
+.history-page__account-meta,
 .history-page__intro > p:first-child,
 .history-page__take,
 .history-page__score {
@@ -268,10 +268,12 @@ onMounted(loadHistory)
   letter-spacing: 0.07em;
 }
 
-.history-page__masthead > span {
+.history-page__account-meta {
   color: color-mix(in srgb, var(--color-ink) 58%, transparent);
   text-align: right;
 }
+
+.history-page__account-meta a { color: var(--color-primary-strong); text-underline-offset: 0.2em; }
 
 .history-page__intro { padding-block: clamp(3rem, 10vw, 5.5rem) 2rem; }
 
