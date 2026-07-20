@@ -81,7 +81,12 @@ const readSafeFailurePayload = (error: unknown): SafeFailurePayload => {
   }
 }
 
-export const wrapAdminOperationBoundaryError = (error: unknown, safeCode: string): unknown => {
+export const wrapAdminOperationBoundaryError = (
+  error: unknown,
+  safeCode: string,
+  options: { apiBoundary?: boolean } = {},
+): unknown => {
+  if (!options.apiBoundary) return new Error(safeCode)
   const payload = readSafeFailurePayload(error)
   if (payload.code || payload.status !== null || hasNetworkCause(error) || error instanceof z.ZodError) return error
   return new Error(safeCode)

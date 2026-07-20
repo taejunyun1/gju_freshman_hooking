@@ -52,7 +52,7 @@ const QueueStub = {
 
 const AppStateStub = {
   props: ['variant', 'message'],
-  template: '<div :data-state="variant">{{ message }}</div>',
+  template: '<div :data-state="variant" aria-live="polite">{{ message }}</div>',
 }
 
 const envelope = (data: AdminCounselingQueue) => ({ data, requestId: 'trace-id' })
@@ -240,7 +240,7 @@ describe('administrator counseling page', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    expect(wrapper.get('[data-state="error"]').text()).toContain('서버가 상담 목록을 처리하지 못했습니다')
+    expect(wrapper.get('[data-counseling-load-failure]').text()).toContain('서버가 상담 목록을 처리하지 못했습니다')
     expect(wrapper.text()).toContain('잠시 후 다시 시도')
     expect(wrapper.text()).not.toContain('private network detail')
     await wrapper.get('button[data-action="retry"]').trigger('click')
@@ -261,6 +261,7 @@ describe('administrator counseling page', () => {
     expect(alert.text()).toContain('다시 로그인한 뒤 작업을 시작')
     expect(alert.text()).toContain('요청 번호: counseling-req-17')
     expect(alert.attributes('aria-live')).toBe('assertive')
+    expect(alert.findAll('[aria-live]')).toHaveLength(0)
     expect(alert.text()).not.toContain('private database detail')
     expect(wrapper.find('[data-action="retry"]').exists()).toBe(false)
     await wrapper.get('[data-action="login"]').trigger('click')

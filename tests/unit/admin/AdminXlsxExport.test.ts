@@ -198,7 +198,7 @@ describe('administrator XLSX export flow', () => {
 
   it('keeps a completed job unacknowledged when browser download fails and retries only download plus acknowledgement', async () => {
     const download = vi.fn()
-      .mockRejectedValueOnce(new Error('browser-download-failed'))
+      .mockRejectedValueOnce(new TypeError('browser-download-failed'))
       .mockResolvedValueOnce(undefined)
     const fetcher = vi.fn(async (url: string) => {
       if (url === '/api/admin/export') return { data: job, requestId: 'create' }
@@ -230,6 +230,7 @@ describe('administrator XLSX export flow', () => {
       canRetry: true,
     })
     expect(exporter.state.value.error).toContain('다운로드')
+    expect(exporter.state.value.error).not.toContain('인터넷 연결')
     expect(exporter.state.value.error).not.toContain('browser-download-failed')
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/admin/export/7/complete')).toHaveLength(1)
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/admin/export/7/downloaded')).toHaveLength(0)
@@ -304,7 +305,7 @@ describe('administrator XLSX export flow', () => {
 
   it('wraps a workbook write exception with the same safe workbook guidance', async () => {
     const workbook = new ExcelJS.Workbook()
-    vi.spyOn(workbook.xlsx, 'writeBuffer').mockRejectedValueOnce(new Error('private xlsx write detail'))
+    vi.spyOn(workbook.xlsx, 'writeBuffer').mockRejectedValueOnce(new TypeError('private xlsx write detail'))
     const fetcher = vi.fn(async (url: string) => {
       if (url === '/api/admin/export') return { data: job, requestId: 'create' }
       if (url.endsWith('/students') || url.endsWith('/assessments') || url.endsWith('/counseling')) {
@@ -324,6 +325,7 @@ describe('administrator XLSX export flow', () => {
     await exporter.start({})
 
     expect(exporter.state.value.error).toContain('워크북')
+    expect(exporter.state.value.error).not.toContain('인터넷 연결')
     expect(exporter.state.value.error).not.toContain('private xlsx write detail')
   })
 

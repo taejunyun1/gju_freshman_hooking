@@ -219,7 +219,10 @@ onBeforeUnmount(() => {
       aria-live="assertive"
       aria-atomic="true"
     >
-      <AppState variant="error" :message="failure.reason" />
+      <div class="counseling-operations__failure-summary">
+        <span aria-hidden="true">!</span>
+        <p>{{ failure.reason }}</p>
+      </div>
       <p class="counseling-operations__failure-action">{{ failure.action }}</p>
       <p v-if="failure.requestId" class="counseling-operations__request-id">요청 번호: {{ failure.requestId }}</p>
       <AppButton
@@ -358,6 +361,9 @@ onBeforeUnmount(() => {
 .counseling-operations__count strong { color: var(--color-sequence); font-size: 1.5rem; }
 .counseling-operations__state { display: grid; gap: 0.75rem; justify-items: start; }
 .counseling-operations__next { display: flex; justify-content: center; }
+.counseling-operations__failure-summary { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0.75rem; width: 100%; border: 1px solid var(--color-error); border-radius: var(--radius-card); color: var(--color-error); padding: 1rem; }
+.counseling-operations__failure-summary span { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid currentcolor; border-radius: 50%; font-family: var(--font-mono); font-weight: 700; }
+.counseling-operations__failure-summary p { margin: 0; }
 .counseling-operations__failure-action,
 .counseling-operations__inline-error p,
 .counseling-operations__pagination-error p { margin: 0; color: var(--color-error); }

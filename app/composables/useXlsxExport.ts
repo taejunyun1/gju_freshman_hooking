@@ -481,7 +481,7 @@ export const useXlsxExport = (
       ))
     }
     catch (error) {
-      throw wrapAdminOperationBoundaryError(error, 'EXPORT_CONFIRMATION_FAILED')
+      throw wrapAdminOperationBoundaryError(error, 'EXPORT_CONFIRMATION_FAILED', { apiBoundary: true })
     }
     requireCurrent(version)
     pendingDownload = null
