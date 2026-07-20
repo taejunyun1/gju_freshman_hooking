@@ -23,6 +23,7 @@ const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,200}$/u
 const AUTH_CODES = new Set(['ADMIN_REQUIRED', 'ADMIN_SESSION_REQUIRED', 'MFA_REQUIRED', 'REAUTH_REQUIRED'])
 const LOCAL_CODES = new Set([
   'EXPORT_DOWNLOAD_FAILED',
+  'EXPORT_CONFIRMATION_FAILED',
   'EXPORT_PAGE_INVALID',
   'EXPORT_WORKBOOK_FAILED',
   'EXPORT_WORKBOOK_MODULE_INVALID',
@@ -30,26 +31,65 @@ const LOCAL_CODES = new Set([
 
 const asSafeString = (value: unknown): string => typeof value === 'string' ? value : ''
 const asStatus = (value: unknown): number | null => typeof value === 'number' && Number.isInteger(value) ? value : null
+const MAX_CAUSE_DEPTH = 6
+
+const isObjectLike = (value: unknown): value is Record<string, unknown> => (
+  (typeof value === 'object' && value !== null) || typeof value === 'function'
+)
+
+const hasNetworkCause = (error: unknown): boolean => {
+  let current = error
+  const seen = new Set<object>()
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (current instanceof TypeError) return true
+    if (!isObjectLike(current)) return false
+    if (seen.has(current)) return false
+    seen.add(current)
+    try {
+      current = current.cause
+    }
+    catch {
+      return false
+    }
+  }
+  return false
+}
 
 const readSafeFailurePayload = (error: unknown): SafeFailurePayload => {
   if (typeof error !== 'object' || error === null) return { code: '', requestId: null, status: null }
-  const value = error as {
-    data?: { error?: { code?: unknown }, requestId?: unknown }
-    response?: { status?: unknown, _data?: { error?: { code?: unknown }, requestId?: unknown } }
-    status?: unknown
-    statusCode?: unknown
-    message?: unknown
+  try {
+    const value = error as {
+      data?: { error?: { code?: unknown }, requestId?: unknown }
+      response?: { status?: unknown, _data?: { error?: { code?: unknown }, requestId?: unknown } }
+      status?: unknown
+      statusCode?: unknown
+      message?: unknown
+    }
+    const data = value.data ?? value.response?._data
+    const responseCode = asSafeString(data?.error?.code)
+    const localCode = asSafeString(value.message)
+    const code = responseCode || (LOCAL_CODES.has(localCode) ? localCode : '')
+    const rawRequestId = data?.requestId
+    return {
+      code,
+      requestId: typeof rawRequestId === 'string' && SAFE_REQUEST_ID.test(rawRequestId) ? rawRequestId : null,
+      status: asStatus(value.response?.status) ?? asStatus(value.status) ?? asStatus(value.statusCode),
+    }
   }
-  const data = value.data ?? value.response?._data
-  const responseCode = asSafeString(data?.error?.code)
-  const localCode = asSafeString(value.message)
-  const code = responseCode || (LOCAL_CODES.has(localCode) ? localCode : '')
-  const rawRequestId = data?.requestId
-  return {
-    code,
-    requestId: typeof rawRequestId === 'string' && SAFE_REQUEST_ID.test(rawRequestId) ? rawRequestId : null,
-    status: asStatus(value.response?.status) ?? asStatus(value.status) ?? asStatus(value.statusCode),
+  catch {
+    return { code: '', requestId: null, status: null }
   }
+}
+
+export const wrapAdminOperationBoundaryError = (error: unknown, safeCode: string): unknown => {
+  const payload = readSafeFailurePayload(error)
+  if (payload.code || payload.status !== null || hasNetworkCause(error) || error instanceof z.ZodError) return error
+  return new Error(safeCode)
+}
+
+export const requiresFreshAdminOperation = (error: unknown): boolean => {
+  const { code } = readSafeFailurePayload(error)
+  return code === 'EXPORT_CONFLICT' || code === 'EXPORT_NOT_FOUND'
 }
 
 const exportPhaseLabel = (phase: string): string => {
@@ -123,6 +163,15 @@ export const explainAdminOperationError = (
       canRetry: true,
     }
   }
+  if (payload.code === 'EXPORT_NOT_FOUND') {
+    return {
+      reason: '내보내기 작업이 만료되었거나 이미 정리되었습니다.',
+      action: '이전 파일 확인 절차를 끝내고 새 내보내기를 시작해 주세요.',
+      requestId: payload.requestId,
+      requiresLogin: false,
+      canRetry: true,
+    }
+  }
   if (payload.code === 'EXPORT_WORKBOOK_FAILED' || payload.code === 'EXPORT_WORKBOOK_MODULE_INVALID') {
     return {
       reason: '워크북 파일을 생성하지 못했습니다.',
@@ -141,6 +190,15 @@ export const explainAdminOperationError = (
       canRetry: true,
     }
   }
+  if (payload.code === 'EXPORT_CONFIRMATION_FAILED') {
+    return {
+      reason: '다운로드 완료 확인을 서버에 기록하지 못했습니다.',
+      action: '잠시 후 다시 시도하고, 반복되면 요청 번호를 운영 담당자에게 전달해 주세요.',
+      requestId: payload.requestId,
+      requiresLogin: false,
+      canRetry: true,
+    }
+  }
   if (error instanceof z.ZodError || (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'ZodError')) {
     return {
       reason: context.operation === 'counseling'
@@ -152,7 +210,7 @@ export const explainAdminOperationError = (
       canRetry: true,
     }
   }
-  if (error instanceof TypeError) {
+  if (hasNetworkCause(error)) {
     return {
       reason: context.operation === 'export'
         ? `내보내기 ${exportPhaseLabel(context.phase)} 중 인터넷 연결 또는 서버 응답을 확인할 수 없습니다.`

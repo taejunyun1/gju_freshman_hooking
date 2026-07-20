@@ -211,7 +211,14 @@ onBeforeUnmount(() => {
     </div>
 
     <AppState v-if="loading" variant="loading" message="상담 요청을 확인하고 있습니다." />
-    <div v-else-if="failure" class="counseling-operations__state">
+    <div
+      v-else-if="failure"
+      class="counseling-operations__state"
+      data-counseling-load-failure
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+    >
       <AppState variant="error" :message="failure.reason" />
       <p class="counseling-operations__failure-action">{{ failure.action }}</p>
       <p v-if="failure.requestId" class="counseling-operations__request-id">요청 번호: {{ failure.requestId }}</p>

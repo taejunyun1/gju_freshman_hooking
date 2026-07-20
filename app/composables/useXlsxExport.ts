@@ -17,7 +17,11 @@ import {
   type AdminExportStudent,
 } from '../../shared/schemas/admin-export'
 import { useAdminSessionStore } from '../stores/admin-session'
-import { explainAdminOperationError } from '../utils/admin-operation-error'
+import {
+  explainAdminOperationError,
+  requiresFreshAdminOperation,
+  wrapAdminOperationBoundaryError,
+} from '../utils/admin-operation-error'
 
 const DATE_FORMAT = 'yyyy-mm-dd hh:mm'
 const HEADER_FILL = 'FF17151D'
@@ -424,6 +428,7 @@ export const useXlsxExport = (
     })
     if (failure.requiresLogin) await dependencies.recoverAuth('/admin/login?redirect=/admin/export')
     if (!isCurrent(version)) return
+    if (pending !== null && requiresFreshAdminOperation(error)) pendingDownload = null
     patchState(version, {
       busy: false,
       canRetry: failure.canRetry,
@@ -449,7 +454,12 @@ export const useXlsxExport = (
         message: '완성된 XLSX 다운로드를 시작하고 있습니다.',
         phase: 'finalizing',
       })
-      await dependencies.download(pending.buffer, pending.filename)
+      try {
+        await dependencies.download(pending.buffer, pending.filename)
+      }
+      catch (error) {
+        throw wrapAdminOperationBoundaryError(error, 'EXPORT_DOWNLOAD_FAILED')
+      }
       requireCurrent(version)
       pending.browserDownloaded = true
     }
@@ -460,14 +470,19 @@ export const useXlsxExport = (
       phase: 'finalizing',
     })
     requireCurrent(version)
-    downloadedJobEnvelopeSchema.parse(await dependencies.fetcher(
-      `/api/admin/export/${pending.jobId}/downloaded`,
-      {
-        method: 'POST',
-        headers: headers(),
-        signal,
-      },
-    ))
+    try {
+      downloadedJobEnvelopeSchema.parse(await dependencies.fetcher(
+        `/api/admin/export/${pending.jobId}/downloaded`,
+        {
+          method: 'POST',
+          headers: headers(),
+          signal,
+        },
+      ))
+    }
+    catch (error) {
+      throw wrapAdminOperationBoundaryError(error, 'EXPORT_CONFIRMATION_FAILED')
+    }
     requireCurrent(version)
     pendingDownload = null
     patchState(version, {
@@ -508,10 +523,17 @@ export const useXlsxExport = (
       requireCurrent(version)
 
       failureCode = 'EXPORT_WORKBOOK_FAILED'
-      const { Workbook: WorkbookConstructor } = await dependencies.loadExcel()
-      requireCurrent(version)
-      const workbook = new WorkbookConstructor()
-      const writer = createAdminExportWorkbook(workbook)
+      let workbook: Workbook
+      let writer: ReturnType<typeof createAdminExportWorkbook>
+      try {
+        const { Workbook: WorkbookConstructor } = await dependencies.loadExcel()
+        requireCurrent(version)
+        workbook = new WorkbookConstructor()
+        writer = createAdminExportWorkbook(workbook)
+      }
+      catch (error) {
+        throw wrapAdminOperationBoundaryError(error, 'EXPORT_WORKBOOK_FAILED')
+      }
 
       failureCode = 'EXPORT_FETCH_FAILED'
       const rows = { students: 0, assessments: 0, counseling: 0 }
@@ -542,7 +564,13 @@ export const useXlsxExport = (
 
       failureCode = 'EXPORT_WORKBOOK_FAILED'
       patchState(version, { currentSheet: null, message: '워크북 파일을 생성하고 있습니다.', phase: 'building', rows: { ...rows } })
-      const buffer = await workbook.xlsx.writeBuffer()
+      let buffer: ExcelBuffer
+      try {
+        buffer = await workbook.xlsx.writeBuffer()
+      }
+      catch (error) {
+        throw wrapAdminOperationBoundaryError(error, 'EXPORT_WORKBOOK_FAILED')
+      }
       requireCurrent(version)
 
       failureCode = 'EXPORT_FETCH_FAILED'

@@ -16,6 +16,7 @@ describe('administrator operation error guidance', () => {
     ['EXPORT_FILTER_REQUIRED', 'export', 'collecting', '허용 범위', false, true],
     ['COUNSELING_CONFLICT', 'counseling', 'pagination', '다른 관리자', false, true],
     ['EXPORT_CONFLICT', 'export', 'finalizing', '다른 작업', false, true],
+    ['EXPORT_NOT_FOUND', 'export', 'confirming', '만료', false, true],
   ] as const)('maps %s to an actionable safe explanation', (code, operation, phase, reason, requiresLogin, canRetry) => {
     const failure = explainAdminOperationError(apiFailure(code), { operation, phase })
 
@@ -69,5 +70,16 @@ describe('administrator operation error guidance', () => {
 
     expect(JSON.stringify(failure)).not.toContain('secret sql text')
     expect(failure.canRetry).toBe(true)
+  })
+
+  it('recognizes an ofetch network cause without traversing circular or unbounded cause chains', () => {
+    const fetchError = { name: 'FetchError', cause: new TypeError('private socket failure') }
+    const circular: { cause?: unknown } = {}
+    circular.cause = circular
+    const deeplyNested = Array.from({ length: 8 }).reduce<unknown>((cause) => ({ cause }), new TypeError('too deep'))
+
+    expect(explainAdminOperationError(fetchError, { operation: 'export', phase: 'collecting' }).reason).toContain('인터넷 연결')
+    expect(explainAdminOperationError(circular, { operation: 'counseling', phase: 'loading' }).reason).not.toContain('인터넷 연결')
+    expect(explainAdminOperationError(deeplyNested, { operation: 'counseling', phase: 'loading' }).reason).not.toContain('인터넷 연결')
   })
 })

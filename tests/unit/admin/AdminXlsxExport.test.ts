@@ -229,6 +229,8 @@ describe('administrator XLSX export flow', () => {
       phase: 'failed',
       canRetry: true,
     })
+    expect(exporter.state.value.error).toContain('다운로드')
+    expect(exporter.state.value.error).not.toContain('browser-download-failed')
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/admin/export/7/complete')).toHaveLength(1)
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/admin/export/7/downloaded')).toHaveLength(0)
 
@@ -277,6 +279,90 @@ describe('administrator XLSX export flow', () => {
     await exporter.start({})
     expect(download).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/admin/export/7/downloaded')).toHaveLength(2)
+    expect(exporter.state.value.phase).toBe('completed')
+  })
+
+  it('wraps a workbook setup exception with safe workbook guidance', async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/admin/export') return { data: job, requestId: 'create' }
+      return { data: { ...job, status: 'failed' }, requestId: 'failed' }
+    })
+    const exporter = useXlsxExport({
+      download: vi.fn(),
+      fetcher,
+      getAuthorizationHeaders: () => ({ Authorization: 'Bearer token' }),
+      loadExcel: vi.fn(async () => { throw new Error('private workbook setup') }),
+      now: () => new Date(),
+      recoverAuth: vi.fn(),
+    })
+
+    await exporter.start({})
+
+    expect(exporter.state.value.error).toContain('워크북')
+    expect(exporter.state.value.error).not.toContain('private workbook setup')
+  })
+
+  it('wraps a workbook write exception with the same safe workbook guidance', async () => {
+    const workbook = new ExcelJS.Workbook()
+    vi.spyOn(workbook.xlsx, 'writeBuffer').mockRejectedValueOnce(new Error('private xlsx write detail'))
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/admin/export') return { data: job, requestId: 'create' }
+      if (url.endsWith('/students') || url.endsWith('/assessments') || url.endsWith('/counseling')) {
+        return { data: { items: [], nextCursor: null }, requestId: 'page' }
+      }
+      return { data: { ...job, status: 'failed' }, requestId: 'failed' }
+    })
+    const exporter = useXlsxExport({
+      download: vi.fn(),
+      fetcher,
+      getAuthorizationHeaders: () => ({ Authorization: 'Bearer token' }),
+      loadExcel: vi.fn(async () => ({ Workbook: (function WorkbookFactory() { return workbook }) as unknown as typeof ExcelJS.Workbook })),
+      now: () => new Date(),
+      recoverAuth: vi.fn(),
+    })
+
+    await exporter.start({})
+
+    expect(exporter.state.value.error).toContain('워크북')
+    expect(exporter.state.value.error).not.toContain('private xlsx write detail')
+  })
+
+  it.each([
+    ['EXPORT_NOT_FOUND', '만료'],
+    ['EXPORT_CONFLICT', '다른 작업'],
+  ])('starts a new export after %s prevents download acknowledgement', async (code, reason) => {
+    let createCount = 0
+    let downloadedCount = 0
+    const download = vi.fn()
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/admin/export') {
+        createCount += 1
+        return { data: { ...job, id: createCount }, requestId: `create-${createCount}` }
+      }
+      if (url.endsWith('/students') || url.endsWith('/assessments') || url.endsWith('/counseling')) {
+        return { data: { items: [], nextCursor: null }, requestId: 'page' }
+      }
+      if (url.endsWith('/complete')) return { data: { ...job, status: 'completed' }, requestId: 'complete' }
+      downloadedCount += 1
+      if (downloadedCount === 1) throw { data: { error: { code }, requestId: 'expired-export' } }
+      return { data: { ...job, status: 'completed', downloadedAt: '2026-07-16T02:06:00.000Z' }, requestId: 'downloaded' }
+    })
+    const exporter = useXlsxExport({
+      download,
+      fetcher,
+      getAuthorizationHeaders: () => ({ Authorization: 'Bearer token' }),
+      loadExcel: vi.fn(async () => ({ Workbook: ExcelJS.Workbook })),
+      now: () => new Date(),
+      recoverAuth: vi.fn(),
+    })
+
+    await exporter.start({})
+    expect(exporter.state.value.error).toContain(reason)
+    expect(exporter.state.value.requestId).toBe('expired-export')
+    await exporter.start({})
+
+    expect(createCount).toBe(2)
+    expect(download).toHaveBeenCalledTimes(2)
     expect(exporter.state.value.phase).toBe('completed')
   })
 
