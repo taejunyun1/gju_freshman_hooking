@@ -214,6 +214,26 @@ const categoryMatch = (
   ) / totalWeight
 }
 
+const strongestCategoryMatch = (
+  student: ParsedStudent,
+  tags: readonly ParsedTag[],
+  category: TagCategory,
+): number => tags
+  .filter(tag => tag.category === category && tag.weight > 0)
+  .reduce((strongest, tag) => Math.max(strongest, signalForTag(student, tag)), 0)
+
+const specialistScoringCategories = new Set<TagCategory>(['specialist', 'result', 'career'])
+
+const countSpecialistEvidence = (
+  student: ParsedStudent,
+  tags: readonly ParsedTag[],
+): number => new Set(tags
+  .filter(tag => specialistScoringCategories.has(tag.category)
+    && tag.weight > 0
+    && signalForTag(student, tag) > 0
+    && student.selectedLabels[tag.key] !== undefined)
+  .map(tag => tag.key)).size
+
 const assertUniqueInput = (input: ParsedInput): void => {
   const facultyIds = new Set<number>()
   for (const candidate of input.faculty) {
@@ -586,13 +606,15 @@ const resultFor = <Role extends 'primary' | 'backup' | 'specialist'>(
 interface SpecialistScore {
   readonly candidate: ParsedFaculty
   readonly rawScore: number
+  readonly qualificationScore: number
+  readonly evidenceCount: number
 }
 
 const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): SpecialistScore => {
   const tags = [...candidate.tags].sort(compareTags)
-  const specialist = categoryMatch(student, tags, 'specialist')
-  const result = categoryMatch(student, tags, 'result')
-  const career = categoryMatch(student, tags, 'career')
+  const specialist = strongestCategoryMatch(student, tags, 'specialist')
+  const result = strongestCategoryMatch(student, tags, 'result')
+  const career = strongestCategoryMatch(student, tags, 'career')
   const components = [
     { category: 'specialist' as const, score: specialist, weight: 0.50 },
     { category: 'result' as const, score: result, weight: 0.30 },
@@ -605,7 +627,14 @@ const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): Spec
     (sum, component) => sum + component.score * component.weight,
     0,
   )
-  return { candidate, rawScore: availableWeight === 0 ? 0 : weightedScore / availableWeight }
+  const evidenceCount = countSpecialistEvidence(student, tags)
+  const normalizedScore = availableWeight === 0 ? 0 : weightedScore / availableWeight
+  return {
+    candidate,
+    rawScore: normalizedScore,
+    qualificationScore: evidenceCount >= 2 ? Math.max(50, normalizedScore) : normalizedScore,
+    evidenceCount,
+  }
 }
 
 const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean => (
@@ -656,9 +685,11 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
       && (candidate.employmentType === 'adjunct' || candidate.employmentType === 'practitioner')
       && eligibleSpecialistIds.has(candidate.id))
     .map(candidate => scoreSpecialist(input.student, candidate))
-    .filter(candidate => candidate.rawScore >= 50)
+    .filter(candidate => candidate.qualificationScore >= 50)
     .sort((left, right) => (
-      right.rawScore - left.rawScore
+      right.qualificationScore - left.qualificationScore
+      || right.rawScore - left.rawScore
+      || right.evidenceCount - left.evidenceCount
       || right.candidate.priority - left.candidate.priority
       || left.candidate.id - right.candidate.id
     ))

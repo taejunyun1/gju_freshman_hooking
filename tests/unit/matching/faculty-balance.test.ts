@@ -155,6 +155,23 @@ const optionsByGroup = Object.fromEntries(
 ) as Record<QuestionGroup, AssessmentOption[]>
 
 describe('canonical faculty recommendation balance', () => {
+  it('links the two documentary-video time instructors for the reproduced multi-selection', () => {
+    const reproducedSelections: AssessmentSelections = {
+      work: ['work.photo_everyday', 'work.video_post'],
+      result: ['result.documentary', 'result.brand_video'],
+      style: ['style.solo', 'style.studio'],
+      career: ['career.photo', 'career.video'],
+      careerOther: null,
+    }
+
+    const result = recommendation(reproducedSelections, 3)
+
+    expect(result.primary.name).toBe('김사라')
+    expect(result.backup.name).toBe('윤태준')
+    expect(result.specialists.map(person => person.name)).toEqual(['김태현', '곽동욱'])
+    expect(result.specialists.map(person => person.title)).toEqual(['시간강사', '겸임교수'])
+  })
+
   it('routes the three clear questionnaire expertise paths independently of distribution key', () => {
     const clearPaths = [
       {

@@ -540,6 +540,39 @@ describe('recommendFaculty', () => {
     expect(result.specialists.map(({ id }) => id)).not.toContain(71)
   })
 
+  it('전문가의 선택하지 않은 세부 태그가 가장 강한 검증 분야를 희석하지 않는다', () => {
+    const faculty = facultyFixture().slice(0, 3)
+    faculty.push({
+      ...clone(facultyFixture()[4]),
+      id: 72,
+      name: '복합분야 전문가',
+      tags: [
+        tag('focused_specialist', '선택한 전문분야', 'specialist'),
+        tag('weak_specialist_a', '선택하지 않은 전문분야 A', 'specialist'),
+        tag('weak_specialist_b', '선택하지 않은 전문분야 B', 'specialist'),
+        tag('weak_specialist_c', '선택하지 않은 전문분야 C', 'specialist'),
+        tag('focused_result', '선택한 결과물', 'result', 2),
+        tag('weak_result_a', '선택하지 않은 결과물 A', 'result', 2),
+        tag('weak_result_b', '선택하지 않은 결과물 B', 'result', 2),
+        tag('weak_result_c', '선택하지 않은 결과물 C', 'result', 2),
+      ],
+    })
+    const evidence = student(
+      { ...zeroTracks(), video: 100 },
+      { focused_specialist: 0.8, focused_result: 0.8 },
+      { focused_specialist: '선택한 전문분야', focused_result: '선택한 결과물' },
+    )
+
+    const result = recommend(
+      evidence,
+      faculty,
+      [{ primaryFacultyId: 2, specialistFacultyId: 72, tagKey: 'focused_specialist', priority: 1 }],
+    )
+
+    expect(result.primary.id).toBe(2)
+    expect(result.specialists.map(({ id }) => id)).toContain(72)
+  })
+
   it('결과는 canonical 필드와 public 연락처만 노출하고 배정 표현을 쓰지 않는다', () => {
     const result = recommend(videoDroneStudent())
 
