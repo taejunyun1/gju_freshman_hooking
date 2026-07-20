@@ -14,12 +14,13 @@
 - Exclude a category from the denominator only when the candidate has no positive-weight tag in that category; a present category with no student signal remains zero.
 - Keep the specialist threshold at `rawScore >= 50` and the result limit at two people.
 - Count only distinct positive-signal keys with a selected questionnaire label in the specialist, result, or career category; two or more such keys raise a lower calculated score to exactly 50, while one weak key receives no floor.
-- Keep deterministic ordering by score, distinct verified evidence count, priority, then ID.
+- Keep deterministic ordering by qualification score, underlying calculated score, distinct verified evidence count, priority, then ID.
 - Keep eligibility limited to active `adjunct|practitioner` candidates with `consultationRole: specialist`, an applicable primary/null link, and positive link evidence.
 - Do not change primary or backup professor scoring, distribution, output schema, reason copy, or contact visibility.
 - Do not add a database migration, result-page read, dependency, static fallback card, or historical-result backfill.
 - Preserve the existing blue rounded PHOTO:NEXT card hierarchy; `app/components/result/FacultyRecommendation.vue` requires no change.
-- The reproduced multi-selection must return `김태현` then `유별남` when `김사라` is the selected primary.
+- The reproduced multi-selection must return `김태현` then `곽동욱` when `김사라` is the selected primary.
+- Keep the existing compact supporting-card rendering and the data/schema cap of two instructors; supporting cards remain smaller than primary and backup professor cards.
 
 ---
 
@@ -59,8 +60,8 @@ it('links the two documentary-video time instructors for the reproduced multi-se
 
   expect(result.primary.name).toBe('김사라')
   expect(result.backup.name).toBe('윤태준')
-  expect(result.specialists.map(person => person.name)).toEqual(['김태현', '유별남'])
-  expect(result.specialists.map(person => person.title)).toEqual(['시간강사', '시간강사'])
+  expect(result.specialists.map(person => person.name)).toEqual(['김태현', '곽동욱'])
+  expect(result.specialists.map(person => person.title)).toEqual(['시간강사', '겸임교수'])
 })
 ```
 
@@ -148,6 +149,7 @@ Extend `SpecialistScore` and replace `scoreSpecialist()` with this complete spec
 interface SpecialistScore {
   readonly candidate: ParsedFaculty
   readonly rawScore: number
+  readonly qualificationScore: number
   readonly evidenceCount: number
 }
 
@@ -172,13 +174,14 @@ const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): Spec
   const normalizedScore = availableWeight === 0 ? 0 : weightedScore / availableWeight
   return {
     candidate,
-    rawScore: evidenceCount >= 2 ? Math.max(50, normalizedScore) : normalizedScore,
+    rawScore: normalizedScore,
+    qualificationScore: evidenceCount >= 2 ? Math.max(50, normalizedScore) : normalizedScore,
     evidenceCount,
   }
 }
 ```
 
-In the specialist sort, insert `right.evidenceCount - left.evidenceCount` immediately after raw score and before candidate priority. Do not change `categoryMatch()` or the four calls inside `scorePrimary()`.
+Filter on `qualificationScore >= 50`. Sort first by `qualificationScore`, then by the underlying `rawScore`, then by `evidenceCount`, candidate priority, and ID. Do not change `categoryMatch()` or the four calls inside `scorePrimary()`.
 
 - [ ] **Step 5: Run the focused matcher suite and verify GREEN**
 
@@ -191,7 +194,7 @@ corepack pnpm exec vitest run --project unit \
   tests/unit/components/FacultyRecommendation.test.ts
 ```
 
-Expected: all three files pass. The reproduced result returns `김태현`, `유별남`; the existing 김명우 case remains inside the two-person cap; and the existing exact-50 inclusion, single-signal 49.9 exclusion, present-but-unselected result-category penalty, link eligibility, public-contact, primary balance, and compact-card tests remain green.
+Expected: all three files pass. The reproduced result returns `김태현`, `곽동욱`; the existing 김명우 case remains inside the two-person cap; and the existing exact-50 inclusion, single-signal 49.9 exclusion, present-but-unselected result-category penalty, link eligibility, public-contact, primary balance, and compact-card tests remain green.
 
 - [ ] **Step 6: Run static verification**
 
@@ -231,6 +234,6 @@ After Task 1 passes its independent spec-and-quality review and the whole-branch
 1. Run `corepack pnpm test`, `corepack pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm build`, and `git diff --check`.
 2. Push `feature/photo-next-mvp` without force and run `node scripts/deploy-photo-next-release.mjs`.
 3. Confirm staging and production `/api/health` report the released commit.
-4. Use the existing dummy student `010-9000-0002` without exposing its PIN in logs, resubmit the reproduced selections, and verify the newly created result API returns `김태현`, `유별남` in that order.
+4. Use the existing dummy student `010-9000-0002` without exposing its PIN in logs, resubmit the reproduced selections, and verify the newly created result API returns `김태현`, `곽동욱` in that order.
 5. In a real mobile browser, verify both compact instructor cards render below the primary/backup cards, retain the example grid beneath them, create no horizontal overflow, and emit no console errors or warnings.
 6. Do not update or backfill any historical result row; only the new dummy result is allowed to change during QA.

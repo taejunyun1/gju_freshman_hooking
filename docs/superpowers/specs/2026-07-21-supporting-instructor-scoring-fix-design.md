@@ -42,10 +42,12 @@ Keep every existing boundary unchanged:
 - the link tag must have positive student evidence
 - the final score must remain at least 50
 - return at most two specialists
-- retain deterministic score ordering, then prefer more distinct verified evidence keys before priority and ID
+- retain deterministic qualification-score ordering, then compare the underlying calculated score, distinct verified evidence count, priority, and ID
 - do not change primary or backup professor scoring
 
-For the reproduced selection, 김태현 has six distinct verified keys and 유별남 has two. Both reach the 50-point boundary, and the evidence-count tie-break returns 김태현 시간강사 before 유별남 시간강사. Their cards retain the existing compact hierarchy beneath the primary and backup professor cards.
+Keep both the calculated score and the qualification score. Multiple verified keys can raise only the qualification score to 50; ranking still compares the underlying calculated score before evidence count and priority. This prevents the 50-point floor from erasing the difference between a stronger and weaker match.
+
+For the reproduced selection, 김태현 has six distinct verified keys with a 45-point calculated score, 곽동욱 has six with 30 points, and 유별남 has two with 26.9 points. All three qualify at 50, but the two-card cap and calculated-score ordering return 김태현 시간강사 before 곽동욱 겸임교수. Their cards retain the existing compact hierarchy beneath the primary and backup professor cards.
 
 ## Stored-result boundary
 
@@ -63,7 +65,7 @@ No new visual system is introduced. Continue using the existing blue, rounded PH
 
 ## Tests and verification
 
-1. Add a matcher regression test using the exact reproduced questionnaire selections and canonical seeded faculty data. It must fail before the correction because specialists are empty, then pass with 김태현 and 유별남 returned in deterministic order.
+1. Add a matcher regression test using the exact reproduced questionnaire selections and canonical seeded faculty data. It must fail before the correction because specialists are empty, then pass with 김태현 and 곽동욱 returned in deterministic order.
 2. Add a focused test proving unrelated specialties do not dilute a candidate's strongest verified subfield.
 3. Preserve the existing exact-50 inclusion and below-50 exclusion for single-signal candidates, plus the unselected-category penalty, link eligibility, two-person cap, and primary/backup balance tests.
 4. Run focused matcher and result-component tests, then the full unit suite, typecheck, lint, and production build.
@@ -72,6 +74,7 @@ No new visual system is introduced. Continue using the existing blue, rounded PH
 ## Out of scope
 
 - displaying the full instructor directory in every result
+- displaying more than two supporting instructors in a result
 - lowering or bypassing the 50-point threshold
 - adding fallback cards unrelated to student evidence
 - changing full-time professor distribution
