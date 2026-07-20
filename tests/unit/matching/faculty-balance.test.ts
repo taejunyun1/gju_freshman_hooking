@@ -194,6 +194,7 @@ describe('canonical faculty recommendation balance', () => {
   })
 
   it('keeps professors as primary and backup while linking time instructors to declared evidence', () => {
+    const candidatesById = new Map(activeFaculty().map(person => [person.id, person]))
     const cases: Array<{ name: string, evidence: FacultyStudentEvidence }> = [
       { name: '정한결', evidence: { trackScores: { documentary: 0, art_photo: 100, commercial: 0, video: 0 }, interestVector: { art_photo: 1, ai: 1, media_art: 1, installation: 1 }, selectedLabels: { art_photo: '예술사진', ai: 'AI 이미지', media_art: '미디어아트', installation: '설치' } } },
       { name: '유별남', evidence: { trackScores: { documentary: 100, art_photo: 0, commercial: 0, video: 0 }, interestVector: { documentary: 1, record: 1, photo_story: 1 }, selectedLabels: { documentary: '다큐멘터리', record: '기록', photo_story: '포토스토리' } } },
@@ -208,7 +209,13 @@ describe('canonical faculty recommendation balance', () => {
 
       expect(result.primary.title).toBe('교수')
       expect(result.backup.title).toBe('교수')
+      for (const selected of [result.primary, result.backup]) {
+        const candidate = candidatesById.get(selected.id)
+        expect(candidate?.employmentType).toBe('full_time')
+        expect(candidate?.consultationRole).toBe('primary')
+      }
       expect(result.specialists.map(person => person.name)).toContain(testCase.name)
+      expect(result.specialists.length).toBeLessThanOrEqual(2)
       expect([result.primary.name, result.backup.name]).not.toContain(testCase.name)
     }
   })

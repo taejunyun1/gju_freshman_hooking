@@ -69,7 +69,7 @@ select is(
 select is((select count(*)::integer from public.faculty), 10, 'ten faculty profiles are seeded');
 select is((select count(*)::integer from public.faculty where employment_type = 'full_time' and consultation_role = 'primary'), 3, 'three full-time primary faculty are seeded');
 select is((select count(*)::integer from public.faculty where employment_type = 'adjunct' and consultation_role = 'specialist'), 3, 'three adjunct specialists are seeded');
-select is((select count(*)::integer from public.faculty where employment_type = 'practitioner' and consultation_role = 'specialist' and title = '시간강사'), 4, 'four time instructors are practitioner specialists');
+select is((select count(*)::integer from public.faculty where employment_type = 'practitioner' and consultation_role = 'specialist' and title = '시간강사' and weekly_capacity = 0 and source_date = date '2026-07-20'), 4, 'four time instructors are zero-capacity 2026-07-20 practitioner specialists');
 select is((select count(*)::integer from public.faculty where status = 'draft'), 10, 'all faculty remain draft');
 select is(
   (select count(*)::integer from public.faculty
