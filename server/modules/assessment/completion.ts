@@ -636,6 +636,7 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
         interestVector: matchingInput.interestVector,
         selectedInterests: matchingInput.selectedInterests,
         primaryTrack: matchingInput.primaryTrack,
+        syntheticPathwayCourseIds: matchingInput.syntheticPathwayCourseIds,
       })
       const ranked = {
         ...rawRanked,

@@ -84,6 +84,7 @@ export interface RankResourcesInput {
   readonly selectedInterests: readonly SelectedInterestEvidence[]
   readonly candidates: readonly ResourceCandidate[]
   readonly primaryTrack?: TrackKey
+  readonly syntheticPathwayCourseIds?: readonly number[]
 }
 
 export interface ResourceCategoryFits {
@@ -172,6 +173,7 @@ export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResource
   const pathwayCourses = primaryTrackPathwayCourses[input.primaryTrack]
   const label = input.selectedInterests[0]?.label
   if (label === undefined) throw new Error('Selected interest label evidence is required')
+  const syntheticPathwayCourseIds = new Set(input.syntheticPathwayCourseIds)
 
   return {
     ...input,
@@ -181,14 +183,16 @@ export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResource
     selectedInterests: input.selectedInterests.some(item => item.key === evidenceKey)
       ? input.selectedInterests
       : [...input.selectedInterests, { key: evidenceKey, label }],
-    candidates: input.candidates.map((candidate): ResourceCandidate => (
-      candidate.type !== 'course' || !pathwayCourses.some(pathwayCourse => (
+    candidates: input.candidates.map((candidate): ResourceCandidate => {
+      if (candidate.type !== 'course' || !pathwayCourses.some(pathwayCourse => (
         matchesPathwayCourse(candidate, pathwayCourse)
-      ))
-        || candidate.tags.some(tag => tag.key === evidenceKey)
-        ? candidate
-        : { ...candidate, tags: [...candidate.tags, { key: evidenceKey, weight: 3, isPrimary: true }] }
-    )),
+      )) || candidate.tags.some(tag => tag.key === evidenceKey)) return candidate
+      syntheticPathwayCourseIds.add(candidate.id)
+      return { ...candidate, tags: [...candidate.tags, { key: evidenceKey, weight: 3, isPrimary: true }] }
+    }),
+    ...(syntheticPathwayCourseIds.size === 0
+      ? {}
+      : { syntheticPathwayCourseIds: Object.freeze([...syntheticPathwayCourseIds].sort((left, right) => left - right)) }),
   }
 }
 
@@ -619,13 +623,19 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
   assertInterestVector(matchingInput.interestVector)
   assertSelectedInterests(matchingInput.selectedInterests)
   assertCandidateIntegrity(matchingInput.candidates)
+  const syntheticPathwayCourseIds = new Set(matchingInput.syntheticPathwayCourseIds)
+  const syntheticEvidenceKey = matchingInput.primaryTrack === undefined
+    ? null
+    : pathwayEvidenceKey(matchingInput.primaryTrack)
 
   const ranked = matchingInput.candidates
     .filter(isValidCandidate)
     .map((candidate): RankedCandidate | null => {
       const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
       if (rawAffinity <= 0) return null
-      const tag = primaryTag(candidate.tags.filter(tag => !tag.key.startsWith('pathway_')))
+      const tag = primaryTag(candidate.tags.filter(tag => !(
+        syntheticPathwayCourseIds.has(candidate.id) && tag.key === syntheticEvidenceKey
+      )))
       const result = toResultResource(candidate, rawAffinity, tag, matchingInput)
       if (result === null) return null
       return {

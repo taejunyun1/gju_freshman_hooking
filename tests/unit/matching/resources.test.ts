@@ -178,6 +178,22 @@ describe('resource matching', () => {
     expect(JSON.stringify(ranked)).not.toContain('pathway_')
   })
 
+  it('preserves a positive original pathway tag without a primary track', () => {
+    expect(() => rankResources({
+      interestVector: { pathway_existing: 1 },
+      selectedInterests: [{ key: 'pathway_existing', label: '기존 경로 관심' }],
+      candidates: [course(1, { tags: [tag('pathway_existing')] })],
+    })).not.toThrow()
+
+    const ranked = rankResources({
+      interestVector: { pathway_existing: 1 },
+      selectedInterests: [{ key: 'pathway_existing', label: '기존 경로 관심' }],
+      candidates: [course(1, { tags: [tag('pathway_existing')] })],
+    })
+    expect(ranked.course).toHaveLength(1)
+    expect(ranked.course[0]?.primaryTag).toBe('pathway_existing')
+  })
+
   it.each([
     ['art_photo', ['사물,데이터,이미지 워크숍', '사진과 장소 그리고 콘텍스트 워크숍', '예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']],
     ['documentary', ['포토 스토리 워크숍', '포토에세이 워크숍', '다큐멘터리 세미나', '포스트 다큐멘터리 랩']],
