@@ -5,6 +5,7 @@ import {
 } from './support/commercial-matching-fixture'
 import { provisionLocalRosterStudent } from './support/local-roster-student-fixture'
 import { registerAndLoginStudent, uniqueAssessmentPhone } from './support/student'
+import type { CareerResultResource, ResultSnapshot } from '../../shared/types/result'
 
 const canonicalResultUrl = /\/result\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const canonicalPublicId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
@@ -248,10 +249,31 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
     const response = await fetch(path)
     return response.json()
   }, `/api/result/${publicId}`) as {
-    data: { careerNarrative: { source: string } }
+    data: ResultSnapshot
     requestId: string
   }
-  resultEnvelope.data.careerNarrative.source = 'openai'
+  const careerFixtures: CareerResultResource[] = Array.from({ length: 4 }, (_, index) => ({
+    id: 9_501 + index,
+    type: 'career',
+    title: `졸업생 진로 사례 ${index + 1}`,
+    summary: `추천 순서 ${index + 1}번째 졸업생 진로 사례입니다.`,
+    sourceDate: '2026-07-20',
+    affinity: 88 - index,
+    primaryTag: 'commercial',
+    connectionReason: `선택한 관심이 졸업생 진로 사례 ${index + 1}과 연결됩니다.`,
+    displayMetadata: {},
+  }))
+  resultEnvelope.data = {
+    ...resultEnvelope.data,
+    careerNarrative: {
+      ...resultEnvelope.data.careerNarrative,
+      source: 'openai',
+    },
+    resources: {
+      ...resultEnvelope.data.resources,
+      career: careerFixtures,
+    },
+  }
   await page.route(`**/api/result/${publicId}`, async route => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify(resultEnvelope),
@@ -259,6 +281,34 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
   }))
   await page.reload()
   await expect(narrative.locator('[data-narrative-slot]')).toHaveCount(4)
+  const careerRecommendations = outcomes.locator('[data-career-recommendations]')
+  await expect(careerRecommendations.locator('[data-career-featured]')).toHaveCount(2)
+  await expect(careerRecommendations.locator('[data-career-compact]')).toHaveCount(2)
+  expect(await careerRecommendations.locator('[data-career-featured]').evaluateAll(items => (
+    items.map(item => item.textContent)
+  ))).toEqual([
+    expect.stringContaining('졸업생 진로 사례 1'),
+    expect.stringContaining('졸업생 진로 사례 2'),
+  ])
+  expect(await careerRecommendations.locator('[data-career-compact]').evaluateAll(items => (
+    items.map(item => item.textContent)
+  ))).toEqual([
+    expect.stringContaining('졸업생 진로 사례 3'),
+    expect.stringContaining('졸업생 진로 사례 4'),
+  ])
+  const alumniArchiveLinks = careerRecommendations.locator(
+    'a[href="https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link"]',
+  )
+  await expect(alumniArchiveLinks).toHaveCount(3)
+  expect(await alumniArchiveLinks.evaluateAll(links => links.map(link => ({
+    rel: link.getAttribute('rel'),
+    target: link.getAttribute('target'),
+    text: link.textContent,
+  })))).toEqual(Array.from({ length: 3 }, () => ({
+    rel: 'noopener noreferrer',
+    target: '_blank',
+    text: expect.stringContaining('새 창'),
+  })))
   const openaiBox = await narrative.boundingBox()
   expect(openaiBox).not.toBeNull()
   expect(Math.abs(openaiBox!.width - deterministicBox!.width)).toBeLessThanOrEqual(1)

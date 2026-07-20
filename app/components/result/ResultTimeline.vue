@@ -5,6 +5,7 @@ import { trackLabels } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CounselingCTA from '../counseling/CounselingCTA.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
+import CareerRecommendations from './CareerRecommendations.vue'
 import CareerNarrative from './CareerNarrative.vue'
 import FacultyRecommendation from './FacultyRecommendation.vue'
 import InterestClip from './InterestClip.vue'
@@ -144,20 +145,11 @@ const hasOutcomes = computed(() => (
             class="result-timeline__empty"
           >확인된 학과 데이터를 준비 중입니다</p>
         </div>
-        <template v-if="hasOutcomes">
         <div class="result-timeline__outcome-lane">
           <h3>연결 진로</h3>
-          <ResourceCard
-            v-for="resource in snapshot.resources.career"
-            :key="resource.id"
-            :resource="resource"
-            variant="outcome"
-          />
-          <p
-            v-if="snapshot.resources.career.length === 0"
-            class="result-timeline__empty"
-          >확인된 학과 데이터를 준비 중입니다</p>
+          <CareerRecommendations :career="snapshot.resources.career" />
         </div>
+        <template v-if="hasOutcomes">
         <div class="result-timeline__outcome-lane result-timeline__outcome-lane--activities">
           <h3>비교과·학생 활동</h3>
           <ResourceCard

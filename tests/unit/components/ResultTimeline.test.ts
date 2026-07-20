@@ -26,6 +26,21 @@ const resultComponentSource = () => {
 
 const trackScoreSource = () => readFileSync('app/components/result/TrackScore.vue', 'utf8')
 
+const withCareerRecommendations = (count: number): ResultSnapshot => {
+  const snapshot = JSON.parse(JSON.stringify(makeResultSnapshot())) as ResultSnapshot & {
+    resources: ResultSnapshot['resources'] & {
+      career: Array<ResultSnapshot['resources']['career'][number]>
+    }
+  }
+  const base = snapshot.resources.career[0]!
+  snapshot.resources.career = Array.from({ length: count }, (_, index) => ({
+    ...base,
+    id: base.id + index,
+    title: `졸업생 진로 사례 ${index + 1}`,
+  }))
+  return snapshot
+}
+
 describe('result master sequence', () => {
   beforeEach(() => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({ data: { accepted: true }, requestId: 'request-id' }))
@@ -189,6 +204,50 @@ describe('result master sequence', () => {
     expect(orderedSections.indexOf('outcomes')).toBeLessThan(orderedSections.indexOf('capability-evidence'))
     expect(wrapper.find('ol[data-learning-years] [data-capability-evidence]').exists()).toBe(false)
   })
+
+  it('keeps the first two career recommendations featured and links two compact follow-ups in order', async () => {
+    const wrapper = await mountTimeline(withCareerRecommendations(4))
+    const featured = wrapper.findAll('[data-career-featured]')
+    const compact = wrapper.findAll('[data-career-compact]')
+
+    expect(featured).toHaveLength(2)
+    expect(featured.map(item => item.text())).toEqual([
+      expect.stringContaining('졸업생 진로 사례 1'),
+      expect.stringContaining('졸업생 진로 사례 2'),
+    ])
+    expect(compact).toHaveLength(2)
+    expect(compact.map(item => item.text())).toEqual([
+      expect.stringContaining('졸업생 진로 사례 3'),
+      expect.stringContaining('졸업생 진로 사례 4'),
+    ])
+
+    const archiveLinks = wrapper.findAll(
+      'a[href="https://gjphoto94.notion.site/2a163cb8bb55800c9057c4973527db76?source=copy_link"]',
+    )
+    expect(archiveLinks).toHaveLength(3)
+    for (const link of archiveLinks) {
+      expect(link.attributes('target')).toBe('_blank')
+      expect(link.attributes('rel')?.split(/\s+/u).sort()).toEqual(['noopener', 'noreferrer'])
+      expect(link.text()).toContain('새 창')
+    }
+  })
+
+  it.each([
+    [0, 0, 0],
+    [1, 1, 0],
+    [2, 2, 0],
+    [4, 2, 2],
+  ])(
+    'renders %i career recommendations as %i featured and %i compact items without breaking the archive entry point',
+    async (count, featuredCount, compactCount) => {
+      const snapshot = count === 0 ? makeEmptyResultSnapshot() : withCareerRecommendations(count)
+      const wrapper = await mountTimeline(snapshot)
+
+      expect(wrapper.findAll('[data-career-featured]')).toHaveLength(featuredCount)
+      expect(wrapper.findAll('[data-career-compact]')).toHaveLength(compactCount)
+      expect(wrapper.get('[data-career-archive-link]').text()).toContain('새 창')
+    },
+  )
 
   it('shows interest-based examples for specialty and portfolio paths', async () => {
     const wrapper = await mountTimeline()
