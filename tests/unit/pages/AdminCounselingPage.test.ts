@@ -7,7 +7,6 @@ import type { AdminCounselingQueue } from '../../../shared/schemas/counseling'
 const item = {
   id: '11111111-1111-4111-8111-111111111111',
   assessmentPublicId: '22222222-2222-4222-8222-222222222222',
-  campaignId: 3,
   primaryTrack: 'art_photo',
   secondaryTrack: 'video',
   selectedWorkLabels: ['전시 프로젝트'],

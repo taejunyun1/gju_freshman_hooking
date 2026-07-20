@@ -35,7 +35,6 @@ const filterSnapshot = {
   stage: 'high3' as const,
   region: 'gwangju' as const,
   track: 'art_photo' as const,
-  campaignId: 7,
   counselingStatus: 'new' as const,
   dateFrom: '2026-07-01',
   dateTo: '2026-07-16',
@@ -89,12 +88,30 @@ describe('administrator export contracts', () => {
       { query: '010-1234-5678' },
       { school: '010(1234)5678' },
       { phoneList: ['01012345678'] },
-      { campaignId: Number.MAX_SAFE_INTEGER + 1 },
+      { campaignId: 7 },
       { dateFrom: '2026-02-30' },
     ]) {
       await expect(parseExportCreateBody('application/json', JSON.stringify({ filters })))
         .rejects.toMatchObject({ code: 'EXPORT_INVALID' })
     }
+  })
+
+  it('decodes historical export snapshots with a retired campaign field without re-exposing or applying it', async () => {
+    const listStudents = vi.fn(async () => [])
+    const service = createAdminExportService(dependencies({
+      listStudents,
+      loadOwnedJob: vi.fn(async () => storedJob({
+        filterSnapshot: { ...filterSnapshot, campaignId: 7 },
+      })),
+    }))
+
+    await service.students(71, undefined, { adminUserId: admin.userId })
+
+    expect(listStudents).toHaveBeenCalledWith(expect.objectContaining({
+      filters: filterSnapshot,
+      jobId: 71,
+    }))
+    expect(listStudents.mock.calls[0]?.[0].filters).not.toHaveProperty('campaignId')
   })
 
   it('round-trips an exact microsecond created_at/id cursor and rejects non-canonical variants', () => {

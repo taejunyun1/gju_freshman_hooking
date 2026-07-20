@@ -34,7 +34,6 @@ export const adminExportFilterSchema = z.object({
   region: regionSchema.optional(),
   school: inputText(40).refine(excludesRawPhone).optional(),
   track: z.enum(trackKeys).optional(),
-  campaignId: safeIdSchema.optional(),
   counselingStatus: counselingStatusSchema.optional(),
   exportSegment: adminExportSegmentSchema.optional(),
   assignedFaculty: adminExportAssignedFacultySchema.optional(),

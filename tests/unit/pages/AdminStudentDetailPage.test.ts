@@ -24,7 +24,6 @@ const detail: AdminStudentDetail = {
     {
       id: '11111111-1111-4111-8111-111111111111',
       completedAt: '2026-07-15T01:00:00.000Z',
-      campaignId: 9,
       primaryTrack: 'commercial',
       secondaryTrack: 'art_photo',
       trackScores: { documentary: 40, art_photo: 80, commercial: 90, video: 30 },
@@ -32,7 +31,6 @@ const detail: AdminStudentDetail = {
     {
       id: '22222222-2222-4222-8222-222222222222',
       completedAt: '2026-07-14T01:00:00.000Z',
-      campaignId: null,
       primaryTrack: 'art_photo',
       secondaryTrack: 'documentary',
       trackScores: { documentary: 65, art_photo: 88, commercial: 30, video: 40 },

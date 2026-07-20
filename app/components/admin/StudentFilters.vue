@@ -125,10 +125,6 @@ onBeforeUnmount(clearSearchTimer)
       </select>
     </label>
     <label>
-      <span>캠페인 ID</span>
-      <input v-model="local.campaign" name="campaign" type="number" inputmode="numeric" min="1" step="1" placeholder="전체">
-    </label>
-    <label>
       <span>참여 시작일</span>
       <input v-model="local.dateFrom" name="dateFrom" type="date">
     </label>

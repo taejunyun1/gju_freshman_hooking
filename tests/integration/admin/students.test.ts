@@ -176,7 +176,7 @@ describe('administrator student list', () => {
     })
   })
 
-  it('bounds every filter and forwards relation filters to the store', async () => {
+  it('bounds every supported filter and forwards relation filters to the store', async () => {
     const serviceDependencies = dependencies({ listStudents: vi.fn(async () => []) })
     const target = event()
     const handler = createAdminStudentsListHandler({
@@ -187,7 +187,6 @@ describe('administrator student list', () => {
         region: 'gwangju',
         school: '광주고',
         track: 'commercial',
-        campaign: '9',
         counselingStatus: 'assigned',
         dateFrom: '2026-07-01',
         dateTo: '2026-07-31',
@@ -205,12 +204,25 @@ describe('administrator student list', () => {
       region: 'gwangju',
       school: '광주고',
       track: 'commercial',
-      campaignId: 9,
       counselingStatus: 'assigned',
       dateFrom: '2026-07-01',
       dateTo: '2026-07-31',
       limit: 21,
     })
+  })
+
+  it('rejects the retired campaign query before it can reach the student store', async () => {
+    const listStudents = vi.fn(async () => [])
+    const target = event()
+    const handler = createAdminStudentsListHandler({
+      students: createAdminStudentsService(dependencies({ listStudents })),
+      getQuery: () => ({ campaign: '9' }),
+      requireAdmin: async () => admin,
+      ...responseDependencies(target),
+    })
+
+    await expect(handler(target)).resolves.toMatchObject({ error: { code: 'STUDENT_INVALID' } })
+    expect(listStudents).not.toHaveBeenCalled()
   })
 
   it('turns only a canonical full 010 query into an exact HMAC lookup without logging plaintext', async () => {
@@ -239,7 +251,7 @@ describe('administrator student list', () => {
     logSpies.forEach(spy => spy.mockRestore())
   })
 
-  it('escapes text search and applies track, campaign, counseling, and date filters in PostgREST', async () => {
+  it('escapes text search and applies track, counseling, and date filters in PostgREST without campaign filtering', async () => {
     const calls = {
       eq: [] as Array<[string, unknown]>,
       gte: [] as Array<[string, unknown]>,
@@ -279,7 +291,7 @@ describe('administrator student list', () => {
       stage: 'high3',
       region: 'gwangju',
       track: 'commercial',
-      campaignId: 9,
+      campaignId: 9 as never,
       counselingStatus: 'assigned',
       dateFrom: '2026-07-01',
       dateTo: '2026-07-31',
@@ -294,9 +306,9 @@ describe('administrator student list', () => {
       ['region', 'gwangju'],
       ['assessments.status', 'completed'],
       ['assessments.result_snapshot->rankedTracks->>0', 'commercial'],
-      ['assessments.campaign_id', 9],
       ['counseling_requests.status', 'assigned'],
     ]))
+    expect(calls.eq).not.toContainEqual(['assessments.campaign_id', 9])
     expect(calls.gte).toContainEqual(['assessments.completed_at', '2026-06-30T15:00:00.000Z'])
     expect(calls.lt).toContainEqual(['assessments.completed_at', '2026-07-31T15:00:00.000Z'])
     expect(calls.lte).toEqual([])
@@ -336,7 +348,7 @@ describe('administrator student list', () => {
       { query: 'bad\u0000value' },
       { region: 'unknown' },
       { stage: ['high3'] },
-      { campaign: '9007199254740992' },
+      { campaign: '9' },
       { limit: '51' },
       { cursor: 'not-a-canonical-cursor' },
       { dateFrom: '2026-08-01', dateTo: '2026-07-01' },
@@ -380,7 +392,6 @@ describe('administrator student detail', () => {
         recentResults: storedResults().map(result => ({
           id: result.publicId,
           completedAt: result.completedAt,
-          campaignId: result.campaignId,
           primaryTrack: result.primaryTrack,
           secondaryTrack: result.secondaryTrack,
           trackScores: result.trackScores,
@@ -400,6 +411,7 @@ describe('administrator student detail', () => {
     expect(JSON.stringify(response)).not.toMatch(
       /phoneCiphertext|phoneIv|phoneHmac|password|salt|failedAttempts|lockedUntil|session|token/iu,
     )
+    expect(JSON.stringify(response)).not.toContain('campaignId')
   })
 
   it('returns the same generic not-found envelope for an absent active student', async () => {

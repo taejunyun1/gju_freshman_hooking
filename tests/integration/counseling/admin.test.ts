@@ -136,7 +136,6 @@ describe('administrator counseling queue', () => {
       counseling: service,
       getQuery: () => ({
         assignedFacultyId: '202',
-        campaignId: '9',
         createdFrom: '2026-07-01T00:00:00.000Z',
         createdTo: '2026-07-31T23:59:59.999Z',
         cursor,
@@ -155,7 +154,6 @@ describe('administrator counseling queue', () => {
     expect(requireAdmin).toHaveBeenCalledWith(event)
     expect(deps.listRequests).toHaveBeenCalledWith({
       assignedFacultyId: 202,
-      campaignId: 9,
       createdFrom: '2026-07-01T00:00:00.000Z',
       createdTo: '2026-07-31T23:59:59.999Z',
       cursor: { createdAt, id: 73 },
@@ -190,6 +188,7 @@ describe('administrator counseling queue', () => {
       requestId: traceId,
     })
     const serialized = JSON.stringify(response)
+    expect(serialized).not.toContain('campaignId')
     expect(serialized).not.toMatch(/01012345678|phoneCiphertext|phoneIv|adminNote|ciphertext/u)
   })
 
@@ -207,6 +206,7 @@ describe('administrator counseling queue', () => {
 
     for (const query of [
       { unknown: 'value' },
+      { campaignId: '9' },
       { limit: ['20'] },
       { limit: '51' },
       { cursor: 'not-a-valid-cursor' },
@@ -559,7 +559,7 @@ describe('administrator counseling store decoder', () => {
 
     const result = await adapter.listRequests({
       assignedFacultyId: 202,
-      campaignId: 9,
+      campaignId: 9 as never,
       createdFrom: '2026-07-01T00:00:00.000Z',
       createdTo: '2026-07-31T23:59:59.999Z',
       cursor: { createdAt, id: 73 },
@@ -582,9 +582,9 @@ describe('administrator counseling store decoder', () => {
     expect(calls.eq).toEqual([
       ['status', 'assigned'],
       ['primary_track_snapshot', 'commercial'],
-      ['campaign_id_snapshot', 9],
       ['assigned_faculty_id', 202],
     ])
+    expect(calls.eq).not.toContainEqual(['campaign_id_snapshot', 9])
     expect(calls.gte).toEqual([['created_at', '2026-07-01T00:00:00.000Z']])
     expect(calls.lte).toEqual([['created_at', '2026-07-31T23:59:59.999Z']])
     expect(calls.or).toEqual([

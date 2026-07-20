@@ -93,7 +93,6 @@ export const adminCounselingCurrentSchema = z.object({
 
 export const adminCounselingQueueItemSchema = adminCounselingCurrentSchema.extend({
   assessmentPublicId: z.string().uuid(),
-  campaignId: z.number().int().positive().safe().nullable(),
   primaryTrack: z.enum(trackKeys),
   secondaryTrack: z.enum(trackKeys),
   selectedWorkLabels: storedLabelListSchema.max(4),

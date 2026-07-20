@@ -43,7 +43,6 @@ const trackScoresSchema = z.object({
 const resultSchema = z.object({
   id: z.string().uuid(),
   completedAt: timestampSchema,
-  campaignId: safeIdSchema.nullable(),
   primaryTrack: z.enum(trackKeys),
   secondaryTrack: z.enum(trackKeys),
   trackScores: trackScoresSchema,
@@ -81,7 +80,6 @@ export const adminStudentFilterKeys = [
   'region',
   'school',
   'track',
-  'campaign',
   'counselingStatus',
   'dateFrom',
   'dateTo',

@@ -15,7 +15,6 @@ const faculty = [
 const request = (status: AdminCounselingQueueItem['status'] = 'new'): AdminCounselingQueueItem => ({
   id: requestId,
   assessmentPublicId: '22222222-2222-4222-8222-222222222222',
-  campaignId: 3,
   primaryTrack: 'art_photo',
   secondaryTrack: 'video',
   selectedWorkLabels: ['사진과 영상을 결합한 전시'],

@@ -94,7 +94,6 @@ const listLimitSchema = z.string().regex(/^[1-9][0-9]?$/u)
   .pipe(z.number().int().min(1).max(50))
 
 const rawListQuerySchema = z.object({
-  campaign: positiveIntegerString.optional(),
   counselingStatus: counselingStatusSchema.optional(),
   cursor: z.string().min(1).max(200).transform((value, context) => {
     try {
@@ -120,7 +119,6 @@ const rawListQuerySchema = z.object({
 })
 
 export type AdminStudentsListInput = {
-  campaignId?: number
   counselingStatus?: z.infer<typeof counselingStatusSchema>
   cursor?: AdminStudentsCursor
   dateFrom?: string
@@ -136,8 +134,7 @@ export type AdminStudentsListInput = {
 export const parseAdminStudentsListQuery = (input: unknown): AdminStudentsListInput => {
   const parsed = rawListQuerySchema.safeParse(input)
   if (!parsed.success) throw new AppError('STUDENT_INVALID')
-  const { campaign, ...query } = parsed.data
-  return { ...query, ...(campaign === undefined ? {} : { campaignId: campaign }) }
+  return parsed.data
 }
 
 export const parseAdminStudentId = (input: string | undefined): number => {
@@ -359,7 +356,6 @@ export const createAdminStudentsService = (dependencies: AdminStudentsServiceDep
       recentResults: z.array(storedResultSchema).max(3).parse(recentResults).map(result => ({
         id: result.publicId,
         completedAt: result.completedAt,
-        campaignId: result.campaignId,
         primaryTrack: result.primaryTrack,
         secondaryTrack: result.secondaryTrack,
         trackScores: result.trackScores,
@@ -461,7 +457,6 @@ export const createSupabaseAdminStudentsDependencies = (
   ...cryptoDependencies,
   listStudents: async (input) => {
     const assessmentFilter = input.track !== undefined
-      || input.campaignId !== undefined
       || input.dateFrom !== undefined
       || input.dateTo !== undefined
     const counselingFilter = input.counselingStatus !== undefined
@@ -481,7 +476,6 @@ export const createSupabaseAdminStudentsDependencies = (
     }
     if (input.school !== undefined) query = query.ilike('school_name', `%${escapeLikePattern(input.school)}%`)
     if (input.track !== undefined) query = query.eq('assessments.result_snapshot->rankedTracks->>0', input.track)
-    if (input.campaignId !== undefined) query = query.eq('assessments.campaign_id', input.campaignId)
     if (assessmentFilter) query = query.eq('assessments.status', 'completed')
     if (input.dateFrom !== undefined) query = query.gte('assessments.completed_at', kstDayStart(input.dateFrom))
     if (input.dateTo !== undefined) query = query.lt('assessments.completed_at', nextKstDayStart(input.dateTo))

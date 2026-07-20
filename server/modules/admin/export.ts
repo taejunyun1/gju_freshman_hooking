@@ -33,6 +33,12 @@ const timestampSchema = z.iso.datetime({ offset: true }).max(40)
 const cursorSchema = z.object({ createdAt: timestampSchema, id: safeIdSchema }).strict()
 export type AdminExportCursor = z.infer<typeof cursorSchema>
 
+// Existing export jobs can retain the retired field in their immutable DB snapshot.
+// Decode it only to preserve those jobs, then strip it before any current request or response uses the filters.
+const storedExportFilterSchema = adminExportFilterSchema.extend({
+  campaignId: safeIdSchema.optional(),
+}).transform(({ campaignId: _legacyCampaignId, ...filters }): AdminExportFilter => filters)
+
 const decodeBase64url = (value: string): string => {
   if (!/^[A-Za-z0-9_-]+$/u.test(value) || value.length > 200 || value.length % 4 === 1) {
     throw new AppError('EXPORT_INVALID')
@@ -154,7 +160,7 @@ export type AdminExportDependencies = {
 const storedJobSchema = z.object({
   id: safeIdSchema,
   createdByAdminId: z.string().uuid(),
-  filterSnapshot: adminExportFilterSchema,
+  filterSnapshot: storedExportFilterSchema,
   status: z.enum(['created', 'fetching', 'completed', 'failed']),
   studentRowCount: z.number().int().min(0).max(ROW_LIMIT),
   participationRowCount: z.number().int().min(0).max(ROW_LIMIT),
@@ -512,7 +518,7 @@ export const decodeCounselingExportRow = (raw: unknown): ExportRow<AdminExportCo
 const rawJobRowSchema = z.object({
   id: safeIdSchema,
   created_by_admin_id: z.string().uuid(),
-  filter_snapshot: adminExportFilterSchema,
+  filter_snapshot: storedExportFilterSchema,
   status: z.enum(['created', 'fetching', 'completed', 'failed']),
   student_row_count: z.number().int().min(0).max(30_000),
   participation_row_count: z.number().int().min(0).max(30_000),

@@ -89,7 +89,6 @@ const queueLimitSchema = z.string().regex(/^[1-9][0-9]?$/u)
   .pipe(z.number().int().min(1).max(50))
 const rawQueueQuerySchema = z.object({
   assignedFacultyId: positiveIntegerString.optional(),
-  campaignId: positiveIntegerString.optional(),
   createdFrom: timestampSchema.optional(),
   createdTo: timestampSchema.optional(),
   cursor: z.string().min(1).max(200).transform((value, context) => {
@@ -113,7 +112,6 @@ const rawQueueQuerySchema = z.object({
 
 export type AdminCounselingQueueQuery = {
   assignedFacultyId?: number
-  campaignId?: number
   createdFrom?: string
   createdTo?: string
   cursor?: CounselingCursor
@@ -395,7 +393,6 @@ const publicQueueItem = async (
   return {
     ...toCurrent(request),
     assessmentPublicId: request.assessmentPublicId,
-    campaignId: request.campaignId,
     primaryTrack: request.primaryTrack,
     secondaryTrack: request.secondaryTrack,
     selectedWorkLabels: request.selectedWorkLabels,
@@ -780,7 +777,6 @@ export const createSupabaseAdminCounselingDependencies = (
     let query = client.from('counseling_requests').select(requestSelection)
     if (input.status !== undefined) query = query.eq('status', input.status)
     if (input.primaryTrack !== undefined) query = query.eq('primary_track_snapshot', input.primaryTrack)
-    if (input.campaignId !== undefined) query = query.eq('campaign_id_snapshot', input.campaignId)
     if (input.assignedFacultyId !== undefined) query = query.eq('assigned_faculty_id', input.assignedFacultyId)
     if (input.createdFrom !== undefined) query = query.gte('created_at', input.createdFrom)
     if (input.createdTo !== undefined) query = query.lte('created_at', input.createdTo)

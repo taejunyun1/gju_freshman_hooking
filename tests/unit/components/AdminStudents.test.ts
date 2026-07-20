@@ -71,7 +71,6 @@ describe('administrator student list components', () => {
           region: '',
           school: '',
           track: '',
-          campaign: '',
           counselingStatus: '',
           dateFrom: '',
           dateTo: '',
@@ -96,6 +95,7 @@ describe('administrator student list components', () => {
     expect(wrapper.emitted('apply')?.at(-1)).toEqual([
       expect.objectContaining({ track: 'art_photo' }),
     ])
+    expect(wrapper.find('[name="campaign"]').exists()).toBe(false)
   })
 
   it('cancels a pending search before emitting one clean reset', async () => {
@@ -108,7 +108,6 @@ describe('administrator student list components', () => {
           region: '',
           school: '',
           track: '',
-          campaign: '',
           counselingStatus: '',
           dateFrom: '',
           dateTo: '',
