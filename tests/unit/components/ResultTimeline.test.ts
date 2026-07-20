@@ -287,7 +287,7 @@ describe('result master sequence', () => {
     expect(faculty.findAll('[data-faculty-role]').map(role => role.text())).toEqual([
       '추천 총괄교수',
       '예비 상담교수',
-      '함께 연결되는 전문분야',
+      '함께 연결되는 실무·창작 강사',
     ])
     expect(faculty.get('a[href="tel:062-670-2338"]').exists()).toBe(true)
     expect(faculty.get('a[href="mailto:tjyun@gwangju.ac.kr"]').exists()).toBe(true)
