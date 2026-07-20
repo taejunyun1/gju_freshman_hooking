@@ -390,7 +390,7 @@ interface RankedCandidate {
   readonly result: ResultResource
 }
 
-type CameraBrand = 'sony' | 'canon' | 'other'
+type CameraManufacturer = string
 
 const compareRankedCandidates = (left: RankedCandidate, right: RankedCandidate): number => (
   right.rawAffinity - left.rawAffinity
@@ -399,11 +399,18 @@ const compareRankedCandidates = (left: RankedCandidate, right: RankedCandidate):
   || left.candidate.id - right.candidate.id
 )
 
-const cameraBrand = (title: string): CameraBrand => {
-  const normalized = title.trim().toLocaleLowerCase('ko-KR')
-  if (/^(소니|sony)(?:\s|$)/u.test(normalized)) return 'sony'
-  if (/^(캐논|canon)(?:\s|$)/u.test(normalized)) return 'canon'
-  return 'other'
+const cameraManufacturer = (title: string): CameraManufacturer | null => {
+  const normalized = title.normalize('NFKC').trim().toLocaleLowerCase('ko-KR')
+  const token = /^([\p{L}\p{N}][\p{L}\p{N}._+-]{0,31})(?:\s|$)/u.exec(normalized)?.[1]
+  if (token === undefined) return null
+
+  if (token === '소니' || token === 'sony') return 'sony'
+  if (token === '캐논' || token === 'canon') return 'canon'
+  if (token === '니콘' || token === 'nikon') return 'nikon'
+  if (token === '후지' || token === '후지필름' || token === 'fuji' || token === 'fujifilm') {
+    return 'fujifilm'
+  }
+  return `manufacturer:${token}`
 }
 
 const maxInterest = (
@@ -414,9 +421,8 @@ const maxInterest = (
 const cameraPreference = (
   candidate: RankedCandidate,
   interestVector: Readonly<Record<string, number>>,
-  preferredLensBrand: CameraBrand | null,
 ): number => {
-  const brand = cameraBrand(candidate.candidate.title)
+  const manufacturer = cameraManufacturer(candidate.candidate.title)
   const video = maxInterest(interestVector, [
     'video',
     'cinematography',
@@ -435,27 +441,36 @@ const cameraPreference = (
     'analog',
   ])
   const base = film > video
-    ? brand === 'canon' && /\bEOS\b/iu.test(candidate.candidate.title)
+    ? manufacturer === 'canon' && /\bEOS\b/iu.test(candidate.candidate.title)
       ? 4
-      : brand === 'canon' ? 3 : 0
+      : manufacturer === 'canon' ? 3 : 0
     : video > 0
-      ? brand === 'sony' && /\b(FX3|A7SII|PXW[\s-]*FS7)\b/iu.test(candidate.candidate.title)
+      ? manufacturer === 'sony' && /\b(FX3|A7SII|PXW[\s-]*FS7)\b/iu.test(candidate.candidate.title)
         ? 4
-        : brand === 'sony' ? 3 : brand === 'canon' ? 2 : 0
-      : brand === 'sony' || brand === 'canon' ? 2 : 0
+        : manufacturer === 'sony' ? 3 : manufacturer === 'canon' ? 2 : 0
+      : manufacturer === 'sony' || manufacturer === 'canon' ? 2 : 0
 
-  return base + (preferredLensBrand !== null && brand === preferredLensBrand ? 1 : 0)
+  return base
+}
+
+const cameraManufacturerMatch = (
+  candidate: RankedCandidate,
+  preferredLensManufacturer: CameraManufacturer | null,
+): number => {
+  if (preferredLensManufacturer === null) return 0
+  return cameraManufacturer(candidate.candidate.title) === preferredLensManufacturer ? 1 : 0
 }
 
 const compareCameraCandidates = (
   left: RankedCandidate,
   right: RankedCandidate,
   interestVector: Readonly<Record<string, number>>,
-  preferredLensBrand: CameraBrand | null,
+  preferredLensManufacturer: CameraManufacturer | null,
 ): number => (
   right.rawAffinity - left.rawAffinity
-  || cameraPreference(right, interestVector, preferredLensBrand)
-    - cameraPreference(left, interestVector, preferredLensBrand)
+  || cameraManufacturerMatch(right, preferredLensManufacturer)
+    - cameraManufacturerMatch(left, preferredLensManufacturer)
+  || cameraPreference(right, interestVector) - cameraPreference(left, interestVector)
   || compareRankedCandidates(left, right)
 )
 
@@ -502,10 +517,15 @@ const selectCapabilityEvidence = (
   const body = equipment
     .filter(item => equipmentCategoryOf(item.result) === 'body')
     .sort((left, right) => compareCameraCandidates(left, right, interestVector, null))[0]
-  const bodyBrand = body === undefined ? null : cameraBrand(body.candidate.title)
+  const bodyManufacturer = body === undefined ? null : cameraManufacturer(body.candidate.title)
   const lens = equipment
     .filter(item => equipmentCategoryOf(item.result) === 'lens')
-    .sort((left, right) => compareCameraCandidates(left, right, interestVector, bodyBrand))[0]
+    .sort((left, right) => compareCameraCandidates(
+      left,
+      right,
+      interestVector,
+      bodyManufacturer,
+    ))[0]
   const selected = [...facilities, body, lens]
     .filter((item): item is RankedCandidate => item !== undefined)
   const selectedIds = new Set(selected.map(item => item.candidate.id))

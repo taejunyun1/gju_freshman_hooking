@@ -644,6 +644,98 @@ describe('resource matching', () => {
     ))?.title).toBe('니콘 D850 Body')
   })
 
+  it('prefers a Canon lens when higher raw affinity selects a Canon body for video', () => {
+    const ranked = rankResources({
+      interestVector: { canon_fit: 1, video: 0.9 },
+      selectedInterests: selected(['canon_fit', 'video']),
+      candidates: [
+        equipment(1, {
+          title: '소니 FX3 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('video')],
+        }),
+        equipment(2, {
+          title: '캐논 EOS R5 Body',
+          metadata: { ...equipment(2).metadata, category: 'body' },
+          tags: [tag('canon_fit')],
+        }),
+        equipment(3, {
+          title: '소니 FE 24-70mm GM Lens',
+          metadata: { ...equipment(3).metadata, category: 'lens' },
+          tags: [tag('video')],
+        }),
+        equipment(4, {
+          title: '캐논 RF 24-70mm Lens',
+          metadata: { ...equipment(4).metadata, category: 'lens' },
+          tags: [tag('video')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'body'
+    ))?.title).toBe('캐논 EOS R5 Body')
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'lens'
+    ))?.title).toBe('캐논 RF 24-70mm Lens')
+  })
+
+  it('keeps distinct non-Sony-Canon manufacturers when matching a body and lens', () => {
+    const ranked = rankResources({
+      interestVector: { documentary: 1 },
+      selectedInterests: selected(['documentary']),
+      candidates: [
+        equipment(1, {
+          title: '니콘 D850 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('documentary')],
+        }),
+        equipment(2, {
+          title: '후지필름 XF 16-55mm Lens',
+          metadata: { ...equipment(2).metadata, category: 'lens' },
+          tags: [tag('documentary')],
+        }),
+        equipment(3, {
+          title: '니콘 AF-S 24-70mm Lens',
+          metadata: { ...equipment(3).metadata, category: 'lens' },
+          tags: [tag('documentary')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'lens'
+    ))?.title).toBe('니콘 AF-S 24-70mm Lens')
+  })
+
+  it('never lets a body-brand lens match override higher raw lens affinity', () => {
+    const ranked = rankResources({
+      interestVector: { canon_fit: 1, sony_fit: 0.9, video: 0.8 },
+      selectedInterests: selected(['canon_fit', 'sony_fit', 'video']),
+      candidates: [
+        equipment(1, {
+          title: '캐논 EOS R5 Body',
+          metadata: { ...equipment(1).metadata, category: 'body' },
+          tags: [tag('canon_fit')],
+        }),
+        equipment(2, {
+          title: '캐논 RF 24-70mm Lens',
+          metadata: { ...equipment(2).metadata, category: 'lens' },
+          tags: [tag('video')],
+        }),
+        equipment(3, {
+          title: '소니 FE 24-70mm GM Lens',
+          metadata: { ...equipment(3).metadata, category: 'lens' },
+          tags: [tag('sony_fit')],
+        }),
+      ],
+    })
+
+    expect(ranked.capabilityEvidence.find(item => (
+      item.type === 'equipment' && item.displayMetadata.category === 'lens'
+    ))?.title).toBe('소니 FE 24-70mm GM Lens')
+  })
+
   it('fills unused capability slots with the strongest unselected equipment', () => {
     const ranked = rankResources({
       interestVector: { facility: 1, body: 0.8, lighting: 0.95, audio: 0.7 },
