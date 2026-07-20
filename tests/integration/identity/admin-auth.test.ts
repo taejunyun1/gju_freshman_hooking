@@ -87,7 +87,7 @@ describe('administrator authentication', () => {
       },
     })
 
-    const protectedEvent = { context: {}, path: '/api/admin/recovery/44/approve' }
+    const protectedEvent = { context: {}, path: '/api/admin/resources/44/publish?preview=false' }
     await middleware(protectedEvent)
     await middleware({ context: {}, path: '/api/admin/session' })
 

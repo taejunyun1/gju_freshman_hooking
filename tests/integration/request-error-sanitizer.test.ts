@@ -59,6 +59,27 @@ describe('global request error sanitizer', () => {
     expect(error.stack).toBeUndefined()
   })
 
+  it('preserves a generic 404 status while removing route and internal details', async () => {
+    vi.stubGlobal('defineNitroPlugin', (plugin: unknown) => plugin)
+    const { sanitizeUnhandledError } = await import('../../server/plugins/error-sanitizer')
+    const error = Object.assign(new Error('Cannot find any route matching /api/private-record-17.'), {
+      cause: new Error('internal-router-state'),
+      data: { authorization: 'Bearer sensitive-token' },
+      stack: 'internal-router-stack',
+      statusCode: 404,
+      statusMessage: 'Cannot find any route matching /api/private-record-17.',
+    })
+
+    sanitizeUnhandledError(error, { context: { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } })
+
+    expect(error.statusCode).toBe(404)
+    expect(error.statusMessage).toBe('Not Found')
+    expect(error.message).toBe('Not Found')
+    expect(error.cause).toBeUndefined()
+    expect(error.data).toBeUndefined()
+    expect(error.stack).toBeUndefined()
+  })
+
   it('scrubs an unhandled error before response serialization or logging while preserving its request ID', async () => {
     vi.stubGlobal('defineNitroPlugin', (plugin: unknown) => plugin)
     const { installUnhandledErrorSanitizer } = await import('../../server/plugins/error-sanitizer')

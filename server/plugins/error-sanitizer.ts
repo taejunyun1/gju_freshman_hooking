@@ -15,6 +15,7 @@ type NitroAppWithErrorHook = {
 }
 
 const publicErrorMessage = 'Internal Server Error'
+const publicNotFoundMessage = 'Not Found'
 const deliberatePublic403Messages = new Set([
   'ADMIN_REQUIRED',
   'MFA_REQUIRED',
@@ -45,12 +46,23 @@ const removeSensitiveErrorProperties = (error: ErrorRecord): void => {
   removeSensitiveErrorDetails(error)
 }
 
+const sanitizeNotFoundError = (error: ErrorRecord): void => {
+  error.message = publicNotFoundMessage
+  error.statusCode = 404
+  error.statusMessage = publicNotFoundMessage
+  removeSensitiveErrorDetails(error)
+}
+
 export const sanitizeUnhandledError = (error: ErrorRecord, event?: RequestEvent): string => {
   const context = event ? (event.context ??= {}) : undefined
   const requestId = typeof context?.requestId === 'string' ? context.requestId : crypto.randomUUID()
   if (context) context.requestId = requestId
   if (isDeliberatePublicError(error)) {
     removeSensitiveErrorDetails(error)
+    return requestId
+  }
+  if (error.statusCode === 404) {
+    sanitizeNotFoundError(error)
     return requestId
   }
   removeSensitiveErrorProperties(error)

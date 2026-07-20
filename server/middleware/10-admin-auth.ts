@@ -13,9 +13,21 @@ type AdminAuthMiddlewareDependencies = {
   requireAdmin: (event: unknown) => Promise<AdminContext>
 }
 
-const isProtectedAdminPath = (path: string | undefined): boolean => (
-  typeof path === 'string' && path.startsWith('/api/admin/') && path !== '/api/admin/session'
-)
+const protectedAdminApiPrefixes = [
+  '/api/admin/admission-cycles',
+  '/api/admin/counseling',
+  '/api/admin/export',
+  '/api/admin/faculty',
+  '/api/admin/resources',
+  '/api/admin/students',
+] as const
+
+const isProtectedAdminPath = (path: string | undefined): boolean => {
+  if (typeof path !== 'string') return false
+  const queryIndex = path.indexOf('?')
+  const pathname = queryIndex === -1 ? path : path.slice(0, queryIndex)
+  return protectedAdminApiPrefixes.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`))
+}
 
 export const createAdminAuthMiddleware = (dependencies: AdminAuthMiddlewareDependencies) => async (event: AdminEvent): Promise<void> => {
   if (!isProtectedAdminPath(event.path)) return

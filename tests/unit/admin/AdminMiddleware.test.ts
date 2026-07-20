@@ -86,4 +86,24 @@ describe('administrator route middleware', () => {
     await expect(adminAuthMiddleware({ path: '/admin/login', context: {} } as never)).resolves.toBeUndefined()
     expect(getServerRequireAdmin).not.toHaveBeenCalled()
   })
+
+  it.each([
+    '/api/admin/campaigns',
+    '/api/admin/narrative-reports',
+    '/api/admin/unknown-feature',
+  ])('lets removed or unknown administrator API prefixes reach the 404 router: %s', async (path) => {
+    vi.resetModules()
+    const getServerRequireAdmin = vi.fn(() => {
+      throw new Error('SERVER_CONFIG_INVALID')
+    })
+    vi.doMock('../../../server/modules/identity/admin-auth', () => ({ getServerRequireAdmin }))
+    vi.stubGlobal('defineEventHandler', (handler: unknown) => handler)
+    vi.stubGlobal('createError', ({ statusCode, statusMessage }: { statusCode: number, statusMessage: string }) => (
+      Object.assign(new Error(statusMessage), { statusCode, statusMessage })
+    ))
+    const { default: adminAuthMiddleware } = await import('../../../server/middleware/10-admin-auth')
+
+    await expect(adminAuthMiddleware({ path, context: {} } as never)).resolves.toBeUndefined()
+    expect(getServerRequireAdmin).not.toHaveBeenCalled()
+  })
 })
