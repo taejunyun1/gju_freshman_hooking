@@ -52,35 +52,44 @@ begin
   lock table public.faculty, public.faculty_tags, public.faculty_specialist_links
     in share row exclusive mode;
 
+  with faculty_rows as (
+    select name, title, employment_type, consultation_role, office, phone, email,
+      website, contact_visibility, expertise_summary, bio, profile_sections, status,
+      weekly_capacity, priority, source_date,
+      last_verified_at at time zone 'UTC' as last_verified_at
+    from public.faculty
+    where name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
+  ), tag_rows as (
+    select faculty.name as faculty_name, tag.tag_key, tag.tag_label, tag.category,
+      tag.weight, tag.is_primary
+    from public.faculty_tags tag
+    join public.faculty faculty on faculty.id = tag.faculty_id
+    where faculty.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
+  ), link_rows as (
+    select primary_faculty.name as primary_faculty_name,
+      specialist.name as specialist_faculty_name, link.tag_key, link.priority,
+      link.explanation_template
+    from public.faculty_specialist_links link
+    left join public.faculty primary_faculty on primary_faculty.id = link.primary_faculty_id
+    join public.faculty specialist on specialist.id = link.specialist_faculty_id
+    where specialist.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
+  )
   select
-    (select pg_catalog.count(*) from public.faculty
-      where name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
-        and status = 'active' and employment_type = 'practitioner'
-        and consultation_role = 'specialist' and weekly_capacity = 0) = 4
-    and (select pg_catalog.count(*)
-      from public.faculty_tags tag
-      join public.faculty faculty on faculty.id = tag.faculty_id
-      where faculty.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])) = 50
-    and (select pg_catalog.count(*)
-      from public.faculty_specialist_links link
-      join public.faculty specialist on specialist.id = link.specialist_faculty_id
-      where specialist.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])) = 16
-    and (select pg_catalog.count(*) from public.faculty
-      where name = any (array['유별남', '김태현']::text[])
-        and contact_visibility = '{"office":"hidden","phone":"hidden","email":"hidden","website":"public"}'::jsonb
-        and website like 'https://%' and last_verified_at is not null) = 2
-    and (select pg_catalog.count(*) from public.faculty
-      where (name, priority) in (
-        ('정한결', 60), ('유별남', 50), ('김태현', 40), ('김명우', 30)
-      )) = 4
-    and not exists (
-      select 1
-      from public.faculty_tags tag
-      join public.faculty faculty on faculty.id = tag.faculty_id
-      where faculty.name = any (array['정한결', '유별남', '김태현', '김명우']::text[])
-      group by tag.faculty_id, tag.category
-      having pg_catalog.count(*) filter (where tag.is_primary) > 1
-    )
+    pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      (select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(faculty_rows)
+        order by faculty_rows.name)::text from faculty_rows), 'UTF8'), 'sha256'), 'hex')
+      = 'e1bbe96ac42f115c4dc875b42fb38620ce985e73ab54deedaae1a8e933b13d4b'
+    and pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      (select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(tag_rows)
+        order by tag_rows.faculty_name, tag_rows.category, tag_rows.tag_key,
+          tag_rows.tag_label)::text from tag_rows), 'UTF8'), 'sha256'), 'hex')
+      = '42682a1c17295a5926a22b260967da88783b2293d0b9f18cc2ddb56bc9f59cbb'
+    and pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      (select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(link_rows)
+        order by link_rows.primary_faculty_name nulls first,
+          link_rows.specialist_faculty_name, link_rows.tag_key)::text from link_rows),
+        'UTF8'), 'sha256'), 'hex')
+      = 'e4f50dcd1176906cff09196a72b74c38bad871e8bb8a77cebb02a76553f65105'
   into v_is_current;
 
   if v_is_current then

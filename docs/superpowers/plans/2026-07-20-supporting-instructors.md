@@ -148,14 +148,14 @@ git add app/components/result/FacultyCard.vue app/components/result/FacultyRecom
 git commit -m "feat: 2026-07-20 강사 연계 카드 표시"
 ```
 
-### Task 3: Verify, publish seed data, and release without key rotation
+### Task 3: Verify, apply the additive migration, and release without key rotation
 
 **Files:**
 - Verify: `supabase/seed/content-2026.sql`
 - Verify: `scripts/deploy-photo-next-release.mjs`
 
 **Interfaces:**
-- Consumes: generated seed update and compiled Nuxt application.
+- Consumes: migration 033 for populated-database delivery, the generated clean-install seed, and the compiled Nuxt application.
 - Produces: remote content update and staging/production Worker release while retaining existing Worker secrets and accounts.
 
 - [ ] **Step 1: Run local verification**
@@ -179,16 +179,16 @@ Run: `git diff --check && git diff --stat HEAD~2..HEAD`
 
 Expected: no whitespace errors and no change to full-time faculty role semantics.
 
-- [ ] **Step 3: Push and apply the generated seed remotely**
+- [ ] **Step 3: Push and apply migration 033 remotely**
 
 Run:
 
 ```bash
 git push origin feature/photo-next-mvp
-corepack pnpm exec supabase db push --linked --include-all --include-seed --yes --agent no
+corepack pnpm exec supabase db push --linked --include-all --yes --agent no
 ```
 
-Expected: the new `content-2026.sql` hash applies without a schema migration and does not modify student or counseling rows.
+Expected: `202607200033_supporting_instructors_release.sql` applies as the narrowly scoped additive data release and does not modify student, roster, assessment, prospect, or counseling rows. Do not use `--include-seed` for this release: generated `supabase/seed/content-2026.sql` is a clean-install-only artifact and intentionally refuses populated content tables.
 
 - [ ] **Step 4: Use the additive release runner**
 
