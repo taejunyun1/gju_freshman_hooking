@@ -479,6 +479,7 @@ describe('assessment completion service', () => {
       course.connectionReason.includes('제품·패션·광고 이미지 만들기')
     ))).toBe(true)
     expect(snapshot.selectedInterests.some(interest => interest.key.includes('pathway_'))).toBe(false)
+    expect(JSON.stringify(snapshot)).not.toContain('pathway_')
     expect(snapshot.faculty).toMatchObject({
       primary: { id: 203, role: 'primary' },
       backup: { id: 202, role: 'backup' },

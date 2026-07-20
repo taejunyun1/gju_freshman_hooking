@@ -119,39 +119,57 @@ const tagKeyPattern = /^[a-z][a-z0-9_]{0,63}$/u
 const verifiedAtSchema = z.iso.datetime({ offset: true }).max(32)
 const equipmentCategorySet = new Set<unknown>(equipmentCategories)
 
-export const primaryTrackPathwayTitles: Readonly<Record<TrackKey, readonly string[]>> = Object.freeze({
+interface PrimaryTrackPathwayCourse {
+  readonly title: string
+  readonly gradeYear: 3 | 4
+}
+
+const pathwayCourse = (title: string, gradeYear: 3 | 4): PrimaryTrackPathwayCourse => ({
+  title,
+  gradeYear,
+})
+
+export const primaryTrackPathwayCourses: Readonly<Record<TrackKey, readonly PrimaryTrackPathwayCourse[]>> = Object.freeze({
   art_photo: Object.freeze([
-    '사물,데이터,이미지 워크숍',
-    '사진과 장소 그리고 콘텍스트 워크숍',
-    '예술창작 프로젝트 세미나',
-    '예술창작 프로젝트 랩',
+    pathwayCourse('사물,데이터,이미지 워크숍', 3),
+    pathwayCourse('사진과 장소 그리고 콘텍스트 워크숍', 3),
+    pathwayCourse('예술창작 프로젝트 세미나', 4),
+    pathwayCourse('예술창작 프로젝트 랩', 4),
   ]),
   documentary: Object.freeze([
-    '포토 스토리 워크숍',
-    '포토에세이 워크숍',
-    '다큐멘터리 세미나',
-    '포스트 다큐멘터리 랩',
+    pathwayCourse('포토 스토리 워크숍', 3),
+    pathwayCourse('포토에세이 워크숍', 3),
+    pathwayCourse('다큐멘터리 세미나', 4),
+    pathwayCourse('포스트 다큐멘터리 랩', 4),
   ]),
   video: Object.freeze([
-    '영상 인터뷰 내러티브 워크숍',
-    '영상 드론 콘텐츠 워크숍',
-    '영상 콘텐츠 크리에이터 워크숍',
+    pathwayCourse('영상 인터뷰 내러티브 워크숍', 3),
+    pathwayCourse('영상 드론 콘텐츠 워크숍', 3),
+    pathwayCourse('영상 콘텐츠 크리에이터 워크숍', 3),
   ]),
   commercial: Object.freeze([
-    '커머셜 포토그라피 기초 워크숍',
-    '커머셜 포토그라피 심화 워크숍',
-    '커머셜 포토그라피 세미나',
-    '커머셜 포토그라피 랩',
+    pathwayCourse('커머셜 포토그라피 기초 워크숍', 3),
+    pathwayCourse('커머셜 포토그라피 심화 워크숍', 3),
+    pathwayCourse('커머셜 포토그라피 세미나', 4),
+    pathwayCourse('커머셜 포토그라피 랩', 4),
   ]),
 })
 
 const pathwayEvidenceKey = (track: TrackKey): string => `pathway_${track}`
 
+const matchesPathwayCourse = (
+  candidate: Extract<ResourceCandidate, { type: 'course' }>,
+  pathwayCourse: PrimaryTrackPathwayCourse,
+): boolean => (
+  candidate.title === pathwayCourse.title
+  && candidate.metadata.gradeYear === pathwayCourse.gradeYear
+)
+
 export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResourcesInput => {
   if (input.primaryTrack === undefined) return input
 
   const evidenceKey = pathwayEvidenceKey(input.primaryTrack)
-  const pathwayTitles = new Set(primaryTrackPathwayTitles[input.primaryTrack])
+  const pathwayCourses = primaryTrackPathwayCourses[input.primaryTrack]
   const label = input.selectedInterests[0]?.label
   if (label === undefined) throw new Error('Selected interest label evidence is required')
 
@@ -164,7 +182,9 @@ export const withPrimaryTrackPathway = (input: RankResourcesInput): RankResource
       ? input.selectedInterests
       : [...input.selectedInterests, { key: evidenceKey, label }],
     candidates: input.candidates.map((candidate): ResourceCandidate => (
-      candidate.type !== 'course' || !pathwayTitles.has(candidate.title)
+      candidate.type !== 'course' || !pathwayCourses.some(pathwayCourse => (
+        matchesPathwayCourse(candidate, pathwayCourse)
+      ))
         || candidate.tags.some(tag => tag.key === evidenceKey)
         ? candidate
         : { ...candidate, tags: [...candidate.tags, { key: evidenceKey, weight: 3, isPrimary: true }] }
@@ -605,7 +625,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .map((candidate): RankedCandidate | null => {
       const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
       if (rawAffinity <= 0) return null
-      const tag = primaryTag(candidate.tags)
+      const tag = primaryTag(candidate.tags.filter(tag => !tag.key.startsWith('pathway_')))
       const result = toResultResource(candidate, rawAffinity, tag, matchingInput)
       if (result === null) return null
       return {
@@ -627,11 +647,10 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
         ...selectDiverse(courseCandidates.filter(item => (
           item.candidate.metadata.gradeYear <= 2
         )), 5),
-        ...courseCandidates.filter(item => (
-          primaryTrackPathwayTitles[matchingInput.primaryTrack!].includes(item.candidate.title)
-          && item.candidate.metadata.gradeYear >= 3
+        ...primaryTrackPathwayCourses[matchingInput.primaryTrack!].flatMap(pathwayCourse => (
+          courseCandidates.find(item => matchesPathwayCourse(item.candidate, pathwayCourse)) ?? []
         )),
-      ])
+      ].slice(0, 9))
   const capabilityEvidence = selectCapabilityEvidence(ranked, matchingInput.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
   const experienceProjects = selectDiverse(ranked.filter(item => (

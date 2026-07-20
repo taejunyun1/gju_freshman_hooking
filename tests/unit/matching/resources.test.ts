@@ -94,6 +94,90 @@ const selected = (keys: readonly string[]) => keys.map(key => ({
 }))
 
 describe('resource matching', () => {
+  it('caps five foundations plus duplicate pathway titles at nine courses', () => {
+    const foundations = Array.from({ length: 5 }, (_, index) => course(index + 1, {
+      tags: [tag(`foundation_${index + 1}`)],
+    }))
+    const pathway = [
+      course(20, {
+        title: '커머셜 포토그라피 기초 워크숍',
+        priority: 100,
+        metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      }),
+      course(21, {
+        title: '커머셜 포토그라피 기초 워크숍',
+        priority: 1,
+        metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      }),
+      course(22, {
+        title: '커머셜 포토그라피 심화 워크숍',
+        metadata: { gradeYear: 3, term: '2학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      }),
+      course(23, {
+        title: '커머셜 포토그라피 세미나',
+        metadata: { gradeYear: 4, term: '1학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      }),
+      course(24, {
+        title: '커머셜 포토그라피 랩',
+        metadata: { gradeYear: 4, term: '2학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      }),
+    ]
+    const ranked = rankResources({
+      primaryTrack: 'commercial',
+      interestVector: Object.fromEntries(foundations.map(item => [item.tags[0]!.key, 1])),
+      selectedInterests: foundations.map(item => ({ key: item.tags[0]!.key, label: `${item.title} 선택` })),
+      candidates: [...foundations, ...pathway],
+    })
+
+    expect(ranked.course).toHaveLength(9)
+    expect(ranked.course.filter(item => item.title === '커머셜 포토그라피 기초 워크숍')
+      .map(item => item.id)).toEqual([20])
+  })
+
+  it.each([
+    ['art_photo', '사물,데이터,이미지 워크숍', 3],
+    ['documentary', '포토 스토리 워크숍', 3],
+    ['video', '영상 인터뷰 내러티브 워크숍', 3],
+    ['commercial', '커머셜 포토그라피 기초 워크숍', 3],
+  ] as const)('does not force %s pathway course with a wrong grade year', (primaryTrack, title, gradeYear) => {
+    const ranked = rankResources({
+      primaryTrack,
+      interestVector: {},
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: [course(1, {
+        title,
+        metadata: { gradeYear: gradeYear === 3 ? 4 : 3, term: '1학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      })],
+    })
+
+    expect(ranked.course).toEqual([])
+  })
+
+  it('keeps synthetic pathway evidence out of canonical result tags', () => {
+    const ranked = rankResources({
+      primaryTrack: 'video',
+      interestVector: {},
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: [course(1, {
+        title: '영상 인터뷰 내러티브 워크숍',
+        metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '심화 과정을 익히는' },
+        tags: [tag('unmatched_pathway')],
+      })],
+    })
+
+    expect(ranked.course[0]).toMatchObject({
+      primaryTag: 'unmatched_pathway',
+      connectionReason: expect.stringContaining('실제 선택 문구'),
+    })
+    expect(JSON.stringify(ranked)).not.toContain('pathway_')
+  })
+
   it.each([
     ['art_photo', ['사물,데이터,이미지 워크숍', '사진과 장소 그리고 콘텍스트 워크숍', '예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']],
     ['documentary', ['포토 스토리 워크숍', '포토에세이 워크숍', '다큐멘터리 세미나', '포스트 다큐멘터리 랩']],
