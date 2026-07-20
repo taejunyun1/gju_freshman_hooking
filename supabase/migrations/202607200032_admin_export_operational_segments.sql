@@ -199,6 +199,10 @@ as $$
                 and assessment.created_at <= p_cutoff
                 and assessment.completed_at <= p_cutoff
             )
+            and not exists (
+              select 1 from public.counseling_requests request
+              where request.prospect_id = prospect.id and request.created_at <= p_cutoff
+            )
           )
         )
         and (
