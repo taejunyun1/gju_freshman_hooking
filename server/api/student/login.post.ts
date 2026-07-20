@@ -4,26 +4,19 @@ import { AppError, toApiFailure } from '../../utils/app-error'
 import type { RosterIdentityRequestContext } from '../../modules/identity/roster-auth'
 import { getServerRosterAuthService } from '../../modules/identity/roster-auth'
 import { studentSessionCookie } from '../../utils/student-request-security'
+import { studentSessionCookieOptions } from '../../utils/student-session-cookie'
 import { getTrustedClientIp } from '../../utils/trusted-client-ip'
 import { getAnonymousVisitorId } from '../../utils/anonymous-visitor'
 import { getServerVerifiedCampaignId, type VerifiedCampaignId } from '../../utils/campaign-attribution'
 
 export { studentSessionCookie } from '../../utils/student-request-security'
 
-const sessionCookieOptions = {
-  httpOnly: true,
-  maxAge: 12 * 60 * 60,
-  path: '/',
-  sameSite: 'lax' as const,
-  secure: true,
-}
-
 type LoginHandlerDependencies = {
   identity: Pick<ReturnType<typeof getServerRosterAuthService>, 'loginStudent'>
   getCampaignId?: (event: unknown) => Promise<VerifiedCampaignId | null>
   getContext: (event: unknown) => RosterIdentityRequestContext
   readBody: (event: unknown) => Promise<unknown>
-  setCookie: (event: unknown, name: string, value: string, options: typeof sessionCookieOptions) => void
+  setCookie: (event: unknown, name: string, value: string, options: typeof studentSessionCookieOptions) => void
   setStatus: (event: unknown, status: number) => void
 }
 
@@ -58,7 +51,7 @@ export const createLoginHandler = (dependencies: LoginHandlerDependencies) => as
     const result = await dependencies.identity.loginStudent(input, context)
     if (result.kind === 'failed') throw new AppError('AUTH_FAILED')
 
-    dependencies.setCookie(event, studentSessionCookie, result.sessionToken, sessionCookieOptions)
+    dependencies.setCookie(event, studentSessionCookie, result.sessionToken, studentSessionCookieOptions)
     return { data: { kind: result.kind, expiresAt: result.expiresAt }, requestId: context.requestId }
   }
   catch (error) {

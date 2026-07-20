@@ -16,6 +16,7 @@ const csrfProtectedPaths = new Set([
   '/api/assessment/submit',
   '/api/career-narrative/report',
   '/api/student/logout',
+  '/api/student/pin',
   '/api/student/assessment/validate',
 ])
 

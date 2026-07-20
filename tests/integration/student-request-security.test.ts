@@ -122,6 +122,32 @@ describe('student browser mutation security', () => {
     await expect(middleware({ ...base, csrf })).resolves.toBeUndefined()
   })
 
+  it('requires the session-bound CSRF token on the exact student PIN-change path', async () => {
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
+    const { deriveStudentCsrfToken } = await import('../../server/utils/student-request-security')
+    const sessionToken = 'student-pin-session-token'
+    const csrf = await deriveStudentCsrfToken(sessionToken)
+    const middleware = createStudentRequestSecurityMiddleware({
+      getCsrf: event => (event as TestEvent).csrf,
+      getMethod: event => (event as TestEvent).method,
+      getOrigin: event => (event as TestEvent).origin,
+      getPath: event => (event as TestEvent).path,
+      getRequestOrigin: event => (event as TestEvent).requestOrigin,
+      getSessionToken: event => (event as TestEvent).sessionToken,
+    })
+    const base = {
+      method: 'POST',
+      origin: 'https://photo-next.example',
+      path: '/api/student/pin',
+      requestOrigin: 'https://photo-next.example',
+      sessionToken,
+    }
+
+    await expect(middleware(base)).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+    await expect(middleware({ ...base, csrf: 'A'.repeat(43) })).rejects.toThrow('STUDENT_REQUEST_FORBIDDEN')
+    await expect(middleware({ ...base, csrf })).resolves.toBeUndefined()
+  })
+
   it.each([undefined, 'https://cross-origin.example'])(
     'rejects missing or cross-origin requests to the exact assessment submit path: %s',
     async (origin) => {
