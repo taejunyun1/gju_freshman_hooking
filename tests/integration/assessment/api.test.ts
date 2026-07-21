@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseAssessmentCatalog } from '../../../scripts/seed-assessment-options'
+import {
+  createCatalogRevision,
+  parseAssessmentCatalog,
+} from '../../../scripts/seed-assessment-options'
 import { createOptionsHandler } from '../../../server/api/assessment/options.get'
 import { createValidateAssessmentHandler } from '../../../server/api/student/assessment/validate.post'
 import {
@@ -17,11 +20,11 @@ vi.hoisted(() => {
 
 const requestId = '77777777-7777-4777-8777-777777777777'
 const sessionToken = 'opaque-student-session'
-const canonicalRevision = 'sha256:c147c6dc013f7c7886ee4dbd5cd0a1a51c2e1a23295f8368bb636672c4b87819'
 
 const canonicalCatalog = () => parseAssessmentCatalog(JSON.parse(
   readFileSync('supabase/seed/assessment-options.json', 'utf8'),
 ) as unknown)
+const canonicalRevision = createCatalogRevision(canonicalCatalog())
 
 const validSelections = (): AssessmentSelections => ({
   work: ['work.commercial_image'],
