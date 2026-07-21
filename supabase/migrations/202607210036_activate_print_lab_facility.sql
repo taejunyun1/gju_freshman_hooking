@@ -23,9 +23,10 @@ begin
     raise exception using errcode = 'P0001', message = 'PRINT_LAB_SEED_INVALID';
   end if;
 
-  select * into strict v_resource
-  from public.resources
-  where metadata ->> 'seedKey' = 'archive:facility:print_lab';
+  select resource.* into strict v_resource
+  from public.resources resource
+  where resource.metadata ->> 'seedKey' = 'archive:facility:print_lab'
+  for update of resource;
 
   if v_resource.type <> 'facility' or v_resource.visibility <> 'public' then
     raise exception using errcode = 'P0001', message = 'PRINT_LAB_SEED_INVALID';
@@ -108,7 +109,7 @@ begin
           'archive', v_archive || pg_catalog.jsonb_build_object('evidenceStatus', 'snapshot')
         ),
       updated_at = pg_catalog.clock_timestamp()
-  where resource.metadata ->> 'seedKey' = 'archive:facility:print_lab'
+  where resource.id = v_resource.id
     and (
       resource.metadata ->> 'operationNote' is distinct from
         '대형 프린터를 활용한 사진·포트폴리오·전시 출력 시설입니다. 실제 이용은 학과에 문의해야 합니다.'
@@ -120,9 +121,9 @@ begin
     );
   get diagnostics v_metadata_updated = row_count;
 
-  select * into strict v_resource
-  from public.resources
-  where metadata ->> 'seedKey' = 'archive:facility:print_lab';
+  select resource.* into strict v_resource
+  from public.resources resource
+  where resource.id = v_resource.id;
 
   if v_resource.status = 'draft' then
     v_outcome := public.transition_admin_resource(

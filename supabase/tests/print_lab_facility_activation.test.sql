@@ -1,5 +1,5 @@
 begin;
-select plan(32);
+select plan(33);
 
 select has_function('public', 'activate_verified_print_lab_facility', array[]::text[], 'print lab activation function exists');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'service_role', array['EXECUTE'], 'service role can activate print lab');
@@ -18,6 +18,21 @@ select is(
    where procedure.oid = 'public.activate_verified_print_lab_facility()'::pg_catalog.regprocedure),
   array['search_path=""']::text[],
   'print lab activation has an empty search path'
+);
+select ok(
+  (select pg_catalog.strpos(pg_catalog.lower(definition.body), 'for update') > 0
+     and (
+       pg_catalog.char_length(definition.body)
+       - pg_catalog.char_length(pg_catalog.replace(
+           pg_catalog.lower(definition.body), 'resource.id = v_resource.id', ''
+         ))
+     ) / pg_catalog.char_length('resource.id = v_resource.id') = 2
+   from (
+     select pg_catalog.pg_get_functiondef(
+       'public.activate_verified_print_lab_facility()'::pg_catalog.regprocedure
+     ) as body
+   ) definition),
+  'activation locks the exact row and scopes later writes and reads to its id'
 );
 
 create temporary table print_lab_fixture on commit drop as
