@@ -432,12 +432,23 @@ const selectPrimaryScores = (
   dominantTracks: readonly TrackKey[],
   dominantTrackMargin: number,
 ): { primary: PrimaryScore, backup: PrimaryScore } => {
-  const byFit = [...scores].sort(comparePrimaryScores)
-  const dominantOwners = scores.filter(score => score.ownsDominantTrack)
+  const documentaryIsSoleTop = dominantTracks.length === 1
+    && dominantTracks[0] === 'documentary'
+  const documentaryOwners = documentaryIsSoleTop
+    ? scores.filter(score => score.ownsDominantTrack)
+    : []
+  if (documentaryIsSoleTop && documentaryOwners.length < 2) {
+    throw new Error('FACULTY_CONTENT_NOT_READY')
+  }
+  const eligibleScores = documentaryIsSoleTop ? documentaryOwners : scores
+  const byFit = [...eligibleScores].sort(comparePrimaryScores)
+  const dominantOwners = eligibleScores.filter(score => score.ownsDominantTrack)
   const hasUnownedDominantTrack = dominantTracks.length > 0 && dominantOwners.length === 0
   const hasClearDominantOwnership = dominantOwners.length > 0
     && dominantTrackMargin >= dominantTrackClearMargin
-  const signatureCandidates = hasClearDominantOwnership ? [...dominantOwners] : [...scores]
+  const signatureCandidates = hasClearDominantOwnership
+    ? [...dominantOwners]
+    : [...eligibleScores]
   const useContextualSignature = dominantTracks.length > 0 && !hasClearDominantOwnership
   const signatureFor = (score: PrimaryScore): number => useContextualSignature
     ? score.contextualSignatureScore

@@ -484,6 +484,44 @@ describe('canonical faculty recommendation balance', () => {
     expect(counts.get('김사라')!).toBeGreaterThanOrEqual(1_920 * 0.20)
   })
 
+  it('keeps a documentary top result with the documentary full-time professors', () => {
+    let documentaryCases = 0
+    let distributionKey = 1
+
+    for (const work of optionsByGroup.work) {
+      for (const result of optionsByGroup.result) {
+        for (const style of optionsByGroup.style) {
+          for (const career of optionsByGroup.career) {
+            const input = selections(
+              work.optionKey,
+              result.optionKey,
+              style.optionKey,
+              career.optionKey,
+            )
+            const evidence = evidenceFor(input)
+            const highestOtherTrack = Math.max(
+              evidence.trackScores.art_photo,
+              evidence.trackScores.commercial,
+              evidence.trackScores.video,
+            )
+
+            if (evidence.trackScores.documentary > highestOtherTrack) {
+              documentaryCases += 1
+              const faculty = recommendationForEvidence(evidence, distributionKey)
+              expect(
+                [faculty.primary.name, faculty.backup.name].sort(),
+                `${work.optionKey} | ${result.optionKey} | ${style.optionKey} | ${career.optionKey}`,
+              ).toEqual(['김사라', '조대연'].sort())
+            }
+            distributionKey += 1
+          }
+        }
+      }
+    }
+
+    expect(documentaryCases).toBeGreaterThan(0)
+  })
+
   it('keeps commercial questionnaire choices linked to 곽동욱', () => {
     const result = recommendation(selections(
       'work.commercial_image',
