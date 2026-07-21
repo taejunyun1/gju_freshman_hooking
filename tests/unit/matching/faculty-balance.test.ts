@@ -456,7 +456,7 @@ describe('canonical faculty recommendation balance', () => {
     }
   })
 
-  it('keeps every professor between 15% and 65% while respecting verified expertise', () => {
+  it('keeps every professor in the required distribution while respecting verified expertise', () => {
     const counts = new Map<string, number>()
     let distributionKey = 1
 
@@ -479,9 +479,9 @@ describe('canonical faculty recommendation balance', () => {
 
     expect(distributionKey - 1).toBe(1_920)
     expect([...counts.keys()].sort()).toEqual(['김사라', '윤태준', '조대연'])
-    // Preserve expertise-led routing while preventing either monopoly or token representation.
-    expect(Math.max(...counts.values())).toBeLessThan(1_920 * 0.65)
-    expect(Math.min(...counts.values())).toBeGreaterThanOrEqual(1_920 * 0.15)
+    expect(counts.get('윤태준')!).toBeLessThanOrEqual(1_920 * 0.55)
+    expect(counts.get('조대연')!).toBeGreaterThanOrEqual(1_920 * 0.20)
+    expect(counts.get('김사라')!).toBeGreaterThanOrEqual(1_920 * 0.20)
   })
 
   it('keeps commercial questionnaire choices linked to 곽동욱', () => {

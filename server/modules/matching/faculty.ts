@@ -336,13 +336,9 @@ const signatureClearMinimum = 0.4
 const signatureLeadMinimum = 0.25
 // A 50-point track gap is half the full 100-point scale and represents an unambiguous track.
 const dominantTrackClearMargin = 50
-// Contextual fit contributes at most 50 points; 40 therefore requires at least 80% evidence fit.
-const contextualClearMinimum = 40
-// A 30-point lead is larger than the entire style (10) and career (20) group contribution.
-const contextualClearMargin = 30
-// Near-fit candidates must be within one quarter of the 100-point scale and retain 60% of top fit.
-const nearFitAbsoluteGap = 25
-const nearFitRelativeFloor = 0.6
+// Mixed routes can rotate among evidence-backed candidates within a moderate 35-point fit range.
+const nearFitAbsoluteGap = 35
+const nearFitRelativeFloor = 0.5
 
 const canonicalQuestionnaireKey = (key: string): string => questionnaireAliases[key] ?? key
 
@@ -431,14 +427,11 @@ const scorePrimary = (
     .filter(tag => tag.category === 'track' && trackKeySet.has(tag.key) && tag.weight > 0)
     .map(tag => tag.key as TrackKey))
   const ownsDominantTrack = dominantTracks.some(trackKey => candidateTrackKeys.has(trackKey))
-  const dominantTrackFit = Math.max(0, ...dominantTracks
-    .filter(trackKey => candidateTrackKeys.has(trackKey))
-    .map(trackKey => student.trackScores[trackKey]))
   return {
     candidate,
     baseScore,
     rawScore: baseScore + load * 0.05,
-    routingFit: dominantTrackFit * 0.45 + evidence.expertise * 0.50,
+    routingFit: baseScore + evidence.expertise * 0.60,
     signatureScore: evidence.signature,
     contextualSignatureScore: evidence.contextualSignature,
     ownsDominantTrack,
@@ -486,10 +479,6 @@ const selectPrimaryScores = (
       && dominantTracks.length > 0
       && dominantTrackMargin >= dominantTrackClearMargin) {
       primary = dominantOwners[0]!
-    }
-    else if (byFit[0]!.routingFit >= contextualClearMinimum
-      && byFit[0]!.routingFit - byFit[1]!.routingFit >= contextualClearMargin) {
-      primary = byFit[0]!
     }
     else if (distributionKey !== undefined) {
       const topFit = byFit[0]!.routingFit
@@ -561,11 +550,16 @@ const reasonFor = (
   student: ParsedStudent,
   candidate: ParsedFaculty,
   role: 'primary' | 'backup' | 'specialist',
+  labelKey?: string,
+  useCommercialCoordinatorPath = false,
 ): string => {
-  const key = strongestFacultyEvidenceKey(student, candidate)
+  const key = labelKey ?? strongestFacultyEvidenceKey(student, candidate)
   const label = student.selectedLabels[key]!
   let reason: string
-  if (role === 'primary') {
+  if (role === 'primary' && useCommercialCoordinatorPath) {
+    reason = `광고·패션·제품 관심의 전체 학습경로와 상담을 총괄하는 ${candidate.name} ${candidate.title} 추천입니다.`
+  }
+  else if (role === 'primary') {
     reason = `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴보는 추천 총괄교수입니다.`
   }
   else if (role === 'backup') {
@@ -588,6 +582,8 @@ const resultFor = <Role extends 'primary' | 'backup' | 'specialist'>(
   student: ParsedStudent,
   candidate: ParsedFaculty,
   role: Role,
+  labelKey?: string,
+  useCommercialCoordinatorPath = false,
 ): FacultyResult<Role> => {
   const result = {
     role,
@@ -595,7 +591,7 @@ const resultFor = <Role extends 'primary' | 'backup' | 'specialist'>(
     name: candidate.name,
     title: candidate.title,
     expertise: candidate.expertise,
-    reason: reasonFor(student, candidate, role),
+    reason: reasonFor(student, candidate, role, labelKey, useCommercialCoordinatorPath),
     publicContacts: publicContactsFor(candidate),
   }
   const parsed = facultyResultSchema.safeParse(result)
@@ -607,6 +603,16 @@ interface SpecialistScore {
   readonly candidate: ParsedFaculty
   readonly rawScore: number
   readonly qualificationScore: number
+  readonly evidenceCount: number
+}
+
+interface SpecialistMatch {
+  readonly candidate: ParsedFaculty
+  readonly linkTagKey: string
+  readonly labelKey: string
+  readonly linkPriority: number
+  readonly qualificationScore: number
+  readonly supportScore: number
   readonly evidenceCount: number
 }
 
@@ -642,6 +648,32 @@ const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean 
   || (trackKeySet.has(tagKey) && student.trackScores[tagKey as TrackKey] > 0)
 )
 
+const specialistLinkSpecificity = (tagKey: string): number => (
+  trackKeySet.has(tagKey) ? 0 : 1
+)
+
+const compareSpecialistLinkMatches = (left: SpecialistMatch, right: SpecialistMatch): number => (
+  specialistLinkSpecificity(right.linkTagKey) - specialistLinkSpecificity(left.linkTagKey)
+  || right.linkPriority - left.linkPriority
+  || right.supportScore - left.supportScore
+  || right.qualificationScore - left.qualificationScore
+  || right.evidenceCount - left.evidenceCount
+  || right.candidate.priority - left.candidate.priority
+  || left.candidate.id - right.candidate.id
+  || compareText(left.linkTagKey, right.linkTagKey)
+)
+
+const compareSpecialistMatches = (left: SpecialistMatch, right: SpecialistMatch): number => (
+  right.qualificationScore - left.qualificationScore
+  || right.supportScore - left.supportScore
+  || right.evidenceCount - left.evidenceCount
+  || specialistLinkSpecificity(right.linkTagKey) - specialistLinkSpecificity(left.linkTagKey)
+  || right.candidate.priority - left.candidate.priority
+  || right.linkPriority - left.linkPriority
+  || left.candidate.id - right.candidate.id
+  || compareText(left.linkTagKey, right.linkTagKey)
+)
+
 const deepFreeze = <Value>(value: Value): Value => {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
   for (const child of Object.values(value)) deepFreeze(child)
@@ -673,32 +705,55 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
     dominantTrack.margin,
   )
 
-  const eligibleSpecialistIds = new Set(input.specialistLinks
-    .filter(link => (link.primaryFacultyId === null
-      || link.primaryFacultyId === chosenPrimary.candidate.id)
-      && hasPositiveLinkSignal(input.student, link.tagKey))
-    .map(link => link.specialistFacultyId))
-
-  const specialistScores = input.faculty
+  const activeSpecialists = new Map(input.faculty
     .filter(candidate => candidate.status === 'active'
       && candidate.consultationRole === 'specialist'
-      && (candidate.employmentType === 'adjunct' || candidate.employmentType === 'practitioner')
-      && eligibleSpecialistIds.has(candidate.id))
-    .map(candidate => scoreSpecialist(input.student, candidate))
-    .filter(candidate => candidate.qualificationScore >= 50)
-    .sort((left, right) => (
-      right.qualificationScore - left.qualificationScore
-      || right.rawScore - left.rawScore
-      || right.evidenceCount - left.evidenceCount
-      || right.candidate.priority - left.candidate.priority
-      || left.candidate.id - right.candidate.id
-    ))
+      && (candidate.employmentType === 'adjunct' || candidate.employmentType === 'practitioner'))
+    .map(candidate => [candidate.id, candidate]))
+  const specialistScores = new Map<number, SpecialistScore>()
+  const specialistMatches = new Map<number, SpecialistMatch>()
+  for (const link of input.specialistLinks) {
+    if ((link.primaryFacultyId !== null && link.primaryFacultyId !== chosenPrimary.candidate.id)
+      || !hasPositiveLinkSignal(input.student, link.tagKey)) continue
+    const candidate = activeSpecialists.get(link.specialistFacultyId)
+    if (!candidate) continue
+    const score = specialistScores.get(candidate.id) ?? scoreSpecialist(input.student, candidate)
+    specialistScores.set(candidate.id, score)
+    if (score.qualificationScore < 50) continue
+    const match: SpecialistMatch = {
+      candidate,
+      linkTagKey: link.tagKey,
+      labelKey: input.student.selectedLabels[link.tagKey] === undefined
+        ? strongestFacultyEvidenceKey(input.student, candidate)
+        : link.tagKey,
+      linkPriority: link.priority,
+      qualificationScore: score.qualificationScore,
+      supportScore: score.rawScore,
+      evidenceCount: score.evidenceCount,
+    }
+    const previous = specialistMatches.get(candidate.id)
+    if (!previous || compareSpecialistLinkMatches(match, previous) < 0) {
+      specialistMatches.set(candidate.id, match)
+    }
+  }
+  const selectedSpecialistMatches = [...specialistMatches.values()]
+    .sort(compareSpecialistMatches)
     .slice(0, 2)
 
-  const primary = resultFor(input.student, chosenPrimary.candidate, 'primary')
+  const hasCommercialOwner = primaryScores.some(({ candidate }) => candidate.tags.some(tag => (
+    tag.category === 'track' && tag.key === 'commercial' && tag.weight > 0
+  )))
+  const useCommercialCoordinatorPath = dominantTracks.includes('commercial') && !hasCommercialOwner
+  const primary = resultFor(
+    input.student,
+    chosenPrimary.candidate,
+    'primary',
+    undefined,
+    useCommercialCoordinatorPath,
+  )
   const backup = resultFor(input.student, chosenBackup.candidate, 'backup')
-  const specialists = specialistScores.map(({ candidate }) => (
-    resultFor(input.student, candidate, 'specialist')
+  const specialists = selectedSpecialistMatches.map(({ candidate, labelKey }) => (
+    resultFor(input.student, candidate, 'specialist', labelKey)
   ))
   const resultFaculty = { primary, backup, specialists }
   const canonical = resultFacultySchema.safeParse(resultFaculty)

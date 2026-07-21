@@ -323,6 +323,74 @@ const commercialAssessmentStudent = (): StudentEvidence => {
   return student(scored.trackScores, scored.interestVector, selectedLabels)
 }
 
+const mixedCommercialVideoFixture = () => {
+  const faculty = facultyFixture()
+  faculty.push({
+    ...clone(facultyFixture()[4]!),
+    id: 7,
+    name: '김태현',
+    expertise: '다큐멘터리·영상제작·예술사진',
+    tags: [
+      tag('video', '영상', 'specialist'),
+      tag('art_photo', '예술사진', 'specialist'),
+    ],
+  })
+  return {
+    student: student(
+      { documentary: 0, art_photo: 80, commercial: 80, video: 100 },
+      { video: 1, art_photo: 0.8 },
+      { video: '팀으로 제작', art_photo: '예술사진 작업' },
+    ),
+    faculty,
+    specialistLinks: [
+      { primaryFacultyId: 2, specialistFacultyId: 7, tagKey: 'video', priority: 100 },
+      { primaryFacultyId: 2, specialistFacultyId: 7, tagKey: 'art_photo', priority: 100 },
+    ],
+  }
+}
+
+const exhibitionCuratingFixture = () => {
+  const faculty = facultyFixture()
+  faculty.push({
+    ...clone(facultyFixture()[4]!),
+    id: 7,
+    name: '넓은 예술사진 강사',
+    priority: 99,
+    tags: [
+      tag('art_photo', '예술사진', 'specialist'),
+      tag('art_portfolio', '예술사진 포트폴리오', 'result'),
+    ],
+  }, {
+    ...clone(facultyFixture()[4]!),
+    id: 8,
+    name: '또 다른 예술사진 강사',
+    priority: 98,
+    tags: [
+      tag('art_photo', '예술사진', 'specialist'),
+      tag('art_portfolio', '예술사진 포트폴리오', 'result'),
+    ],
+  })
+  return {
+    student: student(
+      { documentary: 0, art_photo: 100, commercial: 0, video: 0 },
+      { exhibition: 1, curating: 1, art_photo: 1, art_portfolio: 1 },
+      {
+        exhibition: '전시기획',
+        curating: '큐레이팅',
+        art_photo: '예술사진',
+        art_portfolio: '예술사진 포트폴리오',
+      },
+    ),
+    faculty,
+    specialistLinks: [
+      { primaryFacultyId: 2, specialistFacultyId: 5, tagKey: 'exhibition', priority: 100 },
+      { primaryFacultyId: 2, specialistFacultyId: 5, tagKey: 'curating', priority: 90 },
+      { primaryFacultyId: 2, specialistFacultyId: 7, tagKey: 'art_photo', priority: 100 },
+      { primaryFacultyId: 2, specialistFacultyId: 8, tagKey: 'art_photo', priority: 100 },
+    ],
+  }
+}
+
 const recommend = (
   evidence: StudentEvidence,
   faculty = facultyFixture(),
@@ -395,6 +463,29 @@ describe('recommendFaculty', () => {
     expect(result.specialists.map(({ id }) => id)).toContain(6)
     expect(result.specialists.find(({ id }) => id === 6)?.reason)
       .toContain('제품·패션·광고 이미지 만들기')
+  })
+
+  it('uses the same specialist link tag for eligibility, ranking, and displayed reason', () => {
+    const result = recommendFaculty(mixedCommercialVideoFixture())
+    const kim = result.specialists.find(person => person.name === '김태현')
+
+    expect(kim?.reason).not.toContain('팀으로 제작')
+  })
+
+  it('prioritizes a specific exhibition link over a broad art-photo link', () => {
+    const result = recommendFaculty(exhibitionCuratingFixture())
+
+    expect(result.specialists.map(person => person.name)).toContain('정철호')
+    expect(result.specialists).toHaveLength(2)
+  })
+
+  it('uses the coordinator-path explanation for an unowned commercial track', () => {
+    const result = recommend(commercialAssessmentStudent())
+
+    expect(result.primary.reason).toContain('전체 학습경로와 상담을 총괄')
+    expect(result.primary.reason).toContain(result.primary.name)
+    expect(result.primary.reason).toContain('광고·패션·제품')
+    expect(result.primary.reason).not.toContain(`${result.primary.expertise} 전문분야와 연결`)
   })
 
   it('총괄 후보의 점수 공식·부하·동점 순서를 적용하고 facultyFit에서는 부하를 제외한다', () => {
