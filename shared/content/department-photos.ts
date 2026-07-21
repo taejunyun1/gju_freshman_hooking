@@ -25,8 +25,8 @@ export const landingDepartmentPhoto: DepartmentPhoto = Object.freeze({
 })
 
 export const departmentPhotosByTrack = Object.freeze({
-  documentary: Object.freeze([darkroom, printLab]),
-  art_photo: Object.freeze([darkroom, printLab]),
-  commercial: Object.freeze([studioA, studioB]),
-  video: Object.freeze([computerLab, studioA]),
+  documentary: Object.freeze([darkroom, printLab] as const),
+  art_photo: Object.freeze([darkroom, printLab] as const),
+  commercial: Object.freeze([studioA, studioB] as const),
+  video: Object.freeze([computerLab, studioA] as const),
 }) satisfies Readonly<Record<TrackKey, readonly [DepartmentPhoto, DepartmentPhoto]>>
