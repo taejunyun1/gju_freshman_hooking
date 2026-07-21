@@ -423,6 +423,40 @@ const createSubmit = (
 })
 
 describe('assessment completion service', () => {
+  it('preserves a legacy course while new 2026 course snapshots carry requirementType', async () => {
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const current2026 = {
+      ...resourceCandidates()[0]!,
+      metadata: {
+        ...resourceCandidates()[0]!.metadata,
+        academicYear: 2026,
+        requirementType: 'major_required' as const,
+      },
+    }
+    const legacy = {
+      ...resourceCandidates()[0]!,
+      id: 199,
+      title: '2025 사진 스튜디오 기초',
+      metadata: {
+        ...resourceCandidates()[0]!.metadata,
+        academicYear: 2025,
+      },
+    }
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => [current2026, legacy, ...resourceCandidates().slice(1)],
+      completeAssessment,
+    }))
+    const revision = await createAssessmentCatalogRevision(catalog())
+
+    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    expect(snapshot.resources.course.find(course => course.id === 101)?.displayMetadata.requirementType)
+      .toBe('major_required')
+    expect(snapshot.resources.course.find(course => course.id === 199)?.displayMetadata)
+      .not.toHaveProperty('requirementType')
+  })
+
   it.each([
     ['art_photo', '예술창작 프로젝트 세미나'],
     ['documentary', '다큐멘터리 세미나'],

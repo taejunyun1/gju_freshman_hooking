@@ -141,6 +141,7 @@ describe('resource matching', () => {
     const required = requiredTitles.map((title, index) => course(index + 100, {
       title,
       metadata: {
+        academicYear: 2026,
         gradeYear: ([1, 2, 2, 3, 3] as const)[index]!,
         term: '1학기',
         credits: 3,
@@ -167,6 +168,59 @@ describe('resource matching', () => {
     expect(new Set(ranked.course.map(item => item.id)).size).toBe(ranked.course.length)
     expect(ranked.course.length).toBeLessThanOrEqual(15)
     expect(ranked.course.every(item => item.connectionReason.includes(item.title))).toBe(true)
+  })
+
+  it('reserves required and pathway capacity before capping general personalized courses', () => {
+    const required = [
+      [101, '라이팅과 스튜디오', 1],
+      [102, '디지털 이미지 제작과 프린트', 2],
+      [103, '영상 컬러와 포스트 프로덕션', 2],
+      [104, '커머셜 포토그라피 기초 워크숍', 3],
+      [105, '커머셜 포토그라피 심화 워크숍', 3],
+    ] as const
+    const pathway = [
+      '영상 인터뷰 내러티브 워크숍',
+      '영상 드론 콘텐츠 워크숍',
+      '영상 콘텐츠 크리에이터 워크숍',
+    ].map((title, index) => course(201 + index, {
+      title,
+      metadata: { gradeYear: 3, term: '1학기', credits: 3, goalSummary: '영상 심화를 익히는' },
+      tags: [tag('unmatched_pathway')],
+    }))
+    const general = Array.from({ length: 5 }, (_, index) => course(index + 1, {
+      priority: 5 - index,
+      metadata: { gradeYear: 1, term: '1학기', credits: 3, goalSummary: '기초를 익히는' },
+      tags: [tag(`general_${index + 1}`)],
+    }))
+    const ranked = rankResources({
+      primaryTrack: 'video',
+      interestVector: Object.fromEntries(general.map(item => [item.tags[0]!.key, 1])),
+      selectedInterests: general.map(item => ({ key: item.tags[0]!.key, label: item.title })),
+      candidates: [
+        ...required.map(([id, title, gradeYear]) => course(id, {
+          title,
+          metadata: {
+            academicYear: 2026,
+            gradeYear,
+            term: '1학기',
+            credits: 3,
+            goalSummary: '공통 제작 기반을 익히는',
+            requirementType: 'major_required',
+          },
+          tags: [tag('required_without_interest')],
+        })),
+        ...pathway,
+        ...general,
+      ],
+    })
+
+    const ids = ranked.course.map(course => course.id)
+    expect(ids).toEqual(expect.arrayContaining([101, 102, 103, 104, 105, 201, 202, 203]))
+    expect(ids.filter(id => id <= 5)).toEqual([1, 2, 3, 4])
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ranked.course).toHaveLength(12)
+    expect(Object.values(Object.groupBy(ranked.course, course => course.displayMetadata.gradeYear))
+      .every(courses => (courses?.length ?? 0) <= 5)).toBe(true)
   })
 
   it.each([

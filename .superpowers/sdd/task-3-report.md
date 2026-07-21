@@ -9,6 +9,11 @@
 - Historical result snapshots may omit `displayMetadata.requirementType`; new completion mappings always provide it.
 - Added the scoped `202607210034_required_course_classification.sql` migration and pgTAP regression coverage.
 
+## Review follow-up
+
+- Legacy and non-2026 active public courses remain valid matcher candidates without a classification. Completion only requires `requirementType` when mapped course metadata identifies academic year 2026, so preserved courses cannot turn submissions into `INTERNAL_ERROR` responses.
+- Course composition now reserves active public 2026 required courses and exact selected pathway courses before it selects general personalized courses. It then fills only the remaining five-course annual capacity and 15-course total capacity in ranked order. This keeps all required and protected pathway IDs, prevents duplicate IDs, and deterministically caps general personalized courses instead of selecting them and silently deleting a pathway item later.
+
 ## TDD evidence
 
 RED was observed before implementation for:
@@ -23,6 +28,7 @@ RED was observed before implementation for:
 - `corepack pnpm exec tsx scripts/seed-content.ts --check`
 - `corepack pnpm vitest run --project unit tests/unit/content/content-seed.test.ts tests/unit/matching/resources.test.ts tests/unit/result/result-schema.test.ts tests/unit/components/AdminResources.test.ts` — 112 passed
 - `corepack pnpm vitest run --project integration tests/integration/admin/resources.test.ts` — 58 passed
+- `corepack pnpm vitest run --project integration tests/integration/result/completion.test.ts` — 64 passed
 - `corepack pnpm typecheck`
 - `corepack pnpm exec supabase db reset --local`
 - `corepack pnpm exec supabase test db --local supabase/tests/required_course_classification.test.sql` — 7 passed

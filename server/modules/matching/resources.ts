@@ -27,6 +27,7 @@ type CandidateStatus = 'draft' | 'active' | 'next_year_confirmed' | 'archived'
 type CandidateVisibility = 'public' | 'admin_only' | 'hidden'
 
 interface CourseCandidateMetadata {
+  readonly academicYear?: number
   readonly gradeYear: 1 | 2 | 3 | 4
   readonly term: string
   readonly credits: number
@@ -680,33 +681,48 @@ const isCurrentProject = (candidate: RankedCandidate): boolean => (
 
 const isRequiredCourse = (candidate: RankedCandidate): boolean => (
   candidate.candidate.type === 'course'
+  && candidate.candidate.metadata.academicYear === 2026
   && candidate.candidate.metadata.requirementType === 'major_required'
 )
 
-const mergeRequiredCourses = (
-  personalized: readonly RankedCandidate[],
-  required: readonly RankedCandidate[],
-  pathwayIds: ReadonlySet<number>,
+const uniqueCourseCandidates = (
+  candidates: readonly RankedCandidate[],
 ): readonly RankedCandidate[] => {
-  const merged = [...personalized, ...required.filter(item => !personalized.some(existing => (
-    existing.candidate.id === item.candidate.id
-  )))]
-  const byYear = new Map<number, RankedCandidate[]>()
-  for (const candidate of merged) {
+  const seen = new Set<number>()
+  return Object.freeze(candidates.filter((candidate) => {
+    if (seen.has(candidate.candidate.id)) return false
+    seen.add(candidate.candidate.id)
+    return true
+  }))
+}
+
+const composeCourseCandidates = (
+  general: readonly RankedCandidate[],
+  required: readonly RankedCandidate[],
+  pathway: readonly RankedCandidate[],
+): readonly RankedCandidate[] => {
+  const protectedCourses = uniqueCourseCandidates([...required, ...pathway])
+  const protectedIds = new Set(protectedCourses.map(candidate => candidate.candidate.id))
+  const remainingByYear = new Map<number, number>([[1, 5], [2, 5], [3, 5], [4, 5]])
+  for (const candidate of protectedCourses) {
     if (candidate.candidate.type !== 'course') continue
     const year = candidate.candidate.metadata.gradeYear
-    byYear.set(year, [...(byYear.get(year) ?? []), candidate])
+    const remaining = (remainingByYear.get(year) ?? 0) - 1
+    if (remaining < 0) throw new Error('RESOURCE_COURSE_YEAR_CAPACITY_EXCEEDED')
+    remainingByYear.set(year, remaining)
   }
-  const allowed = new Set<number>()
-  for (const courses of byYear.values()) {
-    const ordered = [...courses].sort((left, right) => (
-      Number(isRequiredCourse(right)) - Number(isRequiredCourse(left))
-      || Number(pathwayIds.has(right.candidate.id)) - Number(pathwayIds.has(left.candidate.id))
-      || merged.indexOf(left) - merged.indexOf(right)
-    ))
-    ordered.slice(0, 5).forEach(candidate => allowed.add(candidate.candidate.id))
+
+  const selectedGeneral: RankedCandidate[] = []
+  for (const candidate of general) {
+    if (protectedIds.has(candidate.candidate.id) || candidate.candidate.type !== 'course') continue
+    if (protectedCourses.length + selectedGeneral.length >= 15) break
+    const year = candidate.candidate.metadata.gradeYear
+    const remaining = remainingByYear.get(year) ?? 0
+    if (remaining <= 0) continue
+    selectedGeneral.push(candidate)
+    remainingByYear.set(year, remaining - 1)
   }
-  return Object.freeze(merged.filter(candidate => allowed.has(candidate.candidate.id)).slice(0, 15))
+  return Object.freeze([...selectedGeneral, ...protectedCourses])
 }
 
 export const rankResources = (input: RankResourcesInput): RankedResources => {
@@ -749,18 +765,22 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
         courseCandidates.find(item => matchesPathwayCourse(item.candidate, selection.course)) ?? []
       ))
   const foundationCap = Math.min(5, Math.max(0, 10 - pathwayCandidates.length))
-  const personalizedCourses = matchingInput.primaryTrack === undefined
-    ? selectDiverse(courseCandidates, 5)
-    : Object.freeze([
-        ...selectDiverse(courseCandidates.filter(item => (
-          item.candidate.metadata.gradeYear <= 2
-        )), foundationCap),
-        ...pathwayCandidates,
-      ].slice(0, 10))
-  const course = mergeRequiredCourses(
-    personalizedCourses,
+  const protectedIds = new Set([
+    ...courseCandidates.filter(isRequiredCourse),
+    ...pathwayCandidates,
+  ].map(candidate => candidate.candidate.id))
+  const generalCourseCandidates = courseCandidates.filter(candidate => (
+    !protectedIds.has(candidate.candidate.id)
+    && (matchingInput.primaryTrack === undefined || candidate.candidate.metadata.gradeYear <= 2)
+  ))
+  const general = selectDiverse(
+    generalCourseCandidates,
+    matchingInput.primaryTrack === undefined ? 5 : foundationCap,
+  )
+  const course = composeCourseCandidates(
+    general,
     courseCandidates.filter(isRequiredCourse),
-    new Set(pathwayCandidates.map(candidate => candidate.candidate.id)),
+    pathwayCandidates,
   )
   const capabilityEvidence = selectCapabilityEvidence(ranked, matchingInput.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
