@@ -41,13 +41,15 @@ describe('landing page', () => {
     expect(startLinks[0].classes()).toContain('landing__cta')
   })
 
-  it('shows one eager-loading department photo below the primary CTA', () => {
+  it('shows one eager-loading rotating event photo below the primary CTA', () => {
     const wrapper = mount(LandingPage, {
       global: { stubs: { NuxtLink: NuxtLinkStub } },
     })
 
     expect(wrapper.findAll('[data-department-photo="landing"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-department-photo="landing"] img')).toHaveLength(1)
     expect(wrapper.get('[data-department-photo="landing"] img').attributes('loading')).toBe('eager')
+    expect(wrapper.findAll('[data-photo-position]')).toHaveLength(4)
   })
 
   it('provides a labelled 44px home control in the masthead', () => {

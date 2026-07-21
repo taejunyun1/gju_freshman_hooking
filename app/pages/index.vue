@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
-import DepartmentPhotoCard from '../components/common/DepartmentPhotoCard.vue'
-import { landingDepartmentPhoto } from '../../shared/content/department-photos'
+import DepartmentPhotoRotator from '../components/common/DepartmentPhotoRotator.vue'
+import { landingDepartmentPhotos } from '../../shared/content/department-photos'
 
 onMounted(() => {
   void $fetch('/api/events', {
@@ -39,7 +39,7 @@ onMounted(() => {
           나의 연결 경로 찾기
         </NuxtLink>
         <div class="landing__photo" data-department-photo="landing">
-          <DepartmentPhotoCard :photo="landingDepartmentPhoto" loading="eager" />
+          <DepartmentPhotoRotator :photos="landingDepartmentPhotos" />
         </div>
       </section>
 
