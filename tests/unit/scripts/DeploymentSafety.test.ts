@@ -383,6 +383,7 @@ describe('deployment and E2E safety contracts', () => {
     expect(result.stdout).toContain('staging gate behavior: passed')
     expect(result.stdout).toContain('health mismatch behavior: passed')
     expect(result.stdout).toContain('smoke propagation retry window: passed')
+    expect(result.stdout).toContain('smoke wall-clock deadline: passed')
     expect(result.stdout).toContain('offline adapter trap: passed')
   })
 

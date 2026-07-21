@@ -19,6 +19,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -40,6 +41,9 @@ const ADMIN_PASSWORD_ONLY_MARKER = 'ADMIN / PASSWORD ACCESS'
 const SMOKE_RETRY_ATTEMPTS = 11
 const SMOKE_RETRY_BASE_DELAY_MS = 500
 const SMOKE_RETRY_MAX_DELAY_MS = 4_000
+const SMOKE_FETCH_TIMEOUT_MS = 10_000
+const HEALTH_SMOKE_DEADLINE_MS = 35_000
+const CONTENT_SMOKE_DEADLINE_MS = 15_000
 const WORKERS = Object.freeze({
   staging: 'photo-next-mvp-staging',
   production: 'photo-next-mvp',
@@ -688,12 +692,21 @@ const delay = milliseconds => new Promise(resolveDelay => setTimeout(resolveDela
 const fetchWithRetry = async (url, validator, label, adapters = {}) => {
   const fetcher = adapters.fetch ?? fetch
   const wait = adapters.delay ?? delay
+  const now = adapters.now ?? (() => performance.now())
+  const timeoutSignal = adapters.timeoutSignal ?? (milliseconds => AbortSignal.timeout(milliseconds))
+  const deadlineMs = adapters.deadlineMs ?? HEALTH_SMOKE_DEADLINE_MS
+  const startedAt = now()
   let lastStatus = 'network'
   for (let attempt = 1; attempt <= SMOKE_RETRY_ATTEMPTS; attempt += 1) {
+    const remainingBeforeFetch = deadlineMs - (now() - startedAt)
+    if (remainingBeforeFetch <= 0) break
     try {
       const response = await fetcher(url, {
         redirect: 'follow',
-        signal: AbortSignal.timeout(10_000),
+        signal: timeoutSignal(Math.max(
+          1,
+          Math.min(SMOKE_FETCH_TIMEOUT_MS, Math.floor(remainingBeforeFetch)),
+        )),
       })
       lastStatus = String(response.status)
       if (response.ok && await validator(response)) return
@@ -702,9 +715,12 @@ const fetchWithRetry = async (url, validator, label, adapters = {}) => {
       lastStatus = 'network'
     }
     if (attempt < SMOKE_RETRY_ATTEMPTS) {
+      const remainingBeforeDelay = deadlineMs - (now() - startedAt)
+      if (remainingBeforeDelay <= 0) break
       await wait(Math.min(
         SMOKE_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
         SMOKE_RETRY_MAX_DELAY_MS,
+        remainingBeforeDelay,
       ))
     }
   }
@@ -717,20 +733,25 @@ const smokeDeployment = async (baseUrl, commit, label) => {
   await fetchWithRetry(`${baseUrl}/api/health`, async (response) => {
     const body = await response.json().catch(() => null)
     return healthMatchesCommit(body, commit)
-  }, `${label} health/commit`)
-  await fetchWithRetry(`${baseUrl}/`, async response => (await response.text()).length > 100, `${label} landing`)
+  }, `${label} health/commit`, { deadlineMs: HEALTH_SMOKE_DEADLINE_MS })
+  await fetchWithRetry(
+    `${baseUrl}/`,
+    async response => (await response.text()).length > 100,
+    `${label} landing`,
+    { deadlineMs: CONTENT_SMOKE_DEADLINE_MS },
+  )
   await fetchWithRetry(`${baseUrl}/api/assessment/options`, async (response) => {
     const body = await response.json().catch(() => null)
     return typeof body?.data?.catalogRevision === 'string'
       && Array.isArray(body?.data?.groups)
       && body.data.groups.length > 0
       && body.data.groups.every(group => Array.isArray(group?.options) && group.options.length > 0)
-  }, `${label} assessment options`)
+  }, `${label} assessment options`, { deadlineMs: CONTENT_SMOKE_DEADLINE_MS })
   await fetchWithRetry(`${baseUrl}/admin/login`, async (response) => {
     const body = await response.text()
     return body.includes(ADMIN_PASSWORD_ONLY_MARKER)
       && !/one-time-code|TOTP|6자리|2단계/iu.test(body)
-  }, `${label} password-only admin login`)
+  }, `${label} password-only admin login`, { deadlineMs: CONTENT_SMOKE_DEADLINE_MS })
 }
 
 const deployEnvironment = (environment, commit, adapters = {}) => {
@@ -1146,6 +1167,7 @@ const runSelfCheck = async () => {
     )
     console.log('- health mismatch behavior: passed')
 
+    let propagationNow = 0
     let propagationAttempts = 0
     const propagationDelays = []
     await fetchWithRetry(
@@ -1161,7 +1183,11 @@ const runSelfCheck = async () => {
             matchesCommit: propagationAttempts === SMOKE_RETRY_ATTEMPTS,
           }
         },
-        delay: async milliseconds => propagationDelays.push(milliseconds),
+        delay: async (milliseconds) => {
+          propagationDelays.push(milliseconds)
+          propagationNow += milliseconds
+        },
+        now: () => propagationNow,
       },
     )
     const propagationWindow = propagationDelays.reduce((total, milliseconds) => total + milliseconds, 0)
@@ -1173,27 +1199,46 @@ const runSelfCheck = async () => {
       propagationWindow >= 30_000 && propagationWindow <= 45_000,
       'smoke 전파 재시도 윈도우가 30~45초 범위가 아닙니다.',
     )
+    assert(
+      HEALTH_SMOKE_DEADLINE_MS + 3 * CONTENT_SMOKE_DEADLINE_MS <= 80_000,
+      '환경별 smoke 최대 wall-clock deadline이 80초를 넘습니다.',
+    )
+    let failedPropagationNow = 0
     let failedPropagationAttempts = 0
+    const failedPropagationTimeouts = []
     assert(
       await rejectsSafelyAsync(() => fetchWithRetry(
         'https://self-check.invalid/api/health',
         async () => false,
         'self-check propagation failure',
         {
-          fetch: async () => {
+          fetch: async (_url, options) => {
             failedPropagationAttempts += 1
-            return { ok: true, status: 200 }
+            const requestTimeout = options.signal.timeoutMilliseconds
+            failedPropagationTimeouts.push(requestTimeout)
+            failedPropagationNow += requestTimeout
+            throw new Error('simulated fetch timeout')
           },
-          delay: async () => {},
+          delay: async (milliseconds) => {
+            failedPropagationNow += milliseconds
+          },
+          now: () => failedPropagationNow,
+          timeoutSignal: milliseconds => ({ timeoutMilliseconds: milliseconds }),
         },
       )),
-      'smoke 재시도 소진 후에도 fail-closed로 중단하지 않았습니다.',
+      'smoke wall-clock deadline 소진 후에도 fail-closed로 중단하지 않았습니다.',
     )
     assert(
-      failedPropagationAttempts === SMOKE_RETRY_ATTEMPTS,
-      'smoke 재시도 횟수가 유한 계약을 벗어났습니다.',
+      failedPropagationNow === HEALTH_SMOKE_DEADLINE_MS,
+      'smoke fetch 지연을 포함한 wall-clock deadline이 보장되지 않았습니다.',
+    )
+    assert(
+      failedPropagationAttempts < SMOKE_RETRY_ATTEMPTS
+        && failedPropagationTimeouts.every(milliseconds => milliseconds <= SMOKE_FETCH_TIMEOUT_MS),
+      'smoke fetch가 남은 deadline과 요청별 timeout을 준수하지 않았습니다.',
     )
     console.log('- smoke propagation retry window: passed')
+    console.log('- smoke wall-clock deadline: passed')
 
     let offlineRemoteCalls = 0
     const offlineAdapters = {
