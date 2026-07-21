@@ -1041,9 +1041,6 @@ const hasExactKeys = (value, expectedKeys) => {
 }
 
 const isPrintLabActivation = activation => {
-  if (hasExactKeys(activation, ['status']) && activation.status === 'not_present') {
-    return true
-  }
   if (!hasExactKeys(activation, ['status', 'metadataUpdated', 'resourcesPublished'])) {
     return false
   }
@@ -1317,7 +1314,7 @@ const selfCheckVerifiedContentActivation = async () => {
     return caught.message
   }
 
-  for (const printLabStatus of ['not_present', 'updated', 'already_activated']) {
+  for (const printLabStatus of ['updated', 'already_activated']) {
     for (const status of ['updated', 'already_activated']) {
       const check = fakeClient({
         activation: activationResult(status),
@@ -1343,6 +1340,7 @@ const selfCheckVerifiedContentActivation = async () => {
   )
 
   for (const printLabActivation of [
+    { status: 'not_present' },
     { status: 'not_present', payload: secretMarker },
     { status: 'updated', metadataUpdated: 0, resourcesPublished: 0 },
     { status: 'already_activated', metadataUpdated: 1, resourcesPublished: 0 },

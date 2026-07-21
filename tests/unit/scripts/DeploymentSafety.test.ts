@@ -295,7 +295,7 @@ describe('deployment and E2E safety contracts', () => {
     expect(printLabActivation).toBeGreaterThan(adminUpsert)
     expect(contentActivation).toBeGreaterThan(printLabActivation)
     expect(activationFlow).toContain('PRINT_LAB_ACTIVATION_FAILED')
-    expect(printLabContract).toContain("'not_present'")
+    expect(printLabContract).not.toContain("'not_present'")
     expect(printLabContract).toContain("'already_activated'")
   })
 
