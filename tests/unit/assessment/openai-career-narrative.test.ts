@@ -33,6 +33,40 @@ const makeChoice = () => {
   return buildDeterministicCareerNarrativeChoice(brief)
 }
 
+const makeVideoBrief = () => {
+  const { careerNarrative: _ignored, ...base } = makeResultSnapshot()
+  return buildCareerNarrativeBrief({
+    ...base,
+    selectedInterests: [
+      { group: 'work', key: 'work.video_scene', label: '카메라로 영상 장면 촬영하기' },
+      ...base.selectedInterests.slice(1),
+    ],
+    rankedTracks: ['video', 'art_photo', 'commercial', 'documentary'],
+  })
+}
+
+const nonVideoBridgeChoice = (): CareerNarrativeChoice => {
+  const deterministic = makeChoice()
+  return {
+    ...deterministic,
+    choices: [
+      {
+        slot: 'direction',
+        templateId: 'direction_bridge_v1',
+        connectorId: 'and_v1',
+        factRefs: [
+          'interest:work.commercial_image',
+          'track:commercial',
+          'track:art_photo',
+        ],
+      },
+      deterministic.choices[1],
+      deterministic.choices[2],
+      deterministic.choices[3],
+    ],
+  }
+}
+
 const providerPayload = (
   choice: unknown = makeChoice(),
   overrides: Record<string, unknown> = {},
@@ -196,6 +230,35 @@ describe('OpenAI career narrative server config', () => {
 })
 
 describe('privacy-bounded OpenAI Responses adapter', () => {
+  it('rejects a commercial-first provider bridge as invalid output', async () => {
+    const fetch = vi.fn(async () => providerResponse(providerPayload(nonVideoBridgeChoice())))
+
+    await expect(requestWith(fetch as typeof globalThis.fetch)).resolves.toEqual({
+      kind: 'fallback',
+      failureCode: 'invalid_output',
+    })
+  })
+
+  it('accepts the advertised bridge for a video-first provider choice', async () => {
+    const brief = makeVideoBrief()
+    const choice = buildDeterministicCareerNarrativeChoice(brief)
+    const fetch = vi.fn(async () => providerResponse(providerPayload(choice)))
+
+    expect(brief.slots[0].allowedTemplateIds).toEqual([
+      'direction_focus_v1',
+      'direction_bridge_v1',
+    ])
+    expect(brief.slots[0].allowedFactRefs).toEqual([
+      'interest:work.video_scene',
+      'track:video',
+      'track:art_photo',
+    ])
+    await expect(requestWith(fetch as typeof globalThis.fetch, brief)).resolves.toMatchObject({
+      kind: 'generated',
+      choice,
+    })
+  })
+
   it('sends the exact private Responses API contract once', async () => {
     const fetch = vi.fn(async () => providerResponse())
     const brief = makeBrief()
@@ -278,7 +341,6 @@ describe('privacy-bounded OpenAI Responses adapter', () => {
     const itemProperties = format.schema.properties.choices.items.properties
     expect(itemProperties.templateId.enum).toEqual([
       'direction_focus_v1',
-      'direction_bridge_v1',
       'learning_course_v1',
       'learning_course_activity_v1',
       'learning_interest_v1',

@@ -327,6 +327,7 @@ const assertSlotFactShape = (
       || refs.length > 3
       || kinds[0] !== 'interest'
       || kinds.slice(1).some(kind => kind !== 'track')
+      || (refs.length === 3 && refs[1] !== 'track:video')
     ) {
       invalidBrief()
     }
@@ -404,7 +405,6 @@ export const decodeOpenAiCareerProviderBrief = (input: unknown) => {
         'allowedFactRefs',
       ])
       || rawSlot.slot !== contract.slot
-      || !hasExactValues(rawSlot.allowedTemplateIds, contract.templates)
       || !hasExactValues(rawSlot.allowedConnectorIds, contract.connectors)
       || !Array.isArray(rawSlot.allowedFactRefs)
       || rawSlot.allowedFactRefs.length < 1
@@ -412,13 +412,26 @@ export const decodeOpenAiCareerProviderBrief = (input: unknown) => {
     ) {
       return invalidBrief()
     }
+    const allowedTemplateIds = contract.slot === 'direction'
+      ? hasExactValues(rawSlot.allowedTemplateIds, ['direction_focus_v1'])
+        ? ['direction_focus_v1'] as const
+        : hasExactValues(rawSlot.allowedTemplateIds, contract.templates)
+          ? [...contract.templates]
+          : invalidBrief()
+      : hasExactValues(rawSlot.allowedTemplateIds, contract.templates)
+        ? [...contract.templates]
+        : invalidBrief()
     const allowedFactRefs = rawSlot.allowedFactRefs.map(assertSafeEvidenceRef)
     if (new Set(allowedFactRefs).size !== allowedFactRefs.length) invalidBrief()
     assertSlotFactShape(contract.slot, allowedFactRefs, facts)
+    if (contract.slot === 'direction') {
+      const bridgeAdvertised = allowedTemplateIds.length === contract.templates.length
+      if (bridgeAdvertised !== (allowedFactRefs.length === 3)) invalidBrief()
+    }
     allSlotRefs.push(...allowedFactRefs)
     return {
       slot: contract.slot,
-      allowedTemplateIds: [...contract.templates],
+      allowedTemplateIds: [...allowedTemplateIds],
       allowedConnectorIds: [...contract.connectors],
       allowedFactRefs,
     }

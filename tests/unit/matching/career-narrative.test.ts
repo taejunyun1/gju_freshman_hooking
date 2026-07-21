@@ -35,6 +35,36 @@ const renderFallback = (core: ResultSnapshotCore) => {
 }
 
 describe('grounded career narrative', () => {
+  it('does not authorize a secondary-track bridge for a non-video top track', () => {
+    const { careerNarrative: _ignored, ...core } = makeResultSnapshot()
+    const brief = buildCareerNarrativeBrief(core)
+    const deterministic = buildDeterministicCareerNarrativeChoice(brief)
+    const providerBridge = {
+      ...deterministic,
+      choices: deterministic.choices.map((choice, index) => index === 0
+        ? {
+            slot: 'direction' as const,
+            templateId: 'direction_bridge_v1' as const,
+            connectorId: 'and_v1' as const,
+            factRefs: [
+              'interest:work.commercial_image' as const,
+              'track:commercial' as const,
+              'track:art_photo' as const,
+            ],
+          }
+        : choice),
+    }
+
+    expect(brief.slots[0].allowedTemplateIds).toEqual(['direction_focus_v1'])
+    expect(brief.slots[0].allowedFactRefs).toEqual([
+      'interest:work.commercial_image',
+      'track:commercial',
+    ])
+    expect(brief.facts).not.toHaveProperty('track:art_photo')
+    expect(() => validateCareerNarrativeChoice(brief, providerBridge))
+      .toThrow('CAREER_NARRATIVE_CHOICE_INVALID')
+  })
+
   it('locks four ordered slots to deterministic result evidence', () => {
     const { careerNarrative: _ignored, ...core } = makeResultSnapshot()
     const brief = buildCareerNarrativeBrief(core)

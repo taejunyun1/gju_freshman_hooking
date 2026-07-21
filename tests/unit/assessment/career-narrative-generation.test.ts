@@ -229,6 +229,65 @@ describe('career narrative generation orchestration', () => {
     expect(generationStore.read).toHaveBeenCalledOnce()
   })
 
+  it('settles a non-video provider bridge as deterministic invalid-output fallback', async () => {
+    const brief = buildCareerNarrativeBrief(coreSnapshot())
+    const deterministic = buildDeterministicCareerNarrativeChoice(brief)
+    const providerChoice = {
+      ...deterministic,
+      choices: [
+        {
+          slot: 'direction' as const,
+          templateId: 'direction_bridge_v1' as const,
+          connectorId: 'and_v1' as const,
+          factRefs: [
+            'interest:work.commercial_image' as const,
+            'track:commercial' as const,
+            'track:art_photo' as const,
+          ],
+        },
+        deterministic.choices[1],
+        deterministic.choices[2],
+        deterministic.choices[3],
+      ] as const,
+    }
+    const fallback = fallbackNarrative()
+    const generationStore = store({
+      claim: vi.fn(async () => ({
+        kind: 'owner',
+        id: 91,
+        claimToken: '33333333-3333-4333-8333-333333333333',
+        expiresAt,
+      })),
+      finish: vi.fn(async input => terminal(input.narrative, input.generationId)),
+      read: vi.fn(async () => terminal(fallback)),
+    })
+    const provider = vi.fn(async () => ({
+      kind: 'generated' as const,
+      choice: providerChoice,
+      providerResponseId: 'resp_test-provider-bridge',
+      model: 'gpt-5.6-sol' as const,
+      inputTokens: 420,
+      outputTokens: 120,
+    }))
+    const resolve = resolveWith({
+      store: generationStore,
+      config: enabledConfig,
+      minorPolicyApproved: true,
+      provider,
+    })
+
+    await expect(resolve(resolutionInput())).resolves.toEqual({
+      kind: 'narrative_ready',
+      generationId: 91,
+      narrative: fallback,
+    })
+    expect(generationStore.finish).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'deterministic',
+      failureCode: 'invalid_output',
+      narrative: fallback,
+    }))
+  })
+
   it.each([
     'timeout',
     'provider_error',

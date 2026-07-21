@@ -146,7 +146,9 @@ export const buildCareerNarrativeBrief = (
   const learningInterestRef = addInterest(firstInterest(core.selectedInterests, ['work', 'result']))
   const careerInterestRef = addInterest(firstInterest(core.selectedInterests, ['career']))
   const topTrackRef = addTrack(core.rankedTracks[0])
-  const secondTrackRef = addTrack(core.rankedTracks[1])
+  const secondTrackRef = core.rankedTracks[0] === 'video'
+    ? addTrack(core.rankedTracks[1])
+    : undefined
 
   const bridgeCourses = videoBridgeCourses(core)
   const selectedCourses = core.rankedTracks[0] === 'video'
@@ -264,7 +266,9 @@ export const buildCareerNarrativeBrief = (
     slots: [
       {
         slot: 'direction',
-        allowedTemplateIds: ['direction_focus_v1', 'direction_bridge_v1'],
+        allowedTemplateIds: core.rankedTracks[0] === 'video'
+          ? ['direction_focus_v1', 'direction_bridge_v1']
+          : ['direction_focus_v1'],
         allowedConnectorIds: ['and_v1', 'then_v1'],
         allowedFactRefs: directionRefs,
       },
@@ -430,6 +434,9 @@ const validateTemplateFacts = (
       return
     case 'direction_bridge_v1':
       assertKinds(brief, choice.factRefs, ['interest', 'track', 'track'])
+      if (choice.factRefs[1] !== 'track:video') {
+        throw new Error('CAREER_NARRATIVE_FACT_SHAPE_INVALID')
+      }
       return
     case 'learning_course_v1': {
       if (choice.factRefs.length < 1 || choice.factRefs.length > 2) {

@@ -76,7 +76,9 @@ export type CareerNarrativeBrief = {
   readonly slots: readonly [
     {
       readonly slot: 'direction'
-      readonly allowedTemplateIds: readonly ['direction_focus_v1', 'direction_bridge_v1']
+      readonly allowedTemplateIds:
+        | readonly ['direction_focus_v1']
+        | readonly ['direction_focus_v1', 'direction_bridge_v1']
       readonly allowedConnectorIds: readonly ['and_v1', 'then_v1']
       readonly allowedFactRefs: readonly CareerNarrativeEvidenceId[]
     },

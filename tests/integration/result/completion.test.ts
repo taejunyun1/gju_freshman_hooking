@@ -10,6 +10,10 @@ import {
 } from '../../../server/modules/assessment/career-narrative'
 import { createAssessmentCatalogRevision } from '../../../server/modules/assessment/catalog-revision'
 import {
+  createCareerNarrativeResolver,
+  type GenerationReadResult,
+} from '../../../server/modules/assessment/career-narrative-generation'
+import {
   createAssessmentResponseFingerprint,
   createAssessmentCompletionService,
   createSupabaseAssessmentCompletionDependencies,
@@ -784,6 +788,100 @@ describe('assessment completion service', () => {
       top_track: 'commercial',
       narrative_source: 'openai',
     })
+  })
+
+  it('persists a deterministic fallback when a provider returns a non-video bridge', async () => {
+    const revision = await createAssessmentCatalogRevision(catalog())
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    let authoritative: GenerationReadResult | undefined
+    const finish = vi.fn(async (input) => {
+      authoritative = {
+        kind: 'terminal',
+        id: input.generationId,
+        expiresAt: '2026-07-16T02:00:12.000Z',
+        source: input.source,
+        narrative: input.narrative,
+        ...(input.failureCode === null ? {} : { failureCode: input.failureCode }),
+      }
+      return authoritative
+    })
+    const provider = vi.fn(async ({ brief }) => {
+      const deterministic = buildDeterministicCareerNarrativeChoice(brief)
+      return {
+        kind: 'generated' as const,
+        choice: {
+          ...deterministic,
+          choices: [
+            {
+              slot: 'direction' as const,
+              templateId: 'direction_bridge_v1' as const,
+              connectorId: 'and_v1' as const,
+              factRefs: [
+                'interest:work.commercial_image' as const,
+                'track:commercial' as const,
+                'track:art_photo' as const,
+              ],
+            },
+            deterministic.choices[1],
+            deterministic.choices[2],
+            deterministic.choices[3],
+          ] as const,
+        },
+        providerResponseId: 'resp_test-non-video-bridge',
+        model: 'gpt-5.6-sol' as const,
+        inputTokens: 420,
+        outputTokens: 120,
+      }
+    })
+    const resolveCareerNarrative = createCareerNarrativeResolver({
+      store: {
+        claim: vi.fn(async () => ({
+          kind: 'owner',
+          id: generationId,
+          claimToken: '33333333-3333-4333-8333-333333333333',
+          expiresAt: '2026-07-16T02:00:12.000Z',
+        })),
+        markAttempted: vi.fn(async () => true),
+        finish,
+        read: vi.fn(async () => {
+          if (authoritative === undefined) throw new Error('missing authoritative narrative')
+          return authoritative
+        }),
+      },
+      config: {
+        enabled: true,
+        apiKey: 'server-test-key',
+        safetyHmacKey: new Uint8Array(32).fill(29),
+        model: 'gpt-5.6-sol',
+        timeoutMs: 5_000,
+        dailyCap: 500,
+        prospectCap: 5,
+        maxOutputTokens: 512,
+      },
+      minorPolicyApproved: true,
+      loadCompletedAssessmentByIdempotency: vi.fn(async () => null),
+      provider,
+      createSafetyIdentifier: vi.fn(async () => `pn_${'A'.repeat(43)}`),
+      delay: vi.fn(async () => undefined),
+      wallNow: () => Date.parse('2026-07-16T02:00:00.000Z'),
+    })
+    const service = createAssessmentCompletionService(serviceDependencies({
+      completeAssessment,
+      resolveCareerNarrative,
+    }))
+
+    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    expect(snapshot.careerNarrative.source).toBe('deterministic')
+    expect(snapshot.careerNarrative.sentences[0]?.evidenceIds).toEqual([
+      'interest:work.commercial_image',
+      'track:commercial',
+    ])
+    expect(finish).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'deterministic',
+      failureCode: 'invalid_output',
+    }))
   })
 
   it('returns a completed sequential retry before catalog, matching, or narrative work', async () => {
