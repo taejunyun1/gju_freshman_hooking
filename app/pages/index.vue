@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
+import DepartmentPhotoCard from '../components/common/DepartmentPhotoCard.vue'
+import { landingDepartmentPhoto } from '../../shared/content/department-photos'
 
 onMounted(() => {
   void $fetch('/api/events', {
@@ -36,6 +38,9 @@ onMounted(() => {
         >
           나의 연결 경로 찾기
         </NuxtLink>
+        <div class="landing__photo" data-department-photo="landing">
+          <DepartmentPhotoCard :photo="landingDepartmentPhoto" loading="eager" />
+        </div>
       </section>
 
       <section
@@ -230,6 +235,11 @@ onMounted(() => {
   content: '→';
 }
 
+.landing__photo {
+  margin-top: 2rem;
+  --department-photo-aspect: 4 / 3;
+}
+
 .sequence {
   padding-bottom: clamp(4.5rem, 12vw, 8rem);
 }
@@ -386,6 +396,12 @@ onMounted(() => {
   border-top: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   color: color-mix(in srgb, var(--color-primary-strong) 64%, transparent);
   font-size: 0.5625rem;
+}
+
+@media (min-width: 720px) {
+  .landing__photo {
+    --department-photo-aspect: 16 / 7;
+  }
 }
 
 @media (min-width: 48rem) {
