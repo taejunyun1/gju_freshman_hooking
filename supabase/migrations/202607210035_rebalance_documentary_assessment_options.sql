@@ -9,6 +9,7 @@ lock table public.assessment_options in share row exclusive mode;
 do $migration$
 declare
   v_changed integer;
+  v_non_target_fingerprint text;
 begin
   -- A pristine database is populated by the canonical seed after migrations.
   -- Existing deployments must have the complete approved catalog below.
@@ -48,6 +49,47 @@ begin
     raise exception using
       errcode = 'P0001',
       message = 'assessment rebalance aborted: active option groups do not match the approved catalog';
+  end if;
+
+  select pg_catalog.encode(
+    extensions.digest(
+      pg_catalog.convert_to(
+        coalesce(
+          pg_catalog.jsonb_agg(
+            pg_catalog.jsonb_build_object(
+              'question_group', question_group,
+              'option_key', option_key,
+              'label', label,
+              'description', description,
+              'visual_key', visual_key,
+              'track_weights', track_weights,
+              'interest_tags', interest_tags,
+              'status', status,
+              'sort_order', sort_order
+            )
+            order by pg_catalog.array_position(
+              array['work', 'result', 'style', 'career'],
+              question_group
+            ), sort_order
+          ),
+          '[]'::jsonb
+        )::text,
+        'UTF8'
+      ),
+      'sha256'
+    ),
+    'hex'
+  )
+  into v_non_target_fingerprint
+  from public.assessment_options
+  where option_key not in ('work.photo_everyday', 'work.brand_region');
+
+  if v_non_target_fingerprint is distinct from
+    '2436467a58414325724d9673051ec705515ec5dcb3305177b79d45efae86b112'
+  then
+    raise exception using
+      errcode = 'P0001',
+      message = 'assessment rebalance aborted: non-target options drifted from the approved catalog';
   end if;
 
   if (
