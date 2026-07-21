@@ -275,6 +275,30 @@ describe('deployment and E2E safety contracts', () => {
     expect(production).toBeGreaterThan(activation)
   })
 
+  it('activates the seeded print lab immediately after admin upsert and before other verified content', () => {
+    const runner = readFileSync('scripts/deploy-photo-next-remote.mjs', 'utf8')
+    const printLabContract = runner.slice(
+      runner.indexOf('const isPrintLabActivation ='),
+      runner.indexOf('const upsertAdminAndActivateContent = async'),
+    )
+    const activationFlow = runner.slice(
+      runner.indexOf('const upsertAdminAndActivateContent = async'),
+      runner.indexOf('const configureAdmin = async'),
+    )
+    const adminUpsert = activationFlow.indexOf(".from('admin_users')")
+    const printLabActivation = activationFlow.indexOf(
+      ".rpc('activate_verified_print_lab_facility_if_present')",
+    )
+    const contentActivation = activationFlow.indexOf(".rpc('activate_verified_2026_content')")
+
+    expect(adminUpsert).toBeGreaterThanOrEqual(0)
+    expect(printLabActivation).toBeGreaterThan(adminUpsert)
+    expect(contentActivation).toBeGreaterThan(printLabActivation)
+    expect(activationFlow).toContain('PRINT_LAB_ACTIVATION_FAILED')
+    expect(printLabContract).toContain("'not_present'")
+    expect(printLabContract).toContain("'already_activated'")
+  })
+
   it('tracks a release-only runner that preserves existing Worker secrets and fails closed', () => {
     const runnerPath = 'scripts/deploy-photo-next-release.mjs'
     expect(existsSync(runnerPath)).toBe(true)

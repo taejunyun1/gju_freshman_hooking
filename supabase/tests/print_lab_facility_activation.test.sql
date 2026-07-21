@@ -1,5 +1,5 @@
 begin;
-select plan(38);
+select plan(39);
 
 select has_function('public', 'activate_verified_print_lab_facility', array[]::text[], 'print lab activation function exists');
 select has_function('public', 'activate_verified_print_lab_facility_if_present', array[]::text[], 'print lab deployment gate exists');
@@ -8,6 +8,7 @@ select function_privs_are('public', 'activate_verified_print_lab_facility', arra
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'anon', array[]::text[], 'anonymous users cannot activate print lab');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'authenticated', array[]::text[], 'ordinary users cannot activate print lab');
 select function_privs_are('public', 'activate_verified_print_lab_facility_if_present', array[]::text[], 'public', array[]::text[], 'deployment gate is not publicly executable');
+select function_privs_are('public', 'activate_verified_print_lab_facility_if_present', array[]::text[], 'service_role', array['EXECUTE'], 'service role can execute the post-seed deployment gate');
 select ok(
   (select procedure.prosecdef
    from pg_catalog.pg_proc procedure

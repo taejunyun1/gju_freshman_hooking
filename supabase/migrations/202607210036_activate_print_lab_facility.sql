@@ -170,6 +170,8 @@ $$;
 
 revoke all on function public.activate_verified_print_lab_facility_if_present()
   from public, anon, authenticated, service_role;
+grant execute on function public.activate_verified_print_lab_facility_if_present()
+  to service_role;
 
 do $$
 begin

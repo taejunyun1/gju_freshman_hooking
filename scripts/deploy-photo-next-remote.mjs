@@ -1032,11 +1032,42 @@ const findAdminUser = async (client, email) => {
 
 const isActivationCount = value => Number.isInteger(value) && value >= 0
 
+const hasExactKeys = (value, expectedKeys) => {
+  if (!isPlainObject(value)) return false
+  const actual = Object.keys(value).sort()
+  const expected = [...expectedKeys].sort()
+  return actual.length === expected.length
+    && actual.every((key, index) => key === expected[index])
+}
+
+const isPrintLabActivation = activation => {
+  if (hasExactKeys(activation, ['status']) && activation.status === 'not_present') {
+    return true
+  }
+  if (!hasExactKeys(activation, ['status', 'metadataUpdated', 'resourcesPublished'])) {
+    return false
+  }
+  if (![activation.metadataUpdated, activation.resourcesPublished]
+    .every(value => Number.isInteger(value) && value >= 0 && value <= 1)) {
+    return false
+  }
+  const changes = activation.metadataUpdated + activation.resourcesPublished
+  return activation.status === 'updated'
+    ? changes > 0
+    : activation.status === 'already_activated' && changes === 0
+}
+
 const upsertAdminAndActivateContent = async (serviceClient, userId) => {
   const { error: upsertError } = await serviceClient
     .from('admin_users')
     .upsert({ id: userId, role: 'admin', is_active: true }, { onConflict: 'id' })
   if (upsertError) fail('admin_users 권한 행 구성에 실패했습니다.')
+
+  const { data: printLabActivation, error: printLabActivationError } = await serviceClient
+    .rpc('activate_verified_print_lab_facility_if_present')
+  if (printLabActivationError || !isPrintLabActivation(printLabActivation)) {
+    fail('PRINT_LAB_ACTIVATION_FAILED')
+  }
 
   const { data: activation, error: activationError } = await serviceClient
     .rpc('activate_verified_2026_content')
@@ -1215,9 +1246,18 @@ const selfCheckVerifiedContentActivation = async () => {
     resourcesPublished: 41,
     validationErrors: 3,
   })
+  const printLabActivationResult = status => status === 'not_present'
+    ? { status }
+    : {
+        status,
+        metadataUpdated: status === 'updated' ? 1 : 0,
+        resourcesPublished: status === 'updated' ? 1 : 0,
+      }
   const fakeClient = ({
     activation = activationResult('updated'),
     activationError = null,
+    printLabActivation = printLabActivationResult('updated'),
+    printLabActivationError = null,
     upsertError = null,
   } = {}) => {
     const calls = []
@@ -1234,6 +1274,10 @@ const selfCheckVerifiedContentActivation = async () => {
           }
         },
         rpc: async (name) => {
+          if (name === 'activate_verified_print_lab_facility_if_present') {
+            calls.push({ operation: 'printLab', name })
+            return { data: printLabActivation, error: printLabActivationError }
+          }
           calls.push({ operation: 'activate', name })
           return { data: activation, error: activationError }
         },
@@ -1242,8 +1286,8 @@ const selfCheckVerifiedContentActivation = async () => {
   }
   const assertCallContract = (calls) => {
     assert(
-      calls.map(call => call.operation).join(',') === 'upsert,activate',
-      'admin upsert 이후 activation이 정확히 한 번 호출되지 않았습니다.',
+      calls.map(call => call.operation).join(',') === 'upsert,printLab,activate',
+      'admin upsert 이후 프린트랩과 검증 콘텐츠 activation이 순서대로 호출되지 않았습니다.',
     )
     assert(
       calls[0].values.id === userId
@@ -1253,7 +1297,11 @@ const selfCheckVerifiedContentActivation = async () => {
       'admin_users upsert payload가 잘못되었습니다.',
     )
     assert(
-      calls[1].name === 'activate_verified_2026_content',
+      calls[1].name === 'activate_verified_print_lab_facility_if_present',
+      '프린트랩 activation RPC 이름이 잘못되었습니다.',
+    )
+    assert(
+      calls[2].name === 'activate_verified_2026_content',
       '검증 콘텐츠 activation RPC 이름이 잘못되었습니다.',
     )
   }
@@ -1269,10 +1317,46 @@ const selfCheckVerifiedContentActivation = async () => {
     return caught.message
   }
 
-  for (const status of ['updated', 'already_activated']) {
-    const check = fakeClient({ activation: activationResult(status) })
-    await upsertAdminAndActivateContent(check.client, userId)
-    assertCallContract(check.calls)
+  for (const printLabStatus of ['not_present', 'updated', 'already_activated']) {
+    for (const status of ['updated', 'already_activated']) {
+      const check = fakeClient({
+        activation: activationResult(status),
+        printLabActivation: printLabActivationResult(printLabStatus),
+      })
+      await upsertAdminAndActivateContent(check.client, userId)
+      assertCallContract(check.calls)
+    }
+  }
+
+  const printLabRpcFailure = fakeClient({
+    printLabActivation: { payload: secretMarker },
+    printLabActivationError: { message: secretMarker },
+  })
+  const printLabRpcFailureMessage = await captureSafeMessage(
+    () => upsertAdminAndActivateContent(printLabRpcFailure.client, userId),
+  )
+  assert(
+    printLabRpcFailure.calls.map(call => call.operation).join(',') === 'upsert,printLab'
+      && printLabRpcFailureMessage === 'PRINT_LAB_ACTIVATION_FAILED'
+      && !printLabRpcFailureMessage.includes(secretMarker),
+    '프린트랩 activation 실패 후 콘텐츠 activation 차단 또는 secret-safe 오류 계약이 깨졌습니다.',
+  )
+
+  for (const printLabActivation of [
+    { status: 'not_present', payload: secretMarker },
+    { status: 'updated', metadataUpdated: 0, resourcesPublished: 0 },
+    { status: 'already_activated', metadataUpdated: 1, resourcesPublished: 0 },
+  ]) {
+    const malformedPrintLab = fakeClient({ printLabActivation })
+    const malformedPrintLabMessage = await captureSafeMessage(
+      () => upsertAdminAndActivateContent(malformedPrintLab.client, userId),
+    )
+    assert(
+      malformedPrintLab.calls.map(call => call.operation).join(',') === 'upsert,printLab'
+        && malformedPrintLabMessage === 'PRINT_LAB_ACTIVATION_FAILED'
+        && !malformedPrintLabMessage.includes(secretMarker),
+      'malformed 프린트랩 activation 응답이 fail-closed 또는 secret-safe가 아닙니다.',
+    )
   }
 
   const rpcFailure = fakeClient({
