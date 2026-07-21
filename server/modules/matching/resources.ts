@@ -440,20 +440,31 @@ const canonicalResult = (result: ResultResource): ResultResource | null => (
   resultResourceSchema.safeParse(result).success ? result : null
 )
 
+const isForceIncludedRequiredCourse = (
+  candidate: ResourceCandidate,
+): candidate is Extract<ResourceCandidate, { type: 'course' }> => (
+  candidate.type === 'course'
+  && candidate.status === 'active'
+  && candidate.visibility === 'public'
+  && candidate.metadata.academicYear === 2026
+  && candidate.metadata.requirementType === 'major_required'
+)
+
 const toResultResource = (
   candidate: ResourceCandidate,
   rawAffinity: number,
   tag: ResourceMatchTag,
   input: Pick<RankResourcesInput, 'interestVector' | 'selectedInterests'>,
 ): ResultResource | null => {
-  const connectionReason = candidate.type === 'course' && candidate.metadata.requirementType === 'major_required'
+  const goalSummary = candidate.type === 'course' ? candidate.metadata.goalSummary : candidate.summary
+  const connectionReason = isForceIncludedRequiredCourse(candidate)
     ? `${candidate.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`
     : renderConnectionReason({
     interestVector: input.interestVector,
     selectedInterests: input.selectedInterests,
     resourceTags: candidate.tags,
     resourceTitle: candidate.title,
-    goalSummary: candidate.type === 'course' ? candidate.metadata.goalSummary : candidate.summary,
+    goalSummary,
     })
   const base = {
     id: candidate.id,
@@ -680,9 +691,7 @@ const isCurrentProject = (candidate: RankedCandidate): boolean => (
 )
 
 const isRequiredCourse = (candidate: RankedCandidate): boolean => (
-  candidate.candidate.type === 'course'
-  && candidate.candidate.metadata.academicYear === 2026
-  && candidate.candidate.metadata.requirementType === 'major_required'
+  isForceIncludedRequiredCourse(candidate.candidate)
 )
 
 const uniqueCourseCandidates = (
@@ -737,7 +746,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .filter(isValidCandidate)
     .map((candidate): RankedCandidate | null => {
       const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
-      if (rawAffinity <= 0 && !(candidate.type === 'course' && candidate.metadata.requirementType === 'major_required')) return null
+      if (rawAffinity <= 0 && !isForceIncludedRequiredCourse(candidate)) return null
       const tag = primaryTag(candidate.tags.filter(tag => !(
         syntheticPathwayCourseIds.has(candidate.id) && syntheticPathwayEvidenceKeys.has(tag.key)
       )))

@@ -170,6 +170,56 @@ describe('resource matching', () => {
     expect(ranked.course.every(item => item.connectionReason.includes(item.title))).toBe(true)
   })
 
+  it.each([
+    ['active public', 'active', 'public', [301]],
+    ['next-year public', 'next_year_confirmed', 'public', []],
+    ['draft public', 'draft', 'public', []],
+    ['archived public', 'archived', 'public', []],
+    ['active admin-only', 'active', 'admin_only', []],
+  ] as const)('force-includes a 2026 major-required course only when %s', (_label, status, visibility, expectedIds) => {
+    const ranked = rankResources({
+      interestVector: { selected: 1 },
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: [course(301, {
+        title: '라이팅과 스튜디오',
+        status,
+        visibility,
+        metadata: {
+          academicYear: 2026,
+          gradeYear: 1,
+          term: '2학기',
+          credits: 3,
+          goalSummary: '공통 제작 기반을 익히는',
+          requirementType: 'major_required',
+        },
+        tags: [tag('unmatched_required')],
+      })],
+    })
+
+    expect(ranked.course.map(course => course.id)).toEqual(expectedIds)
+  })
+
+  it('retains a positively matched next-year course through ordinary ranking', () => {
+    const ranked = rankResources({
+      interestVector: { selected: 1 },
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: [course(302, {
+        status: 'next_year_confirmed',
+        metadata: {
+          academicYear: 2026,
+          gradeYear: 1,
+          term: '2학기',
+          credits: 3,
+          goalSummary: '다음 학년도 수업을 익히는',
+          requirementType: 'major_required',
+        },
+        tags: [tag('selected')],
+      })],
+    })
+
+    expect(ranked.course.map(course => course.id)).toEqual([302])
+  })
+
   it('reserves required and pathway capacity before capping general personalized courses', () => {
     const required = [
       [101, '라이팅과 스튜디오', 1],
