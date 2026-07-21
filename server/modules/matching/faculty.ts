@@ -214,26 +214,6 @@ const categoryMatch = (
   ) / totalWeight
 }
 
-const strongestCategoryMatch = (
-  student: ParsedStudent,
-  tags: readonly ParsedTag[],
-  category: TagCategory,
-): number => tags
-  .filter(tag => tag.category === category && tag.weight > 0)
-  .reduce((strongest, tag) => Math.max(strongest, signalForTag(student, tag)), 0)
-
-const specialistScoringCategories = new Set<TagCategory>(['specialist', 'result', 'career'])
-
-const countSpecialistEvidence = (
-  student: ParsedStudent,
-  tags: readonly ParsedTag[],
-): number => new Set(tags
-  .filter(tag => specialistScoringCategories.has(tag.category)
-    && tag.weight > 0
-    && signalForTag(student, tag) > 0
-    && student.selectedLabels[tag.key] !== undefined)
-  .map(tag => tag.key)).size
-
 const assertUniqueInput = (input: ParsedInput): void => {
   const facultyIds = new Set<number>()
   for (const candidate of input.faculty) {
@@ -557,7 +537,7 @@ const reasonFor = (
   const label = student.selectedLabels[key]!
   let reason: string
   if (role === 'primary' && useCommercialCoordinatorPath) {
-    reason = `광고·패션·제품 관심의 전체 학습경로와 상담을 총괄하는 ${candidate.name} ${candidate.title} 추천입니다.`
+    reason = `광고·패션·제품 관심의 전체 학습경로와 상담을 총괄하는 ${candidate.name} ${candidate.title}와 곽동욱 겸임교수의 광고·패션·제품 실무지도를 함께 연결하는 추천입니다.`
   }
   else if (role === 'primary') {
     reason = `선택한 ‘${label}’ 관심을 ${candidate.name} ${candidate.title}의 ${candidate.expertise} 전문분야와 함께 살펴보는 추천 총괄교수입니다.`
@@ -599,48 +579,15 @@ const resultFor = <Role extends 'primary' | 'backup' | 'specialist'>(
   return parsed.data as FacultyResult<Role>
 }
 
-interface SpecialistScore {
-  readonly candidate: ParsedFaculty
-  readonly rawScore: number
-  readonly qualificationScore: number
-  readonly evidenceCount: number
-}
-
 interface SpecialistMatch {
   readonly candidate: ParsedFaculty
   readonly linkTagKey: string
   readonly labelKey: string
   readonly linkPriority: number
+  readonly linkSignal: number
   readonly qualificationScore: number
   readonly supportScore: number
   readonly evidenceCount: number
-}
-
-const scoreSpecialist = (student: ParsedStudent, candidate: ParsedFaculty): SpecialistScore => {
-  const tags = [...candidate.tags].sort(compareTags)
-  const specialist = strongestCategoryMatch(student, tags, 'specialist')
-  const result = strongestCategoryMatch(student, tags, 'result')
-  const career = strongestCategoryMatch(student, tags, 'career')
-  const components = [
-    { category: 'specialist' as const, score: specialist, weight: 0.50 },
-    { category: 'result' as const, score: result, weight: 0.30 },
-    { category: 'career' as const, score: career, weight: 0.20 },
-  ].filter(component => tags.some(tag => (
-    tag.category === component.category && tag.weight > 0
-  )))
-  const availableWeight = components.reduce((sum, component) => sum + component.weight, 0)
-  const weightedScore = components.reduce(
-    (sum, component) => sum + component.score * component.weight,
-    0,
-  )
-  const evidenceCount = countSpecialistEvidence(student, tags)
-  const normalizedScore = availableWeight === 0 ? 0 : weightedScore / availableWeight
-  return {
-    candidate,
-    rawScore: normalizedScore,
-    qualificationScore: evidenceCount >= 2 ? Math.max(50, normalizedScore) : normalizedScore,
-    evidenceCount,
-  }
 }
 
 const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean => (
@@ -648,12 +595,38 @@ const hasPositiveLinkSignal = (student: ParsedStudent, tagKey: string): boolean 
   || (trackKeySet.has(tagKey) && student.trackScores[tagKey as TrackKey] > 0)
 )
 
+const linkSignalFor = (student: ParsedStudent, tagKey: string): number => (
+  trackKeySet.has(tagKey)
+    ? Math.max(student.trackScores[tagKey as TrackKey], (student.interestVector[tagKey] ?? 0) * 100)
+    : (student.interestVector[tagKey] ?? 0) * 100
+)
+
+const scoreSpecialistLink = (
+  student: ParsedStudent,
+  candidate: ParsedFaculty,
+  linkTagKey: string,
+): Pick<SpecialistMatch, 'linkSignal' | 'qualificationScore' | 'supportScore' | 'evidenceCount'> => {
+  const linkSignal = linkSignalFor(student, linkTagKey)
+  const evidenceCount = new Set(candidate.tags
+    .filter(tag => tag.key === linkTagKey
+      && (tag.category === 'specialist' || tag.category === 'result' || tag.category === 'career')
+      && tag.weight > 0)
+    .map(tag => tag.category)).size
+  return {
+    linkSignal,
+    qualificationScore: evidenceCount >= 2 ? Math.max(50, linkSignal) : linkSignal,
+    supportScore: linkSignal,
+    evidenceCount,
+  }
+}
+
 const specialistLinkSpecificity = (tagKey: string): number => (
   trackKeySet.has(tagKey) ? 0 : 1
 )
 
 const compareSpecialistLinkMatches = (left: SpecialistMatch, right: SpecialistMatch): number => (
   specialistLinkSpecificity(right.linkTagKey) - specialistLinkSpecificity(left.linkTagKey)
+  || right.linkSignal - left.linkSignal
   || right.linkPriority - left.linkPriority
   || right.supportScore - left.supportScore
   || right.qualificationScore - left.qualificationScore
@@ -664,12 +637,13 @@ const compareSpecialistLinkMatches = (left: SpecialistMatch, right: SpecialistMa
 )
 
 const compareSpecialistMatches = (left: SpecialistMatch, right: SpecialistMatch): number => (
-  right.qualificationScore - left.qualificationScore
+  specialistLinkSpecificity(right.linkTagKey) - specialistLinkSpecificity(left.linkTagKey)
+  || right.linkSignal - left.linkSignal
+  || right.linkPriority - left.linkPriority
+  || right.qualificationScore - left.qualificationScore
   || right.supportScore - left.supportScore
   || right.evidenceCount - left.evidenceCount
-  || specialistLinkSpecificity(right.linkTagKey) - specialistLinkSpecificity(left.linkTagKey)
   || right.candidate.priority - left.candidate.priority
-  || right.linkPriority - left.linkPriority
   || left.candidate.id - right.candidate.id
   || compareText(left.linkTagKey, right.linkTagKey)
 )
@@ -710,16 +684,14 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
       && candidate.consultationRole === 'specialist'
       && (candidate.employmentType === 'adjunct' || candidate.employmentType === 'practitioner'))
     .map(candidate => [candidate.id, candidate]))
-  const specialistScores = new Map<number, SpecialistScore>()
   const specialistMatches = new Map<number, SpecialistMatch>()
   for (const link of input.specialistLinks) {
     if ((link.primaryFacultyId !== null && link.primaryFacultyId !== chosenPrimary.candidate.id)
       || !hasPositiveLinkSignal(input.student, link.tagKey)) continue
     const candidate = activeSpecialists.get(link.specialistFacultyId)
     if (!candidate) continue
-    const score = specialistScores.get(candidate.id) ?? scoreSpecialist(input.student, candidate)
-    specialistScores.set(candidate.id, score)
-    if (score.qualificationScore < 50) continue
+    const linkScore = scoreSpecialistLink(input.student, candidate, link.tagKey)
+    if (linkScore.qualificationScore < 50) continue
     const match: SpecialistMatch = {
       candidate,
       linkTagKey: link.tagKey,
@@ -727,9 +699,7 @@ export const recommendFaculty = (rawInput: RecommendFacultyInput): FacultyRecomm
         ? strongestFacultyEvidenceKey(input.student, candidate)
         : link.tagKey,
       linkPriority: link.priority,
-      qualificationScore: score.qualificationScore,
-      supportScore: score.rawScore,
-      evidenceCount: score.evidenceCount,
+      ...linkScore,
     }
     const previous = specialistMatches.get(candidate.id)
     if (!previous || compareSpecialistLinkMatches(match, previous) < 0) {

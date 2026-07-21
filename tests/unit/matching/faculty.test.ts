@@ -337,8 +337,8 @@ const mixedCommercialVideoFixture = () => {
   })
   return {
     student: student(
-      { documentary: 0, art_photo: 80, commercial: 80, video: 100 },
-      { video: 1, art_photo: 0.8 },
+      { documentary: 0, art_photo: 100, commercial: 80, video: 80 },
+      { video: 0.8, art_photo: 1 },
       { video: '팀으로 제작', art_photo: '예술사진 작업' },
     ),
     faculty,
@@ -470,6 +470,48 @@ describe('recommendFaculty', () => {
     const kim = result.specialists.find(person => person.name === '김태현')
 
     expect(kim?.reason).not.toContain('팀으로 제작')
+    expect(kim?.reason).toContain('예술사진 작업')
+  })
+
+  it('does not qualify a linked specialist from a stronger unrelated candidate tag', () => {
+    const faculty = facultyFixture().slice(0, 3)
+    faculty.push(
+      {
+        ...clone(facultyFixture()[4]!),
+        id: 70,
+        name: '미연결 태그 강사',
+        priority: 99,
+        tags: [
+          tag('linked_signal', '약한 연결', 'specialist'),
+          tag('unlinked_bonus', '미연결 강점', 'specialist'),
+        ],
+      },
+      {
+        ...clone(facultyFixture()[4]!),
+        id: 71,
+        name: '연결 강사',
+        tags: [tag('linked_peer', '연결 근거', 'specialist')],
+      },
+    )
+    const result = recommend(
+      student(
+        { ...zeroTracks(), video: 100 },
+        { linked_signal: 0.4, linked_peer: 0.5, unlinked_bonus: 1 },
+        {
+          linked_signal: '약한 연결',
+          linked_peer: '연결 근거',
+          unlinked_bonus: '미연결 강점',
+        },
+      ),
+      faculty,
+      [
+        { primaryFacultyId: 2, specialistFacultyId: 70, tagKey: 'linked_signal', priority: 100 },
+        { primaryFacultyId: 2, specialistFacultyId: 71, tagKey: 'linked_peer', priority: 1 },
+      ],
+    )
+
+    expect(result.specialists.map(person => person.name)).toEqual(['연결 강사'])
+    expect(result.specialists[0]?.reason).toContain('연결 근거')
   })
 
   it('prioritizes a specific exhibition link over a broad art-photo link', () => {
@@ -484,6 +526,7 @@ describe('recommendFaculty', () => {
 
     expect(result.primary.reason).toContain('전체 학습경로와 상담을 총괄')
     expect(result.primary.reason).toContain(result.primary.name)
+    expect(result.primary.reason).toContain('곽동욱')
     expect(result.primary.reason).toContain('광고·패션·제품')
     expect(result.primary.reason).not.toContain(`${result.primary.expertise} 전문분야와 연결`)
   })
@@ -553,7 +596,7 @@ describe('recommendFaculty', () => {
     )
   })
 
-  it('결측 범주는 N/A로 정규화해 정확히 50을 포함하고 50 미만과 다른 총괄 링크를 제외한다', () => {
+  it('링크 신호가 정확히 50인 후보를 인정하고 50 미만과 다른 총괄 링크를 제외한다', () => {
     const faculty = facultyFixture()
     const template = faculty[4]
     faculty.push(
@@ -600,12 +643,12 @@ describe('recommendFaculty', () => {
     evidence.selectedLabels.below = '50 미만'
 
     const result = recommend(evidence, faculty, links)
-    expect(result.specialists.map(({ id }) => id)).toEqual([4, 8])
+    expect(result.specialists.map(({ id }) => id)).toEqual([4, 5])
     expect(result.specialists.map(({ id }) => id)).not.toContain(9)
     expect(result.specialists.map(({ id }) => id)).not.toContain(10)
   })
 
-  it('후보에 있는 result 범주가 학생 신호 0이면 N/A가 아니라 0점으로 반영한다', () => {
+  it('선택하지 않은 후보 result 범주가 링크 근거를 희석하지 않는다', () => {
     const faculty = facultyFixture().slice(0, 3)
     faculty.push({
       ...clone(facultyFixture()[4]),
@@ -628,7 +671,7 @@ describe('recommendFaculty', () => {
     )
 
     expect(result.primary.id).toBe(2)
-    expect(result.specialists.map(({ id }) => id)).not.toContain(71)
+    expect(result.specialists.map(({ id }) => id)).toContain(71)
   })
 
   it('전문가의 선택하지 않은 세부 태그가 가장 강한 검증 분야를 희석하지 않는다', () => {

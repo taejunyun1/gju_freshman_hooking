@@ -168,8 +168,8 @@ describe('canonical faculty recommendation balance', () => {
 
     expect(result.primary.name).toBe('김사라')
     expect(result.backup.name).toBe('윤태준')
-    expect(result.specialists.map(person => person.name)).toEqual(['김태현', '곽동욱'])
-    expect(result.specialists.map(person => person.title)).toEqual(['시간강사', '겸임교수'])
+    expect(result.specialists.map(person => person.name)).toEqual(['곽동욱', '김태현'])
+    expect(result.specialists.map(person => person.title)).toEqual(['겸임교수', '시간강사'])
   })
 
   it('routes the three clear questionnaire expertise paths independently of distribution key', () => {
