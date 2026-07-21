@@ -368,6 +368,21 @@ test('영상과 기술 관심사가 후반작업 예시와 컴퓨터실로 이�
   await expect(faculty).toContainText('AI 이미지·영상')
   await expect(faculty).toContainText('드론·360 콘텐츠')
 
+  const learningPath = page.locator('[data-result-section="learning-path"]')
+  const firstProject = learningPath.locator('details[data-project-resource]').first()
+  const firstProjectSummary = firstProject.locator('summary')
+  await expect(firstProject).not.toHaveAttribute('open', '')
+  await expect(firstProject.locator('[data-project-track-badge]')).toHaveText(
+    /^(?:다큐멘터리 사진|예술사진|광고사진|영상과 기술\(AI·편집·드론\))$/u,
+  )
+  expect((await firstProjectSummary.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
+  await firstProjectSummary.focus()
+  await firstProjectSummary.press('Enter')
+  await expect(firstProject).toHaveAttribute('open', '')
+  await expect(firstProject.locator('[data-project-details]')).toBeVisible()
+  await expect(firstProject.locator('[data-project-facts]')).toContainText('학생 활동')
+  await expect(firstProject.locator('[data-project-facts]')).toContainText('결과물')
+
   const outcomes = page.locator('[data-result-section="outcomes"]')
   await expect(outcomes).toContainText('촬영·편집 쇼릴')
 

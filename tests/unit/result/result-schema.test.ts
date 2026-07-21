@@ -772,6 +772,24 @@ describe('result snapshot decoder', () => {
     expect(() => decodeResultSnapshot(safeText)).not.toThrow()
   })
 
+  it('accepts bounded optional public project detail fields', () => {
+    const snapshot = clone(makeValidSnapshot())
+    Object.assign(snapshot.resources.project[0]!.displayMetadata, {
+      category: 'content development',
+      activities: 'research, interview, photo and video production',
+      outcomes: 'photo archive and short documentary',
+      locations: 'Gwangju University and partner venue',
+    })
+
+    const decoded = decodeResultSnapshot(snapshot)
+    expect(decoded.resources.project[0]!.displayMetadata).toMatchObject({
+      category: 'content development',
+      activities: 'research, interview, photo and video production',
+      outcomes: 'photo archive and short documentary',
+      locations: 'Gwangju University and partner venue',
+    })
+  })
+
   it('rejects a title-only connection reason unrelated to every selected interest label', () => {
     const snapshot = clone(makeValidSnapshot())
     const project = snapshot.resources.project[0]!

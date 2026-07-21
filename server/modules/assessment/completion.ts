@@ -965,6 +965,10 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
         periodLabel: valueAt(metadata, 'periodLabel', 'period_label'),
         statusLabel: valueAt(metadata, 'statusLabel', 'status_label'),
         programGroup: valueAt(metadata, 'programGroup', 'program_group'),
+        category: metadata.category,
+        activities: metadata.activities,
+        outcomes: metadata.outcomes,
+        locations: metadata.locations,
       },
     } as ResourceCandidate
     case 'extracurricular':

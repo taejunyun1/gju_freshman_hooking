@@ -1241,6 +1241,56 @@ describe('assessment completion service', () => {
     expect(JSON.stringify(snapshot)).not.toContain('verificationNote')
   })
 
+  it('maps existing public project detail metadata without a schema migration', async () => {
+    const row = {
+      id: 302,
+      type: 'project',
+      title: 'Regional archive project',
+      summary: 'A verified department project.',
+      status: 'active',
+      visibility: 'public',
+      priority: 20,
+      source_date: '2026-07-14',
+      metadata: {
+        displayTier: 'current',
+        projectYear: 2026,
+        periodLabel: '2026 second semester',
+        statusLabel: 'planned',
+        programGroup: 'RISE',
+        category: 'content development',
+        activities: 'research, interview and production',
+        outcomes: 'photo and video archive',
+        locations: 'Gwangju',
+        internalNote: 'must not be public',
+      },
+      image_path: null,
+      resource_tags: [{ tag_key: 'documentary', weight: 3, is_primary: true }],
+    }
+    const query = {
+      eq: () => query,
+      in: () => query,
+      select: () => query,
+      then: <Result>(resolve: (value: { data: (typeof row)[], error: null }) => Result | PromiseLike<Result>) => (
+        Promise.resolve({ data: [row], error: null }).then(resolve)
+      ),
+    }
+    const adapter = createSupabaseAssessmentCompletionDependencies({ from: vi.fn(() => query) } as never)
+
+    const loaded = await adapter.loadResourceCandidates()
+
+    expect(loaded[0]?.metadata).toEqual({
+      displayTier: 'current',
+      projectYear: 2026,
+      periodLabel: '2026 second semester',
+      statusLabel: 'planned',
+      programGroup: 'RISE',
+      category: 'content development',
+      activities: 'research, interview and production',
+      outcomes: 'photo and video archive',
+      locations: 'Gwangju',
+    })
+  })
+
   it('uses verified inventory truth instead of a stored equipment quantity in the public result', async () => {
     const equipmentRow = {
       id: 102,

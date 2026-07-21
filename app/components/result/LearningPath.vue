@@ -47,6 +47,7 @@ const yearTitles = {
     <ol
       class="learning-path__years"
       data-learning-years
+      data-curriculum-focus
     >
       <li
         v-for="bucket in years"
@@ -147,7 +148,7 @@ const yearTitles = {
 
 <style scoped>
 .learning-path {
-  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-primary) 42%, transparent);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
   overflow: hidden;
@@ -155,15 +156,15 @@ const yearTitles = {
 
 .learning-path__ruler {
   position: relative;
-  min-height: 2.75rem;
+  min-height: 3.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   overflow: hidden;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
-  background: var(--color-primary-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  background: var(--color-primary-strong);
   padding-inline: 0.9rem;
-  color: color-mix(in srgb, var(--color-ink) 62%, transparent);
+  color: var(--color-surface);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   font-weight: 700;
@@ -206,6 +207,7 @@ const yearTitles = {
   gap: 0;
   margin: 0;
   padding: 1rem;
+  background: color-mix(in srgb, var(--color-primary-soft) 38%, var(--color-surface));
   list-style: none;
 }
 
@@ -248,7 +250,8 @@ const yearTitles = {
 .learning-path__year h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1rem;
+  color: var(--color-primary-strong);
+  font-size: 1.075rem;
   letter-spacing: -0.025em;
 }
 
@@ -272,7 +275,7 @@ const yearTitles = {
   display: grid;
   gap: 0.85rem;
   border-top: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
-  background: color-mix(in srgb, var(--color-primary-soft) 58%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary-soft) 34%, var(--color-surface));
   padding: 1rem;
 }
 
@@ -301,6 +304,7 @@ const yearTitles = {
 
 .learning-path__projects {
   display: grid;
+  align-items: start;
   gap: 0.65rem;
 }
 

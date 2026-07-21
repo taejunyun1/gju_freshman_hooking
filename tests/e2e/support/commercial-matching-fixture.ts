@@ -45,9 +45,10 @@ export const expectedCommercialMatchingFixtureSummary: CommercialMatchingFixture
   nonVerifiedPublishableEquipmentItems: 0,
   positiveFullTimePrimaries: 3,
   positiveOtherFaculty: 0,
-  publishableResources: 11,
+  publishableResources: 12,
   publishableTitles: [
     'APUTURE 600X 바이컬러 조명',
+    'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
     '사진영상학개론',
     '소니 FE 28-70mm F3.5-5.6 Lens',
     '소니 FX3 Body',
@@ -114,6 +115,7 @@ select jsonb_build_object(
         '사진영상학개론',
         '프로포토 B10',
         'APUTURE 600X 바이컬러 조명',
+        'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
         '스튜디오 A(호리존)',
         '소니 FX3 Body',
         '소니 FE 28-70mm F3.5-5.6 Lens',
@@ -128,6 +130,7 @@ select jsonb_build_object(
         '사진영상학개론',
         '프로포토 B10',
         'APUTURE 600X 바이컬러 조명',
+        'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
         '스튜디오 A(호리존)',
         '소니 FX3 Body',
         '소니 FE 28-70mm F3.5-5.6 Lens',
@@ -234,6 +237,7 @@ begin
     '사진영상학개론',
     '프로포토 B10',
     'APUTURE 600X 바이컬러 조명',
+    'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
     '스튜디오 A(호리존)',
     '소니 FX3 Body',
     '소니 FE 28-70mm F3.5-5.6 Lens',
@@ -241,8 +245,8 @@ begin
   ]::text[])
   and visibility = 'public';
 
-  if target_resource_count <> 11 then
-    raise exception 'expected exactly 11 public result fixture resources, found %', target_resource_count;
+  if target_resource_count <> 12 then
+    raise exception 'expected exactly 12 public result fixture resources, found %', target_resource_count;
   end if;
 
   select count(*)
@@ -285,6 +289,7 @@ and title <> all (array[
   '사진영상학개론',
   '프로포토 B10',
   'APUTURE 600X 바이컬러 조명',
+  'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
   '스튜디오 A(호리존)',
   '소니 FX3 Body',
   '소니 FE 28-70mm F3.5-5.6 Lens',
@@ -303,6 +308,7 @@ set
     when '스튜디오 A(호리존)' then 100
     when '프로포토 B10' then 90
     when 'APUTURE 600X 바이컬러 조명' then 80
+    when 'K-컬처리딩센터 요청 콘텐츠·이벤트 제작' then 85
     when '컴퓨터실' then 100
     when '소니 FX3 Body' then 90
     when '소니 FE 28-70mm F3.5-5.6 Lens' then 80
@@ -328,6 +334,7 @@ where title = any (array[
   '사진영상학개론',
   '프로포토 B10',
   'APUTURE 600X 바이컬러 조명',
+  'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
   '스튜디오 A(호리존)',
   '소니 FX3 Body',
   '소니 FE 28-70mm F3.5-5.6 Lens',
@@ -365,8 +372,8 @@ begin
   select count(*) into count_value
   from public.resources
   where status in ('active', 'next_year_confirmed');
-  if count_value <> 11 then
-    raise exception 'expected exactly 11 publishable resources, found %', count_value;
+  if count_value <> 12 then
+    raise exception 'expected exactly 12 publishable resources, found %', count_value;
   end if;
 
   select count(*) into count_value
@@ -380,12 +387,13 @@ begin
     '사진영상학개론',
     '프로포토 B10',
     'APUTURE 600X 바이컬러 조명',
+    'K-컬처리딩센터 요청 콘텐츠·이벤트 제작',
     '스튜디오 A(호리존)',
     '소니 FX3 Body',
     '소니 FE 28-70mm F3.5-5.6 Lens',
     '컴퓨터실'
   ]::text[]);
-  if count_value <> 11 then
+  if count_value <> 12 then
     raise exception 'publishable resource allowlist mismatch';
   end if;
 

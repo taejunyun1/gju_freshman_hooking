@@ -182,6 +182,10 @@ const projectDisplayMetadataSchema = z.object({
   periodLabel: boundedText(1, 80).optional(),
   statusLabel: boundedText(1, 40).optional(),
   programGroup: boundedText(1, 120).optional(),
+  category: boundedText(1, 120).optional(),
+  activities: boundedText(1, 1000).optional(),
+  outcomes: boundedText(1, 1000).optional(),
+  locations: boundedText(1, 500).optional(),
 }).strict().superRefine((metadata, context) => {
   const hasTier = metadata.displayTier !== undefined
   const hasYear = metadata.projectYear !== undefined

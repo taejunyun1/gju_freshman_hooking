@@ -578,6 +578,37 @@ describe('resource matching', () => {
     expect(projects.every(resource => resultResourceSchema.safeParse(resource).success)).toBe(true)
   })
 
+  it('forwards only the approved public project detail metadata', () => {
+    const candidate = {
+      ...emptyMetadataCandidate(91, 'project', 'documentary'),
+      metadata: {
+        displayTier: 'current',
+        projectYear: 2026,
+        category: 'content development',
+        activities: 'research and production',
+        outcomes: 'photo and video archive',
+        locations: 'Gwangju',
+        internalNote: 'private operational note',
+      },
+    } as ResourceCandidate
+
+    const ranked = rankResources({
+      interestVector: { documentary: 1 },
+      selectedInterests: selected(['documentary']),
+      candidates: [candidate],
+    })
+
+    const project = ranked.extracurricularProject[0]
+    expect(project?.displayMetadata).toEqual({
+      displayTier: 'current',
+      projectYear: 2026,
+      category: 'content development',
+      activities: 'research and production',
+      outcomes: 'photo and video archive',
+      locations: 'Gwangju',
+    })
+  })
+
   it('uses no inactive, private, unrelated, or malformed candidate as filler', () => {
     const valid = course(1, { tags: [tag('documentary')] })
     const invalidWeightHigh = course(6, { tags: [tag('documentary', 4)] }) as ResourceCandidate

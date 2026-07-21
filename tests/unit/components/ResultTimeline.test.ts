@@ -117,6 +117,7 @@ describe('result master sequence', () => {
     ])
     expect(source).toMatch(/@media\s*\(min-width:\s*1024px\)/u)
     expect(source).toMatch(/\.learning-path__experience\s*\{\s*grid-column:\s*1\s*\/\s*-1/u)
+    expect(source).toMatch(/\.learning-path__projects\s*\{[\s\S]*align-items:\s*start/u)
   })
 
   it('keeps empty years explicit instead of inventing recommendations', async () => {
@@ -175,6 +176,7 @@ describe('result master sequence', () => {
     const project = wrapper.get('[data-project-resource="302"]')
     const learningPath = wrapper.get('[data-result-section="learning-path"]')
 
+    expect(learningPath.get('[data-curriculum-focus]').exists()).toBe(true)
     expect(firstCourse.text()).toContain('기초사진실기')
     expect(firstCourse.text()).toContain('1학기')
     expect(firstCourse.text()).toContain('3학점')
@@ -187,6 +189,8 @@ describe('result master sequence', () => {
     expect(project.text()).toContain('2026년 2학기')
     expect(project.text()).toContain('예정')
     expect(project.get('time').attributes('datetime')).toBe('2026-07-14')
+    expect(project.element.tagName).toBe('DETAILS')
+    expect(project.attributes('open')).toBeUndefined()
     expect(project.element.closest('[data-learning-year]')).toBeNull()
   })
 

@@ -60,6 +60,10 @@ export interface ProjectDisplayMetadata {
   readonly periodLabel?: string
   readonly statusLabel?: string
   readonly programGroup?: string
+  readonly category?: string
+  readonly activities?: string
+  readonly outcomes?: string
+  readonly locations?: string
 }
 
 export type EmptyDisplayMetadata = Readonly<Record<string, never>>

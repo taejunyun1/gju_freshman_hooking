@@ -434,6 +434,10 @@ const projectDisplayMetadata = (
   ...(isNonEmptyString(metadata.periodLabel) ? { periodLabel: metadata.periodLabel } : {}),
   ...(isNonEmptyString(metadata.statusLabel) ? { statusLabel: metadata.statusLabel } : {}),
   ...(isNonEmptyString(metadata.programGroup) ? { programGroup: metadata.programGroup } : {}),
+  ...(isNonEmptyString(metadata.category) ? { category: metadata.category } : {}),
+  ...(isNonEmptyString(metadata.activities) ? { activities: metadata.activities } : {}),
+  ...(isNonEmptyString(metadata.outcomes) ? { outcomes: metadata.outcomes } : {}),
+  ...(isNonEmptyString(metadata.locations) ? { locations: metadata.locations } : {}),
 })
 
 const canonicalResult = (result: ResultResource): ResultResource | null => (
