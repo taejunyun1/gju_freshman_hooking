@@ -12,6 +12,18 @@ import type { ResultSnapshot, ResultSnapshotCore } from '../types/result'
 
 export const resultSnapshotMaxBytes = 262_144
 
+const videoThirdYearPathwayCourseTitles = new Set([
+  '영상 인터뷰 내러티브 워크숍',
+  '영상 드론 콘텐츠 워크숍',
+  '영상 콘텐츠 크리에이터 워크숍',
+])
+const secondaryFourthYearPathwayCourseTitles = {
+  art_photo: new Set(['예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']),
+  documentary: new Set(['다큐멘터리 세미나', '포스트 다큐멘터리 랩']),
+  commercial: new Set(['커머셜 포토그라피 세미나', '커머셜 포토그라피 랩']),
+  video: new Set<string>(),
+} as const
+
 const hasOnlyPairedUtf16Surrogates = (value: string) => {
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = value.charCodeAt(index)
@@ -500,6 +512,21 @@ const refineResultSnapshot = (
     ))!
     const careerInterest = snapshot.selectedInterests.find(interest => interest.group === 'career')!
     const courseRefs = snapshot.resources.course.slice(0, 2).map(resource => `resource:${resource.id}`)
+    const videoBridgeCourseRefs = snapshot.rankedTracks[0] !== 'video'
+      ? null
+      : (() => {
+          const videoCourse = snapshot.resources.course.find(resource => (
+            resource.displayMetadata.gradeYear === 3
+            && videoThirdYearPathwayCourseTitles.has(resource.title)
+          ))
+          const secondaryCourse = snapshot.resources.course.find(resource => (
+            resource.displayMetadata.gradeYear === 4
+            && secondaryFourthYearPathwayCourseTitles[snapshot.rankedTracks[1]].has(resource.title)
+          ))
+          return videoCourse === undefined || secondaryCourse === undefined
+            ? null
+            : [`resource:${videoCourse.id}`, `resource:${secondaryCourse.id}`]
+        })()
     const activity = snapshot.resources.project[0] ?? snapshot.resources.extracurricular[0]
     const activityRef = activity === undefined ? null : `resource:${activity.id}`
     const careerRef = snapshot.resources.career[0] === undefined
@@ -525,12 +552,22 @@ const refineResultSnapshot = (
     const directionEvidence = narrative.sentences[0].evidenceIds
     const directionValid = sameEvidence(directionEvidence, [directionInterestRef, topTrackRef])
       || sameEvidence(directionEvidence, [directionInterestRef, topTrackRef, secondTrackRef])
+    const directionBridgeValid = sameEvidence(
+      directionEvidence,
+      [directionInterestRef, topTrackRef, secondTrackRef],
+    )
+    const videoBridgeDirectionValid = snapshot.rankedTracks[0] === 'video' && directionBridgeValid
 
     const learningEvidence = narrative.sentences[1].evidenceIds
-    const learningCourseValid = learningEvidence.length >= 1
+    const learningCourseValid = !videoBridgeDirectionValid
+      && learningEvidence.length >= 1
       && learningEvidence.length <= 2
       && learningEvidence.every(ref => courseRefs.includes(ref))
-    const learningCourseActivityValid = activityRef !== null
+    const learningVideoBridgeValid = videoBridgeCourseRefs !== null
+      && videoBridgeDirectionValid
+      && sameEvidence(learningEvidence, videoBridgeCourseRefs)
+    const learningCourseActivityValid = !videoBridgeDirectionValid
+      && activityRef !== null
       && learningEvidence.length >= 2
       && learningEvidence.length <= 3
       && learningEvidence.at(-1) === activityRef
@@ -557,7 +594,7 @@ const refineResultSnapshot = (
 
     const slotValidity = [
       directionValid,
-      learningCourseValid || learningCourseActivityValid || learningFallbackValid,
+      learningCourseValid || learningVideoBridgeValid || learningCourseActivityValid || learningFallbackValid,
       careerResourceValid || careerFallbackValid,
       facultyValid,
     ]

@@ -61,6 +61,12 @@ const catalogRevisionPattern = /^sha256:[a-f0-9]{64}$/u
 const tagKeyPattern = /^[a-z][a-z0-9_]{0,63}$/u
 const offsetDateTimeSchema = z.iso.datetime({ offset: true }).max(32)
 const groupOrder = new Map(questionGroups.map((group, index) => [group, index]))
+const interestContributionTieOrder = new Map([
+  ['work', 0],
+  ['result', 1],
+  ['career', 2],
+  ['style', 3],
+] as const)
 
 type StudentSession = {
   prospectId: number
@@ -314,11 +320,13 @@ export const orderSelectedInterestsByTopTrackContribution = (
         * option.trackWeights[topTrack]
         / (selectedCountByGroup.get(option.group) ?? 1),
     }))
-    .sort((left, right) => (
-      right.contribution - left.contribution
-      || groupOrder.get(left.option.group)! - groupOrder.get(right.option.group)!
-      || left.option.sortOrder - right.option.sortOrder
-    ))
+    .sort((left, right) => {
+      const contributionDifference = right.contribution - left.contribution
+      if (Math.abs(contributionDifference) > Number.EPSILON * 16) return contributionDifference
+      return interestContributionTieOrder.get(left.option.group)!
+        - interestContributionTieOrder.get(right.option.group)!
+        || left.option.sortOrder - right.option.sortOrder
+    })
     .map(({ option }) => ({
       group: option.group,
       key: option.optionKey,

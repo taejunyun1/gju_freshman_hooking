@@ -13,6 +13,7 @@ import {
   createAssessmentResponseFingerprint,
   createAssessmentCompletionService,
   createSupabaseAssessmentCompletionDependencies,
+  orderSelectedInterestsByTopTrackContribution,
 } from '../../../server/modules/assessment/completion'
 import type { FacultyRecommendationCandidate } from '../../../server/modules/matching/faculty'
 import type { ResourceCandidate } from '../../../server/modules/matching/resources'
@@ -175,20 +176,30 @@ const resourceCandidates = (): ResourceCandidate[] => [
   })),
 ]
 
-const videoArtSelections = (): AssessmentSelections => ({
+const videoSecondarySelections = (
+  secondaryTrack: 'art_photo' | 'documentary' | 'commercial',
+): AssessmentSelections => ({
   work: ['work.video_scene'],
-  result: ['result.photo_portfolio'],
-  style: ['style.solo'],
+  result: [secondaryTrack === 'art_photo'
+    ? 'result.photo_portfolio'
+    : secondaryTrack === 'documentary'
+      ? 'result.documentary'
+      : 'result.commercial_fashion'],
+  style: [secondaryTrack === 'documentary' ? 'style.field' : secondaryTrack === 'commercial'
+    ? 'style.studio'
+    : 'style.solo'],
   career: ['career.video'],
   careerOther: null,
 })
 
-const videoArtResourceCandidates = (): ResourceCandidate[] => [
+const videoSecondaryResourceCandidates = (
+  secondaryTrack: 'art_photo' | 'documentary' | 'commercial',
+): ResourceCandidate[] => [
   ...([
     ['카메라와 영상 기초', 1, 'camera'],
     ['영상 프레임과 컷', 1, 'video'],
     ['포트폴리오 기초', 1, 'portfolio'],
-    ['개인 창작 기초', 2, 'art_photo'],
+    ['개인 창작 기초', 2, secondaryTrack],
     ['리서치와 이미지', 2, 'research'],
   ] as const).map(([title, gradeYear, key], index): ResourceCandidate => ({
     id: 130 + index,
@@ -211,8 +222,20 @@ const videoArtResourceCandidates = (): ResourceCandidate[] => [
     ['영상 인터뷰 내러티브 워크숍', 3, '1학기'],
     ['영상 드론 콘텐츠 워크숍', 3, '2학기'],
     ['영상 콘텐츠 크리에이터 워크숍', 3, '2학기'],
-    ['예술창작 프로젝트 세미나', 4, '1학기'],
-    ['예술창작 프로젝트 랩', 4, '2학기'],
+    ...(secondaryTrack === 'art_photo'
+      ? [
+          ['예술창작 프로젝트 세미나', 4, '1학기'],
+          ['예술창작 프로젝트 랩', 4, '2학기'],
+        ]
+      : secondaryTrack === 'documentary'
+        ? [
+            ['다큐멘터리 세미나', 4, '1학기'],
+            ['포스트 다큐멘터리 랩', 4, '2학기'],
+          ]
+        : [
+            ['커머셜 포토그라피 세미나', 4, '1학기'],
+            ['커머셜 포토그라피 랩', 4, '2학기'],
+          ]),
   ] as const).map(([title, gradeYear, term], index): ResourceCandidate => ({
     id: 140 + index,
     type: 'course',
@@ -400,33 +423,93 @@ const createSubmit = (
 })
 
 describe('assessment completion service', () => {
-  it('uses the second ranked art-photo interest for a video-first year 4 path', async () => {
+  it.each([
+    ['art_photo', '예술창작 프로젝트 세미나'],
+    ['documentary', '다큐멘터리 세미나'],
+    ['commercial', '커머셜 포토그라피 세미나'],
+  ] as const)('persists video-first %s bridge evidence with actual pathway courses', async (
+    secondaryTrack,
+    expectedFourthYearCourse,
+  ) => {
     const revision = await createAssessmentCatalogRevision(catalog())
     const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
     const service = createAssessmentCompletionService(serviceDependencies({
-      loadResourceCandidates: async () => videoArtResourceCandidates(),
+      loadResourceCandidates: async () => videoSecondaryResourceCandidates(secondaryTrack),
       completeAssessment,
     }))
 
     await service.submitAssessment({
       catalogRevision: revision,
-      selections: videoArtSelections(),
+      selections: videoSecondarySelections(secondaryTrack),
       idempotencyKey,
     }, context)
 
     const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
-    expect(snapshot.rankedTracks.slice(0, 2)).toEqual(['video', 'art_photo'])
+    expect(snapshot.rankedTracks.slice(0, 2)).toEqual(['video', secondaryTrack])
     expect(snapshot.learningPath[2].resources.map(course => course.title)).toEqual([
       '영상 인터뷰 내러티브 워크숍',
       '영상 드론 콘텐츠 워크숍',
       '영상 콘텐츠 크리에이터 워크숍',
     ])
     expect(snapshot.learningPath[3].resources.map(course => course.title)).toEqual([
-      '예술창작 프로젝트 세미나',
-      '예술창작 프로젝트 랩',
+      expectedFourthYearCourse,
+      secondaryTrack === 'art_photo'
+        ? '예술창작 프로젝트 랩'
+        : secondaryTrack === 'documentary'
+          ? '포스트 다큐멘터리 랩'
+          : '커머셜 포토그라피 랩',
     ])
-    expect(snapshot.resources.course).toHaveLength(10)
+    expect(snapshot.careerNarrative?.sentences[0].evidenceIds).toEqual([
+      'interest:work.video_scene',
+      'track:video',
+      `track:${secondaryTrack}`,
+    ])
+    expect(snapshot.careerNarrative?.sentences[1]).toMatchObject({
+      evidenceIds: ['resource:140', 'resource:143'],
+    })
+    expect(snapshot.careerNarrative?.sentences[1].text).toContain('영상 인터뷰 내러티브 워크숍')
+    expect(snapshot.careerNarrative?.sentences[1].text).toContain(expectedFourthYearCourse)
+    const arbitraryBridge = structuredClone(snapshot) as unknown as {
+      careerNarrative: { sentences: Array<{ evidenceIds: string[] }> }
+    }
+    arbitraryBridge.careerNarrative.sentences[1]!.evidenceIds = ['resource:130', 'resource:131']
+    expect(() => decodeResultSnapshot(arbitraryBridge)).toThrow()
+    expect(snapshot.resources.course).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: '영상 인터뷰 내러티브 워크숍' }),
+      expect.objectContaining({ title: expectedFourthYearCourse }),
+    ]))
     expect(JSON.stringify(snapshot)).not.toContain('pathway_')
+  })
+
+  it('breaks equal contribution ties by group and catalog sort order', () => {
+    const options = catalog()
+    const tieOptions = options.flatMap((option) => {
+      const target = option.group === 'work'
+        ? 3
+        : option.group === 'result'
+          ? 2
+          : 3
+      const needed = option.group === 'work' ? 4
+        : option.group === 'result' || option.group === 'career' ? 2
+          : 1
+      const groupIndex = options.filter(candidate => candidate.group === option.group).indexOf(option)
+      return groupIndex < needed
+        ? [{ ...option, trackWeights: { ...option.trackWeights, commercial: target } }]
+        : []
+    }).reverse()
+
+    expect(orderSelectedInterestsByTopTrackContribution(tieOptions, 'commercial').map(interest => interest.key))
+      .toEqual([
+        'work.photo_everyday',
+        'work.video_scene',
+        'work.video_post',
+        'work.commercial_image',
+        'result.photo_portfolio',
+        'result.exhibit_photobook',
+        'career.photo',
+        'career.video',
+        'style.solo',
+      ])
   })
 
   it('stores and reads one evidence-based environment score for current results', async () => {
@@ -539,8 +622,8 @@ describe('assessment completion service', () => {
       selectedInterests: [
         { group: 'work', key: 'work.commercial_image', label: '제품·패션·광고 이미지 만들기' },
         { group: 'result', key: 'result.commercial_fashion', label: '광고·패션 이미지' },
-        { group: 'style', key: 'style.studio', label: '스튜디오에서 촬영' },
         { group: 'career', key: 'career.photo', label: expect.any(String) },
+        { group: 'style', key: 'style.studio', label: '스튜디오에서 촬영' },
       ],
       trackScores: { documentary: 6.7, art_photo: 50, commercial: 100, video: 20 },
       rankedTracks: ['commercial', 'art_photo', 'video', 'documentary'],
