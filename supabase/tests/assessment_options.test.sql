@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(22);
 
 select has_table('public'::name, 'assessment_options'::name);
 select col_type_is('public', 'assessment_options', 'id', 'bigint', 'catalog uses a bigint identity');
@@ -32,6 +32,43 @@ select results_eq(
     order by array_position(array['work','result','style','career'], question_group)$$,
   $$values ('work', 10), ('result', 8), ('style', 6), ('career', 4)$$,
   'seed preserves the exact 10/8/6/4 group manifest'
+);
+
+select is(
+  (
+    select track_weights
+    from public.assessment_options
+    where status = 'active'
+      and question_group = 'work'
+      and option_key = 'work.photo_everyday'
+  ),
+  '{"documentary":3,"art_photo":2,"commercial":1,"video":0}'::jsonb,
+  'everyday photography uses the approved documentary rebalance'
+);
+
+select is(
+  (
+    select track_weights
+    from public.assessment_options
+    where status = 'active'
+      and question_group = 'work'
+      and option_key = 'work.brand_region'
+  ),
+  '{"documentary":3,"art_photo":1,"commercial":2,"video":2}'::jsonb,
+  'brand and region content uses the approved documentary rebalance'
+);
+
+select is(
+  (
+    select pg_catalog.md5(pg_catalog.string_agg(
+      option_key || ':' || track_weights::text,
+      '|' order by option_key
+    ))
+    from public.assessment_options
+    where option_key not in ('work.photo_everyday', 'work.brand_region')
+  ),
+  '29d2809267aa8331d6b034e2752b782b',
+  'the rebalance leaves every other option weight unchanged'
 );
 
 select throws_ok(
