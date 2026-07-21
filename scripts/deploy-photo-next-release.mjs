@@ -37,6 +37,9 @@ const UPSTREAM = `origin/${BRANCH}`
 const PRIVATE_MODE = 0o600
 const ARTIFACT_SCAN_CHUNK_BYTES = 64 * 1024
 const ADMIN_PASSWORD_ONLY_MARKER = 'ADMIN / PASSWORD ACCESS'
+const SMOKE_RETRY_ATTEMPTS = 11
+const SMOKE_RETRY_BASE_DELAY_MS = 500
+const SMOKE_RETRY_MAX_DELAY_MS = 4_000
 const WORKERS = Object.freeze({
   staging: 'photo-next-mvp-staging',
   production: 'photo-next-mvp',
@@ -682,11 +685,13 @@ const buildRelease = (publishableKey, commit, privateMarkers) => {
 
 const delay = milliseconds => new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds))
 
-const fetchWithRetry = async (url, validator, label) => {
+const fetchWithRetry = async (url, validator, label, adapters = {}) => {
+  const fetcher = adapters.fetch ?? fetch
+  const wait = adapters.delay ?? delay
   let lastStatus = 'network'
-  for (let attempt = 1; attempt <= 7; attempt += 1) {
+  for (let attempt = 1; attempt <= SMOKE_RETRY_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const response = await fetcher(url, {
         redirect: 'follow',
         signal: AbortSignal.timeout(10_000),
       })
@@ -696,7 +701,12 @@ const fetchWithRetry = async (url, validator, label) => {
     catch {
       lastStatus = 'network'
     }
-    if (attempt < 7) await delay(Math.min(500 * 2 ** (attempt - 1), 4_000))
+    if (attempt < SMOKE_RETRY_ATTEMPTS) {
+      await wait(Math.min(
+        SMOKE_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+        SMOKE_RETRY_MAX_DELAY_MS,
+      ))
+    }
   }
   fail(`${label} smoke 검증에 실패했습니다 (마지막 상태: ${lastStatus}).`)
 }
@@ -1135,6 +1145,55 @@ const runSelfCheck = async () => {
       '불일치 health commit을 허용했습니다.',
     )
     console.log('- health mismatch behavior: passed')
+
+    let propagationAttempts = 0
+    const propagationDelays = []
+    await fetchWithRetry(
+      'https://self-check.invalid/api/health',
+      async response => response.matchesCommit,
+      'self-check propagation',
+      {
+        fetch: async () => {
+          propagationAttempts += 1
+          return {
+            ok: true,
+            status: 200,
+            matchesCommit: propagationAttempts === SMOKE_RETRY_ATTEMPTS,
+          }
+        },
+        delay: async milliseconds => propagationDelays.push(milliseconds),
+      },
+    )
+    const propagationWindow = propagationDelays.reduce((total, milliseconds) => total + milliseconds, 0)
+    assert(
+      propagationAttempts === SMOKE_RETRY_ATTEMPTS,
+      'smoke 재시도가 전파 지연 윈도우를 끝까지 확인하지 않았습니다.',
+    )
+    assert(
+      propagationWindow >= 30_000 && propagationWindow <= 45_000,
+      'smoke 전파 재시도 윈도우가 30~45초 범위가 아닙니다.',
+    )
+    let failedPropagationAttempts = 0
+    assert(
+      await rejectsSafelyAsync(() => fetchWithRetry(
+        'https://self-check.invalid/api/health',
+        async () => false,
+        'self-check propagation failure',
+        {
+          fetch: async () => {
+            failedPropagationAttempts += 1
+            return { ok: true, status: 200 }
+          },
+          delay: async () => {},
+        },
+      )),
+      'smoke 재시도 소진 후에도 fail-closed로 중단하지 않았습니다.',
+    )
+    assert(
+      failedPropagationAttempts === SMOKE_RETRY_ATTEMPTS,
+      'smoke 재시도 횟수가 유한 계약을 벗어났습니다.',
+    )
+    console.log('- smoke propagation retry window: passed')
 
     let offlineRemoteCalls = 0
     const offlineAdapters = {
