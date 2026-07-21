@@ -222,16 +222,23 @@ const makeDenseKoreanSnapshot = (fillLength: number) => {
 }
 
 describe('result snapshot decoder', () => {
-  it('allows ten courses for five foundations and five verified pathway courses, but rejects eleven', () => {
+  it('allows fifteen courses for foundations, requirements, and verified pathways, but rejects sixteen', () => {
     const snapshot = makeValidSnapshot()
     snapshot.resources.course = [
       course(101, 1), course(102, 1), course(103, 2), course(104, 2), course(105, 2),
       course(106, 3), course(107, 3), course(108, 3), course(109, 4), course(110, 4),
+      course(111, 1), course(112, 2), course(113, 2), course(114, 3), course(115, 3),
     ]
     expect(() => resultResourcesSchema.parse(snapshot.resources)).not.toThrow()
 
-    snapshot.resources.course.push(course(111, 4))
+    snapshot.resources.course.push(course(116, 4))
     expect(() => resultResourcesSchema.parse(snapshot.resources)).toThrow()
+  })
+
+  it('accepts historical course snapshots without requirementType', () => {
+    const snapshot = makeValidSnapshot()
+    expect(snapshot.resources.course[0]!.displayMetadata).not.toHaveProperty('requirementType')
+    expect(() => decodeResultSnapshot(snapshot)).not.toThrow()
   })
   it('accepts every public equipment category, rejects unknown values, and preserves old snapshots', () => {
     for (const category of ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const) {

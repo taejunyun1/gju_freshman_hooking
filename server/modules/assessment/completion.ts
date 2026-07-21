@@ -390,6 +390,7 @@ const assertResourceCandidates = (values: readonly ResourceCandidate[]): void =>
       || !isNonnegativeInteger(metadata.credits)
       || metadata.credits > 30
       || !isBoundedText(metadata.goalSummary, 1, 800)
+      || (metadata.requirementType !== 'major_required' && metadata.requirementType !== 'major_elective')
     )) throw new Error('RESOURCE_STORE_INVALID')
     if (value.type === 'equipment' && (
       !isBoundedText(metadata.locationLabel, 1, 120)
@@ -912,6 +913,7 @@ const mapResourceRow = (input: unknown): ResourceCandidate => {
         term: metadata.term,
         credits: metadata.credits,
         goalSummary: valueAt(metadata, 'goal', 'goalSummary', 'source_goal'),
+        requirementType: valueAt(metadata, 'requirementType', 'requirement_type'),
       },
     } as ResourceCandidate
     case 'equipment': return {

@@ -12,7 +12,7 @@ const FACILITY_LOCATION_LABEL = '사진영상미디어학과'
 const FACILITY_OPERATION_NOTE = '시설 존재가 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const COMPUTER_LAB_OPERATION_NOTE = '2020년형 iMac 및 RTX 4080급 그래픽카드 탑재 워크스테이션이 확인되었습니다. 실제 이용은 학과에 문의해야 합니다.'
 const CONTENT_SQL_PATH = 'supabase/seed/content-2026.sql'
-const EXPECTED_CONTENT_REVISION = 'sha256:597e673e87ad120a3890630b84358dd921e1a880b40fff08caa68696b0e48bd2'
+const EXPECTED_CONTENT_REVISION = 'sha256:8a594d2e00e75c1b67b398243c04258643a884ab6759bf3ced30b84f3faaa205'
 
 const expectedCourseTitles = [
   '흑백사진과 암실', '사진영상학개론', '기초사진실기', '영상 에세이 메이킹',
@@ -105,6 +105,7 @@ const curriculumRecordSchema = z.object({
   term: z.enum(['1학기', '2학기', '매학기', '방학중']),
   credits: z.number().int().min(1).max(30),
   title: z.string().trim().min(1).max(200),
+  requirementType: z.enum(['major_required', 'major_elective']),
   formerName: z.string().trim().min(1).max(200).nullable(),
   fusionMajor: z.string().trim().min(1).max(200).nullable(),
   sourceFormerLabel: z.literal('신규').optional(),
@@ -699,6 +700,7 @@ export const deriveContentSeed = (parsed: ParsedContentSeedInputs): DerivedConte
         grade_year: course.gradeYear,
         term: course.term,
         credits: course.credits,
+        requirement_type: course.requirementType,
         former_name: course.formerName,
         source_former_label: course.sourceFormerLabel ?? null,
         fusion_major: course.fusionMajor,

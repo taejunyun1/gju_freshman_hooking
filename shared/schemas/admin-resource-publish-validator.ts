@@ -66,6 +66,7 @@ export const getAdminResourcePublishIssues = (
       || !isCleanText(metadata.term, 1, 40)
       || !isIntegerInRange(metadata.credits, 0, 30)
       || !isCleanText(metadata.goal, 1, 1000)
+      || (metadata.requirement_type !== 'major_required' && metadata.requirement_type !== 'major_elective')
     ) {
       issues.push('교과의 학년도·학년·학기·학점·목표를 모두 올바르게 입력해 주세요.')
     }

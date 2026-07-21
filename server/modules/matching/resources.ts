@@ -31,6 +31,7 @@ interface CourseCandidateMetadata {
   readonly term: string
   readonly credits: number
   readonly goalSummary: string
+  readonly requirementType?: 'major_required' | 'major_elective'
 }
 
 interface EquipmentCandidateMetadata {
@@ -295,6 +296,9 @@ const hasCourseMetadata = (metadata: Record<string, unknown>): boolean => (
   && metadata.credits >= 0
   && metadata.credits <= 30
   && isNonEmptyString(metadata.goalSummary)
+  && (metadata.requirementType === undefined
+    || metadata.requirementType === 'major_required'
+    || metadata.requirementType === 'major_elective')
 )
 
 const hasEquipmentMetadata = (metadata: Record<string, unknown>): boolean => (
@@ -441,13 +445,15 @@ const toResultResource = (
   tag: ResourceMatchTag,
   input: Pick<RankResourcesInput, 'interestVector' | 'selectedInterests'>,
 ): ResultResource | null => {
-  const connectionReason = renderConnectionReason({
+  const connectionReason = candidate.type === 'course' && candidate.metadata.requirementType === 'major_required'
+    ? `${candidate.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`
+    : renderConnectionReason({
     interestVector: input.interestVector,
     selectedInterests: input.selectedInterests,
     resourceTags: candidate.tags,
     resourceTitle: candidate.title,
     goalSummary: candidate.type === 'course' ? candidate.metadata.goalSummary : candidate.summary,
-  })
+    })
   const base = {
     id: candidate.id,
     title: candidate.title,
@@ -466,6 +472,9 @@ const toResultResource = (
         gradeYear: candidate.metadata.gradeYear,
         term: candidate.metadata.term,
         credits: candidate.metadata.credits,
+        ...(candidate.metadata.requirementType === undefined
+          ? {}
+          : { requirementType: candidate.metadata.requirementType }),
       }),
     }))
     case 'equipment': return canonicalResult(Object.freeze({
@@ -669,6 +678,37 @@ const isCurrentProject = (candidate: RankedCandidate): boolean => (
   && candidate.candidate.metadata.projectYear === 2026
 )
 
+const isRequiredCourse = (candidate: RankedCandidate): boolean => (
+  candidate.candidate.type === 'course'
+  && candidate.candidate.metadata.requirementType === 'major_required'
+)
+
+const mergeRequiredCourses = (
+  personalized: readonly RankedCandidate[],
+  required: readonly RankedCandidate[],
+  pathwayIds: ReadonlySet<number>,
+): readonly RankedCandidate[] => {
+  const merged = [...personalized, ...required.filter(item => !personalized.some(existing => (
+    existing.candidate.id === item.candidate.id
+  )))]
+  const byYear = new Map<number, RankedCandidate[]>()
+  for (const candidate of merged) {
+    if (candidate.candidate.type !== 'course') continue
+    const year = candidate.candidate.metadata.gradeYear
+    byYear.set(year, [...(byYear.get(year) ?? []), candidate])
+  }
+  const allowed = new Set<number>()
+  for (const courses of byYear.values()) {
+    const ordered = [...courses].sort((left, right) => (
+      Number(isRequiredCourse(right)) - Number(isRequiredCourse(left))
+      || Number(pathwayIds.has(right.candidate.id)) - Number(pathwayIds.has(left.candidate.id))
+      || merged.indexOf(left) - merged.indexOf(right)
+    ))
+    ordered.slice(0, 5).forEach(candidate => allowed.add(candidate.candidate.id))
+  }
+  return Object.freeze(merged.filter(candidate => allowed.has(candidate.candidate.id)).slice(0, 15))
+}
+
 export const rankResources = (input: RankResourcesInput): RankedResources => {
   const matchingInput = withPrimaryTrackPathway(input)
   assertInterestVector(matchingInput.interestVector)
@@ -681,7 +721,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
     .filter(isValidCandidate)
     .map((candidate): RankedCandidate | null => {
       const rawAffinity = affinity(matchingInput.interestVector, candidate.tags)
-      if (rawAffinity <= 0) return null
+      if (rawAffinity <= 0 && !(candidate.type === 'course' && candidate.metadata.requirementType === 'major_required')) return null
       const tag = primaryTag(candidate.tags.filter(tag => !(
         syntheticPathwayCourseIds.has(candidate.id) && syntheticPathwayEvidenceKeys.has(tag.key)
       )))
@@ -709,7 +749,7 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
         courseCandidates.find(item => matchesPathwayCourse(item.candidate, selection.course)) ?? []
       ))
   const foundationCap = Math.min(5, Math.max(0, 10 - pathwayCandidates.length))
-  const course = matchingInput.primaryTrack === undefined
+  const personalizedCourses = matchingInput.primaryTrack === undefined
     ? selectDiverse(courseCandidates, 5)
     : Object.freeze([
         ...selectDiverse(courseCandidates.filter(item => (
@@ -717,6 +757,11 @@ export const rankResources = (input: RankResourcesInput): RankedResources => {
         )), foundationCap),
         ...pathwayCandidates,
       ].slice(0, 10))
+  const course = mergeRequiredCourses(
+    personalizedCourses,
+    courseCandidates.filter(isRequiredCourse),
+    new Set(pathwayCandidates.map(candidate => candidate.candidate.id)),
+  )
   const capabilityEvidence = selectCapabilityEvidence(ranked, matchingInput.interestVector)
   const currentProjects = selectDiverse(ranked.filter(isCurrentProject), 3)
   const experienceProjects = selectDiverse(ranked.filter(item => (

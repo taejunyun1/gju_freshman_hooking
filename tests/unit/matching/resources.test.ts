@@ -23,7 +23,13 @@ const course = (id: number, overrides: Partial<CourseCandidate> = {}): CourseCan
   visibility: 'public',
   priority: 0,
   sourceDate: '2026-07-14',
-  metadata: { gradeYear: 1, term: '1학기', credits: 3, goalSummary: '기초를 익히는' },
+  metadata: {
+    gradeYear: 1,
+    term: '1학기',
+    credits: 3,
+    goalSummary: '기초를 익히는',
+    requirementType: 'major_elective',
+  },
   tags: [tag(`interest_${id}`)],
   ...overrides,
 })
@@ -124,6 +130,45 @@ const exactPathwayCandidates = (
 }
 
 describe('resource matching', () => {
+  it('includes every major-required course once even without an interest signal', () => {
+    const requiredTitles = [
+      '라이팅과 스튜디오',
+      '디지털 이미지 제작과 프린트',
+      '영상 컬러와 포스트 프로덕션',
+      '커머셜 포토그라피 기초 워크숍',
+      '커머셜 포토그라피 심화 워크숍',
+    ]
+    const required = requiredTitles.map((title, index) => course(index + 100, {
+      title,
+      metadata: {
+        gradeYear: ([1, 2, 2, 3, 3] as const)[index]!,
+        term: '1학기',
+        credits: 3,
+        goalSummary: '학과의 공통 제작 기반을 익히는',
+        requirementType: 'major_required',
+      },
+      tags: [tag('no_interest_signal')],
+    }))
+    const ranked = rankResources({
+      primaryTrack: 'video',
+      secondaryTrack: 'art_photo',
+      interestVector: { selected: 1 },
+      selectedInterests: [{ key: 'selected', label: '실제 선택 문구' }],
+      candidates: [
+        ...required,
+        course(1, { tags: [tag('selected')] }),
+        course(2, { tags: [tag('selected')] }),
+        course(3, { tags: [tag('selected')] }),
+      ],
+    })
+
+    expect(ranked.course.filter(item => item.displayMetadata.requirementType === 'major_required')
+      .map(item => item.title)).toEqual(requiredTitles)
+    expect(new Set(ranked.course.map(item => item.id)).size).toBe(ranked.course.length)
+    expect(ranked.course.length).toBeLessThanOrEqual(15)
+    expect(ranked.course.every(item => item.connectionReason.includes(item.title))).toBe(true)
+  })
+
   it.each([
     ['art_photo', ['예술창작 프로젝트 세미나', '예술창작 프로젝트 랩']],
     ['documentary', ['다큐멘터리 세미나', '포스트 다큐멘터리 랩']],

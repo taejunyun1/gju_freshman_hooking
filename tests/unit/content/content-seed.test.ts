@@ -63,6 +63,14 @@ const expectedCourseTitles = [
   '포스트 다큐멘터리 랩',
 ] as const
 
+const requiredCourseTitles = [
+  '라이팅과 스튜디오',
+  '디지털 이미지 제작과 프린트',
+  '영상 컬러와 포스트 프로덕션',
+  '커머셜 포토그라피 기초 워크숍',
+  '커머셜 포토그라피 심화 워크숍',
+] as const
+
 describe('verified department content seed', () => {
   it('preserves the exact ordered 2026 curriculum identity and draft contract', () => {
     const { curriculum } = parseContentSeedInputs(canonicalInput())
@@ -93,6 +101,9 @@ describe('verified department content seed', () => {
     expect(curriculum.every(course => course.sourceDocument === '2026학년도 개설 예정')).toBe(true)
     expect(curriculum.every(course => course.status === 'draft' && course.visibility === 'public')).toBe(true)
     expect(curriculum.every(course => course.tags.length > 0)).toBe(true)
+    expect(curriculum.filter(course => course.requirementType === 'major_required').map(course => course.title))
+      .toEqual(requiredCourseTitles)
+    expect(curriculum.filter(course => course.requirementType === 'major_elective')).toHaveLength(36)
   })
 
   it('keeps PDF source wording separate from proofread summaries and covers five paths', () => {
@@ -332,7 +343,7 @@ describe('verified department content seed', () => {
 
   it('keeps every approved internal canonical source byte-for-byte unchanged', () => {
     const expectedHashes = {
-      'supabase/seed/curriculum-2026.json': '832a19636a0a24703903b0f2f769146879eb17231cb3edab81a5717dc8f00324',
+      'supabase/seed/curriculum-2026.json': '3dfe49abb2a215645a40c16912748593788a92061584fb618864aa2854770bc4',
       'supabase/seed/equipment-inventory-2026-07-14.json': 'efbef180c706b7412ab0ea6f51a920e698c3ec00c159d7449818dfaad60728eb',
       'supabase/seed/facilities-2026.json': '3b1fa7e941b88b0558a7decb4203082fdf5332adc3dbefdfcfdaf3cf0674e48c',
       'supabase/seed/faculty-2026.json': 'e4a6b371e0ddada905341743464eff98b532d7d2d6efe092657640e4699179b3',
@@ -513,7 +524,7 @@ describe('verified department content seed', () => {
     })
     expect(secondSql).toBe(firstSql)
     expect(createContentRevision(parsed)).toBe(
-      'sha256:597e673e87ad120a3890630b84358dd921e1a880b40fff08caa68696b0e48bd2',
+      'sha256:8a594d2e00e75c1b67b398243c04258643a884ab6759bf3ced30b84f3faaa205',
     )
     expect(firstSql).toContain(`Content revision: ${createContentRevision(parsed)}`)
     expect(firstSql).toContain('begin;')

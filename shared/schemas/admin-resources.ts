@@ -46,6 +46,7 @@ export const courseAdminResourceMetadataSchema = z.object({
   grade_year: z.number().int().min(1).max(4).optional(),
   term: cleanText(1, 40).optional(),
   credits: z.number().int().min(0).max(30).optional(),
+  requirement_type: z.enum(['major_required', 'major_elective']).optional(),
   goal: cleanText(1, 1000).optional(),
   ...legacyCourseMetadataShape,
 }).strict()

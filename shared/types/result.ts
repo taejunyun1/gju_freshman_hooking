@@ -18,6 +18,7 @@ export interface CourseDisplayMetadata {
   readonly gradeYear: 1 | 2 | 3 | 4
   readonly term: string
   readonly credits: number
+  readonly requirementType?: 'major_required' | 'major_elective'
 }
 
 export const equipmentCategories = ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const

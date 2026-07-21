@@ -412,6 +412,7 @@ const assertPublishable = (
       || typeof metadata.credits !== 'number' || !Number.isInteger(metadata.credits)
       || metadata.credits < 0 || metadata.credits > 30
       || typeof metadata.goal !== 'string' || metadata.goal.trim() === ''
+      || (metadata.requirement_type !== 'major_required' && metadata.requirement_type !== 'major_elective')
     ) throw new AppError('COURSE_METADATA_REQUIRED')
   }
   if (resource.type === 'student_work') {

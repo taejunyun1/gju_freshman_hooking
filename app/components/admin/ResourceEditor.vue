@@ -321,6 +321,9 @@ const previewResource = computed<ResultResource>(() => {
         gradeYear: Number(editable.metadata.grade_year || 1) as 1 | 2 | 3 | 4,
         term: String(editable.metadata.term || '학기 미정'),
         credits: Number(editable.metadata.credits || 0),
+        ...(editable.metadata.requirement_type === 'major_required' || editable.metadata.requirement_type === 'major_elective'
+          ? { requirementType: editable.metadata.requirement_type }
+          : {}),
       },
     }
   }
@@ -553,6 +556,12 @@ const onImageChange = (event: Event) => {
             <label>학년 <input v-model.number="editable.metadata.grade_year" name="grade_year" type="number" min="1" max="4"></label>
             <label>학기 <input v-model="editable.metadata.term" name="term" maxlength="40"></label>
             <label>학점 <input v-model.number="editable.metadata.credits" name="credits" type="number" min="0" max="30"></label>
+            <label>이수 구분
+              <select v-model="editable.metadata.requirement_type" name="requirement_type">
+                <option value="major_required">전공필수</option>
+                <option value="major_elective">전공선택</option>
+              </select>
+            </label>
             <label>교과 목표 <textarea :value="String(editable.metadata.goal ?? '')" name="goal" maxlength="1000" @input="setMetadataText('goal', $event)" /></label>
           </fieldset>
 

@@ -141,6 +141,7 @@ const courseDisplayMetadataSchema = z.object({
   gradeYear: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   term: boundedText(1, 20),
   credits: z.number().int().min(0).max(30),
+  requirementType: z.enum(['major_required', 'major_elective']).optional(),
 }).strict()
 
 const equipmentDisplayMetadataBaseShape = {
@@ -259,7 +260,7 @@ export const resultResourceSchema = z.discriminatedUnion('type', [
 ])
 
 export const resultResourcesSchema = z.object({
-  course: z.array(courseResultResourceSchema).max(10),
+  course: z.array(courseResultResourceSchema).max(15),
   equipment: z.array(equipmentResultResourceSchema).max(4),
   facility: z.array(facilityResultResourceSchema).max(4),
   extracurricular: z.array(extracurricularResultResourceSchema).max(3),

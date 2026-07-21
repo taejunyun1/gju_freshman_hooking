@@ -55,6 +55,7 @@ const storedResource = (overrides: Record<string, unknown> = {}) => ({
     term: '1학기',
     credits: 3,
     goal: '촬영 기초를 익힌다.',
+    requirement_type: 'major_elective',
   },
   imagePath: null,
   createdAt,
@@ -79,6 +80,7 @@ const rawResourceRow = (overrides: Record<string, unknown> = {}) => ({
     term: '1학기',
     credits: 3,
     goal: '촬영 기초를 익힌다.',
+    requirement_type: 'major_elective',
   },
   image_path: null,
   created_at: createdAt,
@@ -168,6 +170,7 @@ const courseWrite = () => ({
     term: '1학기',
     credits: 3,
     goal: '촬영 기초를 익힌다.',
+    requirement_type: 'major_elective',
   },
   imagePath: null,
 })
@@ -439,6 +442,19 @@ describe('administrator resource writes', () => {
     expect(() => parseAdminResourceWrite({
       ...equipmentWrite(),
       metadata: { ...equipmentWrite().metadata, category: 'Body' },
+    })).toThrowError(new AppError('RESOURCE_INVALID'))
+  })
+
+  it('accepts only the two official course requirement classifications', () => {
+    for (const requirement_type of ['major_required', 'major_elective'] as const) {
+      expect(parseAdminResourceWrite({
+        ...courseWrite(),
+        metadata: { ...courseWrite().metadata, requirement_type },
+      }).metadata).toMatchObject({ requirement_type })
+    }
+    expect(() => parseAdminResourceWrite({
+      ...courseWrite(),
+      metadata: { ...courseWrite().metadata, requirement_type: 'required' },
     })).toThrowError(new AppError('RESOURCE_INVALID'))
   })
 
@@ -1134,6 +1150,9 @@ describe('publishing, archiving, and inventory truth', () => {
   })
 
   it.each([
+    ['course requirement', storedResource({ metadata: {
+      academic_year: 2026, grade_year: 1, term: '1학기', credits: 3, goal: '촬영 기초를 익힌다.',
+    } }), 'COURSE_METADATA_REQUIRED'],
     ['course metadata', storedResource({ metadata: {} }), 'COURSE_METADATA_REQUIRED'],
     ['work consent', storedResource({ type: 'student_work', metadata: {}, imagePath: 'resources/42/work.webp' }), 'WORK_CONSENT_REQUIRED'],
     ['work media', storedResource({ type: 'student_work', metadata: {

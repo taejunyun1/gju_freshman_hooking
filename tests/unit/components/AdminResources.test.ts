@@ -20,7 +20,14 @@ const course: AdminResource = {
   visibility: 'public',
   priority: 10,
   sourceDate: '2025-07-14',
-  metadata: { academic_year: 2026, grade_year: 1, term: '1학기', credits: 3, goal: '촬영 기초를 익힌다.' },
+  metadata: {
+    academic_year: 2026,
+    grade_year: 1,
+    term: '1학기',
+    credits: 3,
+    goal: '촬영 기초를 익힌다.',
+    requirement_type: 'major_elective',
+  },
   imagePath: null,
   tags: [{ key: 'photography', weight: 3, isPrimary: true }],
   createdAt: '2026-07-01T01:00:00.000Z',
@@ -143,6 +150,7 @@ describe('administrator resource editor', () => {
       '콘텐츠', '태그', '미디어', '게시',
     ])
     expect(wrapper.get('input[name="academic_year"]').attributes('aria-describedby')).toContain('academic-year-help')
+    expect(wrapper.get('select[name="requirement_type"]').element.value).toBe('major_elective')
     expect(wrapper.get('[data-stale-source]').text()).toContain('현재 학사 주기')
   })
 
