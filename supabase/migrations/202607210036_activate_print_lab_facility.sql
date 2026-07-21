@@ -150,15 +150,29 @@ revoke all on function public.activate_verified_print_lab_facility()
   from public, anon, authenticated, service_role;
 grant execute on function public.activate_verified_print_lab_facility() to service_role;
 
+create function public.activate_verified_print_lab_facility_if_present()
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if not exists (
+    select 1
+    from public.resources resource
+    where resource.metadata ->> 'seedKey' = 'archive:facility:print_lab'
+  ) then
+    return pg_catalog.jsonb_build_object('status', 'not_present');
+  end if;
+
+  return public.activate_verified_print_lab_facility();
+end;
+$$;
+
+revoke all on function public.activate_verified_print_lab_facility_if_present()
+  from public, anon, authenticated, service_role;
+
 do $$
 begin
-  if exists (
-    select 1 from public.resources
-    where metadata ->> 'seedKey' = 'archive:facility:print_lab'
-  ) and exists (
-    select 1 from public.admin_users where role = 'admin' and is_active
-  ) then
-    perform public.activate_verified_print_lab_facility();
-  end if;
+  perform public.activate_verified_print_lab_facility_if_present();
 end;
 $$;

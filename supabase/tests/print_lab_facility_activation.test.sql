@@ -1,11 +1,13 @@
 begin;
-select plan(33);
+select plan(38);
 
 select has_function('public', 'activate_verified_print_lab_facility', array[]::text[], 'print lab activation function exists');
+select has_function('public', 'activate_verified_print_lab_facility_if_present', array[]::text[], 'print lab deployment gate exists');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'service_role', array['EXECUTE'], 'service role can activate print lab');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'public', array[]::text[], 'PUBLIC cannot activate print lab');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'anon', array[]::text[], 'anonymous users cannot activate print lab');
 select function_privs_are('public', 'activate_verified_print_lab_facility', array[]::text[], 'authenticated', array[]::text[], 'ordinary users cannot activate print lab');
+select function_privs_are('public', 'activate_verified_print_lab_facility_if_present', array[]::text[], 'public', array[]::text[], 'deployment gate is not publicly executable');
 select ok(
   (select procedure.prosecdef
    from pg_catalog.pg_proc procedure
@@ -40,6 +42,22 @@ select resource.*
 from public.resources resource
 where resource.metadata ->> 'seedKey' = 'archive:facility:print_lab';
 
+select is(
+  (select count(*)::integer
+   from public.resources resource
+   where resource.metadata ->> 'seedKey' = 'archive:facility:print_lab'
+     and resource.status = 'draft'
+     and resource.metadata -> 'archive' ->> 'evidenceStatus' = 'verify_required'),
+  1,
+  'fresh reset seed leaves exactly one print lab awaiting post-seed verification'
+);
+
+select throws_ok(
+  $$select public.activate_verified_print_lab_facility_if_present()$$,
+  'P0001', 'ADMIN_REQUIRED',
+  'deployment gate fails closed when a seeded print lab has no active admin'
+);
+
 insert into auth.users(id) values ('36000000-0000-4000-8000-000000000036');
 insert into public.admin_users(id, role, is_active)
 values ('36000000-0000-4000-8000-000000000036', 'admin', true);
@@ -47,6 +65,11 @@ values ('36000000-0000-4000-8000-000000000036', 'admin', true);
 update public.resources resource
 set metadata = pg_catalog.jsonb_set(resource.metadata, '{seedKey}', '"archive:facility:print_lab:missing"'::jsonb)
 where resource.id = (select fixture.id from pg_temp.print_lab_fixture fixture);
+select is(
+  public.activate_verified_print_lab_facility_if_present() ->> 'status',
+  'not_present',
+  'deployment gate permits migrations-before-seed when the print lab target is absent'
+);
 select throws_ok(
   $$select public.activate_verified_print_lab_facility()$$,
   'P0001', 'PRINT_LAB_SEED_INVALID',

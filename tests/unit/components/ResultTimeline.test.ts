@@ -213,6 +213,28 @@ describe('result master sequence', () => {
     expect(capability.text()).toContain('실제 제작 공간')
   })
 
+  it('keeps result content and capability evidence when every production-space photo fails', async () => {
+    const timeline = await mountTimeline()
+    const capability = timeline.get('[data-result-section="capability-evidence"]')
+    const photos = capability.findAll('[data-department-space-photo] img')
+
+    expect(photos).toHaveLength(2)
+    for (const photo of photos) {
+      await photo.trigger('error')
+    }
+
+    expect(timeline.get('[data-result-section="summary"]').text())
+      .toContain('광고사진 경로와 가장 높은 연결을 보입니다.')
+    expect(timeline.get('[data-result-section="outcomes"]').text())
+      .toContain('광고사진 포트폴리오')
+    expect(capability.text()).toContain('실제 제작 공간')
+    expect(capability.findAll('[data-department-space-photo] img')).toHaveLength(0)
+    expect(capability.findAll('[data-capability-evidence]')).toHaveLength(3)
+    expect(capability.text()).toContain('스튜디오 A(호리존)')
+    expect(capability.text()).toContain('소니 FX3 Body')
+    expect(capability.text()).toContain('소니 FE 24-70mm F2.8 Lens')
+  })
+
   it('keeps the first two career recommendations featured and links two compact follow-ups in order', async () => {
     const wrapper = await mountTimeline(withCareerRecommendations(4))
     const featured = wrapper.findAll('[data-career-featured]')
