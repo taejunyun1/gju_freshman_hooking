@@ -65,6 +65,7 @@ describe('result master sequence', () => {
       'scores',
       'learning-path',
       'faculty',
+      'counseling-mid',
       'career-narrative',
       'outcomes',
       'capability-evidence',
@@ -386,6 +387,24 @@ describe('result master sequence', () => {
     expect(wrapper.get('[data-result-section="counseling"]').text()).toContain(
       '관리자가 실제 상담교수를 최종 배정',
     )
+  })
+
+  it('places a compact counseling next step after faculty while keeping the full closing CTA', async () => {
+    const wrapper = await mountTimeline()
+    const compactSection = wrapper.get('[data-result-section="counseling-mid"]')
+    const compact = compactSection.get('[data-counseling-cta="compact"]')
+    const standard = wrapper.get('[data-result-section="counseling"] [data-counseling-cta="standard"]')
+    const faculty = wrapper.get('[data-result-section="faculty"]')
+    const narrative = wrapper.get('[data-result-section="career-narrative"]')
+
+    expect(wrapper.findAll('[data-counseling-cta]')).toHaveLength(2)
+    expect(compact.text()).toContain('추천 경로를 상담으로 한 번 더 확인하세요')
+    expect(compact.get('.counseling-cta__link').text()).toContain('이 경로로 상담 이어가기')
+    expect(standard.text()).toContain('관심 분야를 실제 입학 준비로 이어가세요')
+    expect(faculty.element.compareDocumentPosition(compactSection.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+    expect(compactSection.element.compareDocumentPosition(narrative.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
   })
 
   it('describes every score with text and renders one decorative reduced-motion-safe playhead', async () => {

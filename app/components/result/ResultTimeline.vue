@@ -114,6 +114,17 @@ const hasOutcomes = computed(() => (
       </p>
     </section>
 
+    <section
+      class="result-timeline__section result-timeline__counseling-mid"
+      data-result-section="counseling-mid"
+      aria-labelledby="counseling-midpoint-title"
+    >
+      <CounselingCTA
+        :assessment-public-id="resultPublicId"
+        variant="compact"
+      />
+    </section>
+
     <slot name="career-narrative">
       <CareerNarrative
         :narrative="snapshot.careerNarrative"
@@ -388,6 +399,10 @@ const hasOutcomes = computed(() => (
   border-radius: var(--radius-panel);
   background: var(--color-surface);
   padding: clamp(1.25rem, 5vw, 2rem);
+}
+
+.result-timeline__counseling-mid {
+  border-radius: var(--radius-card);
 }
 
 @media (min-width: 1024px) {

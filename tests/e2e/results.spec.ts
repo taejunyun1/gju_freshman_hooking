@@ -17,6 +17,7 @@ const expectedSectionOrder = [
   'scores',
   'learning-path',
   'faculty',
+  'counseling-mid',
   'career-narrative',
   'outcomes',
   'capability-evidence',
@@ -190,7 +191,7 @@ test('상업사진 관심사가 4년 경로, 제작 근거, 교수 연결로 이
   ])
   await expect(narrative).toContainText('광고사진')
   await expect(narrative).toContainText('실제 교과 운영과 상담 배정은 학과 확인 후 확정됩니다')
-  await expect(narrative).toContainText('AI는 진로를 결정하지 않습니다')
+  await expect(narrative).toContainText('선택한 응답과 확인된 학과 데이터로 구성한 안내입니다')
   await expect(narrative).not.toContainText(/openai|deterministic|gpt-5\.6/iu)
   const deterministicBox = await narrative.boundingBox()
   expect(deterministicBox).not.toBeNull()

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { studentCounselingStatusSchema } from '../../../shared/schemas/counseling'
@@ -395,5 +396,51 @@ describe('CounselingCTA', () => {
       `/counseling?assessmentPublicId=${assessmentPublicId}`,
     )
     expect(wrapper.get('a').text()).toContain('상담 신청하기')
+  })
+
+  it('offers the same counseling destination in a distinct compact next-step card', async () => {
+    const { default: CounselingCTA } = await import(
+      '../../../app/components/counseling/CounselingCTA.vue'
+    )
+    const wrapper = mount(CounselingCTA, {
+      props: { assessmentPublicId, variant: 'compact' },
+      global: {
+        stubs: {
+          NuxtLink: {
+            props: ['to'],
+            computed: {
+              href() {
+                const target = this.to as string | { path: string, query?: Record<string, string> }
+                if (typeof target === 'string') return target
+                const query = new URLSearchParams(target.query).toString()
+                return `${target.path}${query ? `?${query}` : ''}`
+              },
+            },
+            template: '<a :href="href"><slot /></a>',
+          },
+        },
+      },
+    })
+
+    expect(wrapper.attributes('data-counseling-cta')).toBe('compact')
+    expect(wrapper.classes()).toContain('counseling-cta--compact')
+    expect(wrapper.get('h2').attributes('id')).toBe('counseling-midpoint-title')
+    expect(wrapper.text()).toContain('추천 경로를 상담으로 한 번 더 확인하세요')
+    expect(wrapper.text()).toContain('NEXT STEP / COUNSELING')
+    expect(wrapper.get('a').attributes('href')).toBe(
+      `/counseling?assessmentPublicId=${assessmentPublicId}`,
+    )
+    expect(wrapper.get('a').text()).toContain('이 경로로 상담 이어가기')
+  })
+
+  it('keeps the compact assignment note at an AA-safe ink strength', () => {
+    const source = readFileSync('app/components/counseling/CounselingCTA.vue', 'utf8')
+    const compactSmallRule = source.match(
+      /\.counseling-cta--compact small\s*\{([\s\S]*?)\}/u,
+    )?.[1] ?? ''
+
+    expect(compactSmallRule).toMatch(
+      /color:\s*color-mix\(in srgb,\s*var\(--color-ink\)\s*(?:7\d|8\d|9\d|100)%,\s*transparent\)/u,
+    )
   })
 })

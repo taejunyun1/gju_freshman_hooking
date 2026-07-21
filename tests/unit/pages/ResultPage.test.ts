@@ -92,6 +92,7 @@ describe('owned result page', () => {
       'scores',
       'learning-path',
       'faculty',
+      'counseling-mid',
       'career-narrative',
       'outcomes',
       'capability-evidence',
