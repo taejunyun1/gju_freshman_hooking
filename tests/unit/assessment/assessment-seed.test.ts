@@ -62,6 +62,20 @@ describe('assessment catalog seed', () => {
     ])
   })
 
+  it('pins the documentary rebalancing weights on the two everyday-record options', () => {
+    const catalog = parseAssessmentCatalog(canonicalInput())
+    const byKey = (optionKey: string) => catalog.find(option => option.optionKey === optionKey)
+
+    expect(byKey('work.photo_everyday')?.trackWeights).toMatchObject({
+      documentary: 3,
+      art_photo: 2,
+    })
+    expect(byKey('work.brand_region')?.trackWeights).toMatchObject({
+      documentary: 3,
+      commercial: 2,
+    })
+  })
+
   it('rejects unknown fields, duplicate keys, and duplicate group sort positions', () => {
     const catalog = canonicalInput() as Array<Record<string, unknown>>
 

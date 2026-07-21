@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   assessmentCatalogOptionSchema,
   assessmentSelectionsSchema,
+  selectionLimits,
 } from '../../../shared/schemas/assessment'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
 import { questionGroups } from '../../../shared/types/domain'
@@ -297,13 +298,33 @@ const responseSnapshots = (
   freeText: option.optionKey === 'career.explore' ? selections.careerOther : null,
 }))
 
-const resultSelectedInterests = (selected: readonly AssessmentOption[]): SelectedInterest[] => (
-  selected.map(option => ({
-    group: option.group,
-    key: option.optionKey,
-    label: option.label,
-  })) as SelectedInterest[]
-)
+export const orderSelectedInterestsByTopTrackContribution = (
+  selected: readonly AssessmentOption[],
+  topTrack: TrackKey,
+): SelectedInterest[] => {
+  const selectedCountByGroup = new Map(questionGroups.map(group => [
+    group,
+    selected.filter(option => option.group === group).length,
+  ]))
+
+  return selected
+    .map(option => ({
+      option,
+      contribution: selectionLimits[option.group].weight
+        * option.trackWeights[topTrack]
+        / (selectedCountByGroup.get(option.group) ?? 1),
+    }))
+    .sort((left, right) => (
+      right.contribution - left.contribution
+      || groupOrder.get(left.option.group)! - groupOrder.get(right.option.group)!
+      || left.option.sortOrder - right.option.sortOrder
+    ))
+    .map(({ option }) => ({
+      group: option.group,
+      key: option.optionKey,
+      label: option.label,
+    }) as SelectedInterest)
+}
 
 const selectedLabelsByTag = (
   selected: readonly AssessmentOption[],
@@ -614,7 +635,10 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       }
       const selected = selectedOptionsInCatalogOrder(catalog, input.selections)
       const labelsByTag = selectedLabelsByTag(selected, scored.interestVector)
-      const selectedInterests = resultSelectedInterests(selected)
+      const selectedInterests = orderSelectedInterestsByTopTrackContribution(
+        selected,
+        scored.rankedTracks[0]!,
+      )
       const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
       const campaignId = null
 

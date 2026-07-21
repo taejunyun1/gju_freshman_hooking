@@ -11,7 +11,7 @@ import {
   type QuestionGroup,
 } from '../shared/types/domain'
 
-const EXPECTED_CATALOG_REVISION = 'sha256:c147c6dc013f7c7886ee4dbd5cd0a1a51c2e1a23295f8368bb636672c4b87819'
+const EXPECTED_CATALOG_REVISION = 'sha256:3f9f976d40da0c8725902d564c0ae3c03ca741867594107400a84a153476ef6e'
 const EXPECTED_OPTION_KEYS = [
   'work.photo_everyday',
   'work.video_scene',

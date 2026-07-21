@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -5,9 +6,11 @@ import {
   buildDeterministicCareerNarrativeChoice,
   renderCareerNarrative,
 } from '../../../server/modules/assessment/career-narrative'
+import { orderSelectedInterestsByTopTrackContribution } from '../../../server/modules/assessment/completion'
 import {
   requestOpenAiCareerNarrativeChoice,
 } from '../../../server/modules/assessment/openai-career-narrative'
+import { parseAssessmentCatalog } from '../../../scripts/seed-assessment-options'
 import type {
   CareerNarrativeBrief,
   CareerNarrativeChoice,
@@ -63,6 +66,15 @@ const resource = (
   primaryTag: 'verified',
   connectionReason: `${title} 학습과 연결됩니다.`,
   displayMetadata: {},
+})
+
+const pathwayCourse = (
+  id: number,
+  gradeYear: 3 | 4,
+  title: string,
+) => ({
+  ...resource(id, 'course', title),
+  displayMetadata: { gradeYear, term: '1학기', credits: 3 },
 })
 
 const scenario = (
@@ -151,6 +163,66 @@ const assertGrounded = (
 }
 
 describe('four-track grounded narrative release matrix', () => {
+  it.each([
+    ['art_photo', 'documentary', 'commercial', '예술창작 프로젝트 세미나'],
+    ['documentary', 'art_photo', 'commercial', '다큐멘터리 세미나'],
+    ['commercial', 'art_photo', 'documentary', '커머셜 포토그라피 세미나'],
+  ] as const)('bridges video with %s through actual third- and fourth-year pathway courses', (
+    secondaryTrack,
+    thirdTrack,
+    fourthTrack,
+    expectedFourthYearCourse,
+  ) => {
+    const core = scenario({
+      interests: [
+        interest('work', 'video_scene', '카메라로 영상 장면 촬영하기'),
+        interest('result', 'secondary', '두 번째 관심 결과물'),
+        interest('style', 'team', '팀으로 제작'),
+        interest('career', 'video', '영상 진로'),
+      ],
+      rankedTracks: ['video', secondaryTrack, thirdTrack, fourthTrack],
+      primary: faculty(19, '윤태준', '현대예술·예술사진·영상·AI·기술적 이미지'),
+      courses: [
+        pathwayCourse(191, 3, '영상 인터뷰 내러티브 워크숍'),
+        pathwayCourse(192, 4, expectedFourthYearCourse),
+      ],
+    })
+    const brief = buildCareerNarrativeBrief(core)
+    const choice = buildDeterministicCareerNarrativeChoice(brief)
+    const narrative = renderCareerNarrative(brief, choice, 'deterministic')
+
+    expect(choice.choices[0]).toMatchObject({
+      templateId: 'direction_bridge_v1',
+      factRefs: ['interest:work.video_scene', 'track:video', `track:${secondaryTrack}`],
+    })
+    expect(choice.choices[1].factRefs).toEqual(['resource:191', 'resource:192'])
+    expect(narrative.sentences[1].text).toContain('영상 인터뷰 내러티브 워크숍')
+    expect(narrative.sentences[1].text).toContain(expectedFourthYearCourse)
+  })
+
+  it('orders multi-selected interests by their real contribution to the top track', () => {
+    const catalog = parseAssessmentCatalog(JSON.parse(
+      readFileSync('supabase/seed/assessment-options.json', 'utf8'),
+    ) as unknown)
+    const selectedKeys = new Set([
+      'work.video_scene',
+      'work.video_post',
+      'result.brand_video',
+      'style.team',
+      'career.video',
+    ])
+    const selected = catalog.filter(option => selectedKeys.has(option.optionKey))
+
+    expect(orderSelectedInterestsByTopTrackContribution(selected, 'video').map(interest => interest.key))
+      .toEqual([
+        'result.brand_video',
+        'work.video_scene',
+        'work.video_post',
+        'career.video',
+        'style.team',
+      ])
+  })
+
   it('keeps documentary-social with 조대연 and photo-communication evidence', () => {
     const { text } = assertGrounded(scenario({
       interests: [

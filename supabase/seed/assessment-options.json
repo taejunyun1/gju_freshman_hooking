@@ -4,7 +4,7 @@
     "optionKey": "work.photo_everyday",
     "label": "인물·풍경·일상을 사진으로 촬영하기",
     "visualKey": "photo_frame",
-    "trackWeights": { "documentary": 2, "art_photo": 3, "commercial": 1, "video": 0 },
+    "trackWeights": { "documentary": 3, "art_photo": 2, "commercial": 1, "video": 0 },
     "interestTags": ["photography", "portrait", "landscape", "daily_life", "field"],
     "status": "active",
     "sortOrder": 1
@@ -54,7 +54,7 @@
     "optionKey": "work.brand_region",
     "label": "브랜드·지역을 위한 콘텐츠 만들기",
     "visualKey": "location_board",
-    "trackWeights": { "documentary": 2, "art_photo": 1, "commercial": 3, "video": 2 },
+    "trackWeights": { "documentary": 3, "art_photo": 1, "commercial": 2, "video": 2 },
     "interestTags": ["brand", "local_culture", "content", "planning", "public_content"],
     "status": "active",
     "sortOrder": 6

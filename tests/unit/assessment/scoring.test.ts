@@ -11,6 +11,7 @@ import type {
   AssessmentOption,
   AssessmentSelections,
   QuestionGroup,
+  TrackKey,
   TrackWeights,
 } from '../../../shared/types/domain'
 
@@ -143,6 +144,35 @@ const expectScoringError = (
 }
 
 describe('scoreAssessment', () => {
+  it('keeps every top-track share within the 15–40% operating range across 1,920 minimum choices', () => {
+    const catalog = canonicalCatalog()
+    const optionsFor = (group: QuestionGroup) => catalog.filter(option => option.group === group)
+    const counts = Object.fromEntries(trackKeys.map(track => [track, 0])) as Record<TrackKey, number>
+
+    for (const work of optionsFor('work')) {
+      for (const result of optionsFor('result')) {
+        for (const style of optionsFor('style')) {
+          for (const career of optionsFor('career')) {
+            const scored = scoreAssessment(catalog, {
+              work: [work.optionKey],
+              result: [result.optionKey],
+              style: [style.optionKey],
+              career: [career.optionKey],
+              careerOther: null,
+            })
+            counts[scored.rankedTracks[0]] += 1
+          }
+        }
+      }
+    }
+
+    expect(Object.values(counts).reduce((total, count) => total + count, 0)).toBe(1_920)
+    for (const count of Object.values(counts)) {
+      expect(count).toBeGreaterThanOrEqual(1_920 * 0.15)
+      expect(count).toBeLessThanOrEqual(1_920 * 0.40)
+    }
+  })
+
   it('normalizes selected weights by group and returns one-decimal 0..100 scores', () => {
     const scored = scoreAssessment(
       makeCatalog(uniformWeights({ art_photo: 1, commercial: 3, video: 2 })),
@@ -273,8 +303,8 @@ describe('scoreAssessment', () => {
     })
 
     expect(scored.trackScores).toEqual({
-      documentary: 66.7,
-      art_photo: 46.7,
+      documentary: 73.3,
+      art_photo: 40,
       commercial: 23.3,
       video: 53.3,
     })

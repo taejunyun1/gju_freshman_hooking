@@ -12,10 +12,12 @@ import { careerNarrativeSlots } from '../../../shared/types/career-narrative'
 import { trackLabels } from '../../../shared/types/domain'
 import type {
   FacultyResult,
+  CourseResultResource,
   ResultResource,
   ResultSnapshotCore,
   SelectedInterest,
 } from '../../../shared/types/result'
+import { primaryTrackPathwayCourses } from '../matching/resources'
 
 const unsafeFactPattern = /`|<\s*\/?\s*[a-z]|<system|assistant:|developer:|ignore previous|이전 지시를 무시|(?:https?:\/\/|www\.)|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:01[016789]|0[2-6]\d?)[-. )]?\d{3,4}[-. ]?\d{4}|합격 보장|취업 보장|진로 확정|배정 완료|반드시|무조건|100%/iu
 const forbiddenOutputPattern = /`|<[^>]+>|(?:https?:\/\/|www\.)|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:01[016789]|0[2-6]\d?)[-. )]?\d{3,4}[-. ]?\d{4}|합격 보장|취업 보장|진로 확정|배정 완료|반드시|무조건|100%/iu
@@ -64,6 +66,28 @@ const firstInterest = (
   interests: readonly SelectedInterest[],
   groups?: readonly SelectedInterest['group'][],
 ) => interests.find(interest => groups === undefined || groups.includes(interest.group))
+
+const videoBridgeCourses = (
+  core: ResultSnapshotCore,
+): readonly [CourseResultResource, CourseResultResource] | undefined => {
+  if (core.rankedTracks[0] !== 'video') return undefined
+
+  const secondaryTrack = core.rankedTracks[1]
+  const hasVideoPathwayCourse = (course: CourseResultResource) => (
+    course.displayMetadata.gradeYear === 3
+    && primaryTrackPathwayCourses.video.some(pathway => pathway.title === course.title)
+  )
+  const hasSecondaryPathwayCourse = (course: CourseResultResource) => (
+    course.displayMetadata.gradeYear === 4
+    && primaryTrackPathwayCourses[secondaryTrack].some(pathway => pathway.title === course.title)
+  )
+  const videoCourse = core.resources.course.find(hasVideoPathwayCourse)
+  const secondaryCourse = core.resources.course.find(hasSecondaryPathwayCourse)
+
+  return videoCourse === undefined || secondaryCourse === undefined
+    ? undefined
+    : [videoCourse, secondaryCourse]
+}
 
 const completeFacultyFacts = (
   faculty: FacultyResult,
@@ -124,7 +148,11 @@ export const buildCareerNarrativeBrief = (
   const topTrackRef = addTrack(core.rankedTracks[0])
   const secondTrackRef = addTrack(core.rankedTracks[1])
 
-  const courseRefs = core.resources.course.slice(0, 2).flatMap((resource) => {
+  const bridgeCourses = videoBridgeCourses(core)
+  const selectedCourses = core.rankedTracks[0] === 'video'
+    ? bridgeCourses ?? []
+    : core.resources.course.slice(0, 2)
+  const courseRefs = selectedCourses.flatMap((resource) => {
     const ref = resourceRef(resource)
     return addFact({
       ref,
@@ -296,12 +324,21 @@ export const buildDeterministicCareerNarrativeChoice = (
   }
   if (primaryFaculty.length !== 3) throw new Error('CAREER_NARRATIVE_FACT_REFERENCE_INVALID')
 
-  const direction: CareerNarrativeChoiceItem<'direction'> = {
-    slot: 'direction',
-    templateId: 'direction_focus_v1',
-    connectorId: 'and_v1',
-    factRefs: [directionInterest, directionTracks[0]],
-  }
+  const direction: CareerNarrativeChoiceItem<'direction'> = (
+    directionTracks[0] === 'track:video' && directionTracks[1] !== undefined
+      ? {
+          slot: 'direction',
+          templateId: 'direction_bridge_v1',
+          connectorId: 'and_v1',
+          factRefs: [directionInterest, directionTracks[0], directionTracks[1]],
+        }
+      : {
+          slot: 'direction',
+          templateId: 'direction_focus_v1',
+          connectorId: 'and_v1',
+          factRefs: [directionInterest, directionTracks[0]],
+        }
+  )
 
   const learningPath: CareerNarrativeChoiceItem<'learning_path'> = courses.length > 0
     ? {
