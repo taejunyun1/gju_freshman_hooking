@@ -205,6 +205,14 @@ describe('result master sequence', () => {
     expect(wrapper.find('ol[data-learning-years] [data-capability-evidence]').exists()).toBe(false)
   })
 
+  it('shows two track-matched production spaces before capability evidence', async () => {
+    const timeline = await mountTimeline()
+    const capability = timeline.get('[data-result-section="capability-evidence"]')
+
+    expect(capability.findAll('[data-department-space-photo]')).toHaveLength(2)
+    expect(capability.text()).toContain('실제 제작 공간')
+  })
+
   it('keeps the first two career recommendations featured and links two compact follow-ups in order', async () => {
     const wrapper = await mountTimeline(withCareerRecommendations(4))
     const featured = wrapper.findAll('[data-career-featured]')

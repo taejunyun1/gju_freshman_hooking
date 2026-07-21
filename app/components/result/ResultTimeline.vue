@@ -7,6 +7,7 @@ import CounselingCTA from '../counseling/CounselingCTA.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
 import CareerRecommendations from './CareerRecommendations.vue'
 import CareerNarrative from './CareerNarrative.vue'
+import DepartmentSpacePhotos from './DepartmentSpacePhotos.vue'
 import FacultyRecommendation from './FacultyRecommendation.vue'
 import InterestClip from './InterestClip.vue'
 import LearningPath from './LearningPath.vue'
@@ -190,6 +191,7 @@ const hasOutcomes = computed(() => (
         <h2 id="capability-title">이 제작을 가능하게 하는 학과 기반</h2>
         <span>장비와 시설은 추천의 주인공이 아니라, 위 학습경로를 실제로 수행할 수 있음을 뒷받침하는 근거입니다.</span>
       </header>
+      <DepartmentSpacePhotos :track="snapshot.rankedTracks[0]" />
       <slot name="capability-evidence">
         <CapabilityEvidence
           :equipment="snapshot.resources.equipment"
