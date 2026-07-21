@@ -34,7 +34,8 @@ describe('career narrative direction cut', () => {
       '04',
     ])
     expect(wrapper.text()).toContain('실제 교과 운영과 상담 배정은 학과 확인 후 확정됩니다')
-    expect(wrapper.text()).toContain('AI는 진로를 결정하지 않습니다')
+    expect(wrapper.text()).toContain('선택한 응답과 확인된 학과 데이터로 구성한 안내')
+    expect(wrapper.text()).not.toContain('AI가 도움')
     expect(wrapper.text()).not.toContain('신고')
     expect(wrapper.html()).not.toContain('career-narrative/report')
     expect(wrapper.text()).not.toContain('evidenceIds')

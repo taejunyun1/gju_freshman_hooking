@@ -370,7 +370,10 @@ describe('result master sequence', () => {
 
     expect(scores.text()).toContain('광고사진')
     expect(scores.text()).toContain('100점')
-    expect(scores.text()).toContain('교육환경 연결도')
+    expect(scores.text()).toContain('응답 기반 관심 방향')
+    expect(scores.text()).toContain('선택한 응답 점수와 네 관심 분야의 가까움')
+    expect(scores.text()).not.toContain('확인된 학과 데이터의 연결 정도')
+    expect(scores.text()).toContain('교육환경 근거 충족도')
     expect(scores.text()).toContain('92.3점')
     expect(playheads).toHaveLength(1)
     expect(playheads[0]!.attributes('aria-hidden')).toBe('true')

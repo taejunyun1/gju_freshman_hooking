@@ -36,8 +36,8 @@ defineProps<{
       <p class="career-narrative__note">
         선택과 확인된 학과 자료를 바탕으로 정리한 탐색 제안입니다. 실제 교과 운영과 상담 배정은 학과 확인 후 확정됩니다.
       </p>
-      <p class="career-narrative__ai-note">
-        일부 표현 선택에 AI가 도움을 줄 수 있지만, AI는 진로를 결정하지 않습니다.
+      <p class="career-narrative__data-note">
+        선택한 응답과 확인된 학과 데이터로 구성한 안내입니다.
       </p>
     </div>
   </section>
@@ -129,7 +129,7 @@ defineProps<{
 }
 
 .career-narrative__note,
-.career-narrative__ai-note {
+.career-narrative__data-note {
   margin: 0;
   color: color-mix(in srgb, var(--color-ink) 63%, transparent);
   font-size: 0.76rem;
@@ -137,7 +137,7 @@ defineProps<{
   word-break: keep-all;
 }
 
-.career-narrative__ai-note {
+.career-narrative__data-note {
   margin-top: 0.35rem;
 }
 

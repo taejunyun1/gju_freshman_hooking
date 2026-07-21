@@ -16,14 +16,21 @@ defineProps<{
     :data-project-resource="resource.type === 'project' ? resource.id : undefined"
   >
     <div class="resource-card__header">
-      <span class="resource-card__type">
-        <template v-if="resource.type === 'course'">COURSE</template>
-        <template v-else-if="resource.type === 'project'">PROJECT</template>
-        <template v-else-if="resource.type === 'extracurricular'">EXTRA</template>
-        <template v-else-if="resource.type === 'student_work'">WORK</template>
-        <template v-else-if="resource.type === 'career'">CAREER</template>
-        <template v-else-if="resource.type === 'support'">SUPPORT</template>
-      </span>
+      <div class="resource-card__course-type">
+        <span class="resource-card__type">
+          <template v-if="resource.type === 'course'">COURSE</template>
+          <template v-else-if="resource.type === 'project'">PROJECT</template>
+          <template v-else-if="resource.type === 'extracurricular'">EXTRA</template>
+          <template v-else-if="resource.type === 'student_work'">WORK</template>
+          <template v-else-if="resource.type === 'career'">CAREER</template>
+          <template v-else-if="resource.type === 'support'">SUPPORT</template>
+        </span>
+        <span
+          v-if="resource.type === 'course' && resource.displayMetadata.requirementType === 'major_required'"
+          class="resource-card__required-badge"
+          data-course-requirement="major_required"
+        >전공필수</span>
+      </div>
       <time :datetime="resource.sourceDate">기준 {{ resource.sourceDate }}</time>
     </div>
 
@@ -98,7 +105,8 @@ defineProps<{
 
 .resource-card__header {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   color: color-mix(in srgb, var(--color-ink) 60%, transparent);
@@ -107,9 +115,33 @@ defineProps<{
   letter-spacing: 0.035em;
 }
 
+.resource-card__course-type {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .resource-card__type {
   color: var(--color-resource);
   font-weight: 700;
+}
+
+.resource-card__required-badge {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  padding: 0.12rem 0.35rem;
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.resource-card__header time {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .resource-card h4 {

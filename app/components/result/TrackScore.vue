@@ -14,8 +14,8 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
   <div class="track-score">
     <div class="track-score__explanation">
       <p>CONNECTION SCORE</p>
-      <h2>관심 분야 연결 점수</h2>
-      <span>선택한 관심사와 확인된 학과 데이터의 연결 정도를 설명합니다.</span>
+      <h2>응답 기반 관심 방향</h2>
+      <span>선택한 응답 점수와 네 관심 분야의 가까움을 설명합니다.</span>
     </div>
 
     <dl class="track-score__tracks">
@@ -34,7 +34,7 @@ const scoreText = (score: number) => Number.isInteger(score) ? String(score) : s
         </dd>
       </div>
       <div class="track-score__environment">
-        <dt>교육환경 연결도</dt>
+        <dt>교육환경 근거 충족도</dt>
         <dd>
           <meter
             min="0"
