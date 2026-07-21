@@ -457,6 +457,62 @@ describe('assessment completion service', () => {
       .not.toHaveProperty('requirementType')
   })
 
+  it('persists all five required courses once with the exact common-foundation reason', async () => {
+    const requiredTitles = [
+      '라이팅과 스튜디오',
+      '디지털 이미지 제작과 프린트',
+      '영상 컬러와 포스트 프로덕션',
+      '커머셜 포토그라피 기초 워크숍',
+      '커머셜 포토그라피 심화 워크숍',
+    ] as const
+    const requiredCourses = requiredTitles.map((title, index): ResourceCandidate => ({
+      id: 201 + index,
+      type: 'course',
+      title,
+      summary: `${title}의 검증된 2026 교과입니다.`,
+      status: 'active',
+      visibility: 'public',
+      priority: 40 - index,
+      sourceDate: '2026-07-14',
+      metadata: {
+        academicYear: 2026,
+        gradeYear: ([1, 2, 2, 3, 3] as const)[index]!,
+        term: index % 2 === 0 ? '1학기' : '2학기',
+        credits: 3,
+        goalSummary: '학과의 공통 제작 기반을 익히는',
+        requirementType: 'major_required',
+      },
+      tags: [tag(index === 0 ? 'commercial' : 'unmatched_required')],
+    }))
+    const supportingCandidates = resourceCandidates().filter(candidate => (
+      candidate.type !== 'course'
+      || candidate.title === '커머셜 포토그라피 세미나'
+      || candidate.title === '커머셜 포토그라피 랩'
+    ))
+    const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
+    const service = createAssessmentCompletionService(serviceDependencies({
+      loadResourceCandidates: async () => [...requiredCourses, ...supportingCandidates],
+      completeAssessment,
+    }))
+    const revision = await createAssessmentCatalogRevision(catalog())
+
+    await expect(service.submitAssessment(envelope(revision), context)).resolves.toEqual({ publicId })
+
+    expect(completeAssessment).toHaveBeenCalledOnce()
+    const snapshot = decodeResultSnapshot(completeAssessment.mock.calls[0]![0].resultSnapshot)
+    const persistedRequired = snapshot.resources.course.filter(course => (
+      course.displayMetadata.requirementType === 'major_required'
+    ))
+    expect(persistedRequired.map(course => course.id).sort((left, right) => left - right))
+      .toEqual([201, 202, 203, 204, 205])
+    expect(new Set(persistedRequired.map(course => course.id)).size).toBe(5)
+    for (const course of persistedRequired) {
+      expect(course.connectionReason).toBe(
+        `${course.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`,
+      )
+    }
+  })
+
   it.each([
     ['art_photo', '예술창작 프로젝트 세미나'],
     ['documentary', '다큐멘터리 세미나'],

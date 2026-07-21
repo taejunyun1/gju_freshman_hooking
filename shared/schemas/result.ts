@@ -440,7 +440,14 @@ const refineResultSnapshot = (
     ...snapshot.resources.support,
   ]
   canonicalResources.forEach((resource) => {
-    if (!selectedLabels.some(label => resource.connectionReason.includes(label))) {
+    const exactRequiredReason = resource.type === 'course'
+      ? `${resource.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`
+      : null
+    const validRequiredReason = resource.type === 'course'
+      && resource.displayMetadata.requirementType === 'major_required'
+      && resource.connectionReason === exactRequiredReason
+    if (!validRequiredReason
+      && !selectedLabels.some(label => resource.connectionReason.includes(label))) {
       context.addIssue({
         code: 'custom',
         message: '연결 이유에는 선택한 관심사 문구가 정확히 포함되어야 합니다.',
@@ -552,7 +559,8 @@ const refineResultSnapshot = (
 
     const directionEvidence = narrative.sentences[0].evidenceIds
     const directionValid = sameEvidence(directionEvidence, [directionInterestRef, topTrackRef])
-      || sameEvidence(directionEvidence, [directionInterestRef, topTrackRef, secondTrackRef])
+      || (snapshot.rankedTracks[0] === 'video'
+        && sameEvidence(directionEvidence, [directionInterestRef, topTrackRef, secondTrackRef]))
     const directionBridgeValid = sameEvidence(
       directionEvidence,
       [directionInterestRef, topTrackRef, secondTrackRef],

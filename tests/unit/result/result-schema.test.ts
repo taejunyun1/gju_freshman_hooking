@@ -240,6 +240,27 @@ describe('result snapshot decoder', () => {
     expect(snapshot.resources.course[0]!.displayMetadata).not.toHaveProperty('requirementType')
     expect(() => decodeResultSnapshot(snapshot)).not.toThrow()
   })
+
+  it('accepts only the exact common-foundation reason without a selected label for required courses', () => {
+    const exact = clone(makeValidSnapshot())
+    const courseResource = exact.resources.course[0]!
+    const exactReason = `${courseResource.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`
+    courseResource.displayMetadata.requirementType = 'major_required'
+    courseResource.connectionReason = exactReason
+    exact.learningPath[0]!.resources[0]!.displayMetadata.requirementType = 'major_required'
+    exact.learningPath[0]!.resources[0]!.connectionReason = exactReason
+    expect(() => decodeResultSnapshot(exact)).not.toThrow()
+
+    const altered = clone(exact)
+    altered.resources.course[0]!.connectionReason = `${altered.resources.course[0]!.title}은 전공필수 교과입니다.`
+    altered.learningPath[0]!.resources[0]!.connectionReason = altered.resources.course[0]!.connectionReason
+    expect(() => decodeResultSnapshot(altered)).toThrow()
+
+    const elective = clone(exact)
+    elective.resources.course[0]!.displayMetadata.requirementType = 'major_elective'
+    elective.learningPath[0]!.resources[0]!.displayMetadata.requirementType = 'major_elective'
+    expect(() => decodeResultSnapshot(elective)).toThrow()
+  })
   it('accepts every public equipment category, rejects unknown values, and preserves old snapshots', () => {
     for (const category of ['body', 'lens', 'lighting', 'audio', 'drone', 'other'] as const) {
       const snapshot = clone(makeValidSnapshot())
@@ -439,6 +460,18 @@ describe('result snapshot decoder', () => {
       testCase.mutate(snapshot)
       expect(() => decodeResultSnapshot(snapshot), testCase.name).toThrow()
     }
+  })
+
+  it('rejects three-reference direction evidence when the top track is not video', () => {
+    const snapshot = clone(makeValidSnapshot())
+    snapshot.careerNarrative.sentences[0]!.evidenceIds = [
+      `interest:${snapshot.selectedInterests[0]!.key}`,
+      `track:${snapshot.rankedTracks[0]}`,
+      `track:${snapshot.rankedTracks[1]}`,
+    ]
+
+    expect(snapshot.rankedTracks[0]).not.toBe('video')
+    expect(() => decodeResultSnapshot(snapshot)).toThrow()
   })
 
   it('decodes the exact contract and deeply freezes the immutable snapshot', () => {

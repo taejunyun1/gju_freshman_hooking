@@ -42,6 +42,7 @@ import {
   type SelectedInterestEvidence,
 } from '../matching/reasons'
 import {
+  isForceIncludedRequiredCourse,
   rankResources,
   withPrimaryTrackPathway,
   type ResourceCandidate,
@@ -474,6 +475,13 @@ const prepareResourceCandidates = (input: {
   const originalsById = new Map(input.candidates.map(candidate => [candidate.id, candidate]))
   const reasonsById = new Map<number, string>()
   const candidates = input.candidates.map((candidate): ResourceCandidate => {
+    if (isForceIncludedRequiredCourse(candidate)) {
+      reasonsById.set(
+        candidate.id,
+        `${candidate.title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`,
+      )
+      return candidate
+    }
     const hasPositiveMatch = candidate.tags.some(tag => (
       tag.weight > 0 && (input.interestVector[tag.key] ?? 0) > 0
     ))

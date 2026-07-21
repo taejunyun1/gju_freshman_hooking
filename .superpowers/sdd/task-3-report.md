@@ -14,6 +14,9 @@
 - Legacy and non-2026 active public courses remain valid matcher candidates without a classification. Completion only requires `requirementType` when mapped course metadata identifies academic year 2026, so preserved courses cannot turn submissions into `INTERNAL_ERROR` responses.
 - Course composition now reserves active public 2026 required courses and exact selected pathway courses before it selects general personalized courses. It then fills only the remaining five-course annual capacity and 15-course total capacity in ranked order. This keeps all required and protected pathway IDs, prevents duplicate IDs, and deterministically caps general personalized courses instead of selecting them and silently deleting a pathway item later.
 - Force inclusion now has one explicit eligibility predicate: course type, `status === 'active'`, student-public visibility, academic year 2026, and `major_required`. It gates zero-affinity admission, required reservation, and the common-foundation reason; `next_year_confirmed` courses remain available only through ordinary positive-affinity ranking.
+- Candidate preparation now records the exact common-foundation reason for every course satisfying that predicate before ordinary affinity handling. Snapshot restoration therefore retains the same reason for both zero- and positive-affinity required courses instead of failing on missing selected-interest text.
+- The result snapshot invariant accepts the label-free common-foundation reason only when the resource is a `major_required` course and the reason exactly equals `${title}은(는) 사진영상미디어학과의 공통 제작 기반을 익히는 전공필수 교과입니다.`. Altered required reasons and elective courses using that reason remain invalid unless their reason contains a selected label.
+- Three-reference direction evidence remains a video-only bridge. Snapshots whose highest-ranked track is not `video` must use the ordinary two-reference direction evidence.
 
 ## TDD evidence
 
@@ -23,6 +26,8 @@ RED was observed before implementation for:
 - required-course merging with no matching interest signal,
 - 15-course result schema capacity,
 - administrator `requirement_type` input and publish validation.
+- completion persistence of all five required courses, including zero-affinity courses, with exact restored reasons,
+- rejection of altered/elective common-foundation reasons and non-video three-reference direction evidence.
 
 ## Verification
 
@@ -30,7 +35,12 @@ RED was observed before implementation for:
 - `corepack pnpm vitest run --project unit tests/unit/content/content-seed.test.ts tests/unit/matching/resources.test.ts tests/unit/result/result-schema.test.ts tests/unit/components/AdminResources.test.ts` — 112 passed
 - `corepack pnpm vitest run --project integration tests/integration/admin/resources.test.ts` — 58 passed
 - `corepack pnpm vitest run --project integration tests/integration/result/completion.test.ts` — 64 passed
+- `corepack pnpm vitest run --project unit tests/unit/matching/resources.test.ts tests/unit/result/result-schema.test.ts` — 76 passed
+- `corepack pnpm vitest run --project integration tests/integration/result/completion.test.ts` — 65 passed, including all five required courses persisted and decoded exactly once
+- `corepack pnpm test` — 101 files, 1,312 passed
 - `corepack pnpm typecheck`
+- `corepack pnpm lint`
+- `corepack pnpm build`
 - `corepack pnpm exec supabase db reset --local`
 - `corepack pnpm exec supabase test db --local supabase/tests/required_course_classification.test.sql` — 7 passed
 - `git diff --check`

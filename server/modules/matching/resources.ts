@@ -440,9 +440,9 @@ const canonicalResult = (result: ResultResource): ResultResource | null => (
   resultResourceSchema.safeParse(result).success ? result : null
 )
 
-const isForceIncludedRequiredCourse = (
+export const isForceIncludedRequiredCourse = (
   candidate: ResourceCandidate,
-): candidate is Extract<ResourceCandidate, { type: 'course' }> => (
+): boolean => (
   candidate.type === 'course'
   && candidate.status === 'active'
   && candidate.visibility === 'public'
