@@ -1,6 +1,6 @@
 begin;
 
-select plan(23);
+select plan(31);
 
 insert into public.admission_cycles (
   id, year, status, roster_version, password_key_version
@@ -9,6 +9,8 @@ insert into public.admission_cycles (
 );
 
 create function pg_temp.register_student(
+  p_expected_cycle_id uuid default 'b5000000-0000-4000-8000-000000000001',
+  p_expected_cycle_year integer default 2030,
   p_phone_hmac bytea default decode(repeat('11', 32), 'hex'),
   p_ip_hmac bytea default decode(repeat('88', 32), 'hex'),
   p_token_hash bytea default decode(repeat('99', 32), 'hex'),
@@ -18,6 +20,8 @@ create function pg_temp.register_student(
 language sql
 as $$
   select public.register_roster_student_v1(
+    p_expected_cycle_id,
+    p_expected_cycle_year,
     p_phone_hmac,
     decode(repeat('22', 16), 'hex'),
     decode(repeat('33', 12), 'hex'),
@@ -40,7 +44,7 @@ select pg_temp.register_student() result;
 select is((select result->>'kind' from first_registration), 'created', 'registration creates a student');
 select is((select count(*) from public.prospects where admission_cycle_id = 'b5000000-0000-4000-8000-000000000001'), 1::bigint, 'registration creates one prospect');
 select ok((select not is_test and status = 'active' and is_self_registered and region = 'other' from public.prospects where phone_hmac = decode(repeat('11', 32), 'hex')), 'registration creates an active non-test self-registered prospect');
-select ok((select password_bcrypt ~ '^\\$2[ab]\\$10\\$[./A-Za-z0-9]{53}$' from public.student_credentials credential join public.prospects prospect on prospect.id = credential.prospect_id where prospect.phone_hmac = decode(repeat('11', 32), 'hex')), 'registration stores only a cost-10 bcrypt credential');
+select ok((select password_bcrypt ~ '^\$2[ab]\$10\$[./A-Za-z0-9]{53}$' from public.student_credentials credential join public.prospects prospect on prospect.id = credential.prospect_id where prospect.phone_hmac = decode(repeat('11', 32), 'hex')), 'registration stores only a cost-10 bcrypt credential');
 select is((select count(*) from public.student_sessions session join public.prospects prospect on prospect.id = session.prospect_id where prospect.phone_hmac = decode(repeat('11', 32), 'hex') and session.token_hash = decode(repeat('99', 32), 'hex') and session.revoked_at is null), 1::bigint, 'registration creates one active opaque student session');
 select ok((select (result->>'prospectId')::bigint = prospect.id and (result->>'expiresAt')::timestamptz = session.expires_at from first_registration cross join public.prospects prospect join public.student_sessions session on session.prospect_id = prospect.id where prospect.phone_hmac = decode(repeat('11', 32), 'hex')), 'created result identifies the prospect and session expiry');
 
@@ -51,12 +55,36 @@ select is((select count(*) from public.prospects where phone_hmac = decode(repea
 select is((select count(*) from public.student_sessions session join public.prospects prospect on prospect.id = session.prospect_id where prospect.phone_hmac = decode(repeat('11', 32), 'hex')), 1::bigint, 'existing registration does not create a session');
 
 select is((pg_temp.register_student(p_phone_hmac => decode(repeat('12', 31), 'hex'))->>'kind'), 'validation_error', 'malformed phone HMAC is rejected');
-select is((public.register_roster_student_v1(decode(repeat('15',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',31),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9b',32),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed name HMAC is rejected');
-select is((public.register_roster_student_v1(decode(repeat('16',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',31),'hex'),decode(repeat('9c',32),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed IP HMAC is rejected');
-select is((public.register_roster_student_v1(decode(repeat('17',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9d',31),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed session token hash is rejected');
+select is((public.register_roster_student_v1('b5000000-0000-4000-8000-000000000001',2030,decode(repeat('15',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',31),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9b',32),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed name HMAC is rejected');
+select is((public.register_roster_student_v1('b5000000-0000-4000-8000-000000000001',2030,decode(repeat('16',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',31),'hex'),decode(repeat('9c',32),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed IP HMAC is rejected');
+select is((public.register_roster_student_v1('b5000000-0000-4000-8000-000000000001',2030,decode(repeat('17',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9d',31),'hex'),pg_catalog.clock_timestamp()+interval '1 hour','신규등록고','high3')->>'kind'), 'validation_error', 'malformed session token hash is rejected');
 select is((pg_temp.register_student(p_phone_hmac => decode(repeat('13', 32), 'hex'), p_stage => 'middle1')->>'kind'), 'validation_error', 'invalid applicant stage is rejected');
 select is((pg_temp.register_student(p_phone_hmac => decode(repeat('14', 32), 'hex'), p_key_version => 6)->>'kind'), 'validation_error', 'wrong password key version is rejected');
-select is((public.register_roster_student_v1(decode(repeat('18',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9e',32),'hex'),pg_catalog.clock_timestamp()+interval '13 hours','신규등록고','high3')->>'kind'), 'validation_error', 'session expiry beyond twelve hours is rejected');
+select is((public.register_roster_student_v1('b5000000-0000-4000-8000-000000000001',2030,decode(repeat('18',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9e',32),'hex'),pg_catalog.clock_timestamp()+interval '13 hours','신규등록고','high3')->>'kind'), 'validation_error', 'session expiry beyond twelve hours is rejected');
+
+select col_is_unique('public', 'prospects', array['admission_cycle_id', 'phone_hmac'], 'phone identity is unique within an admission cycle');
+select is((select count(*) from pg_catalog.pg_constraint constraint_row join pg_catalog.pg_class relation on relation.oid = constraint_row.conrelid join pg_catalog.pg_namespace namespace on namespace.oid = relation.relnamespace where namespace.nspname = 'public' and relation.relname = 'prospects' and constraint_row.contype = 'u' and constraint_row.conkey = array[(select attnum from pg_catalog.pg_attribute where attrelid = relation.oid and attname = 'phone_hmac')]::smallint[]), 0::bigint, 'phone identity is no longer globally unique');
+
+delete from public.rate_limit_buckets;
+select is((pg_temp.register_student(p_expected_cycle_id => 'b5000000-0000-4000-8000-000000000099', p_phone_hmac => decode(repeat('1a',32),'hex'))->>'kind'), 'cycle_changed', 'stale expected cycle ID is rejected as a rollover');
+select is((pg_temp.register_student(p_expected_cycle_year => 2031, p_phone_hmac => decode(repeat('1b',32),'hex'))->>'kind'), 'cycle_changed', 'stale expected cycle year is rejected as a rollover');
+select is((select count(*) from public.rate_limit_buckets), 0::bigint, 'cycle rollover checks do not consume registration limits');
+
+insert into public.admission_cycles(id, year, status, roster_version, password_key_version, archived_at)
+values ('b5000000-0000-4000-8000-000000000002', 2029, 'archived', 0, 7, pg_catalog.clock_timestamp());
+insert into public.prospects(
+  nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage,
+  region, admission_cycle_id, name_hmac, name_ciphertext, name_iv
+) values (
+  'archived-same-phone', decode(repeat('1c',32),'hex'), decode(repeat('22',16),'hex'), decode(repeat('33',12),'hex'),
+  '이전주기고', 'high3', 'other', 'b5000000-0000-4000-8000-000000000002', decode(repeat('44',32),'hex'),
+  decode(repeat('55',16),'hex'), decode(repeat('66',12),'hex')
+);
+create temporary table archived_phone_registration as
+select pg_temp.register_student(p_phone_hmac => decode(repeat('1c',32),'hex'), p_ip_hmac => decode(repeat('8c',32),'hex'), p_token_hash => decode(repeat('9f',32),'hex')) result;
+select is((select result->>'kind' from archived_phone_registration), 'created', 'an archived-cycle phone can register in the current cycle');
+select is((select count(*) from public.prospects where phone_hmac = decode(repeat('1c',32),'hex')), 2::bigint, 'the archived and current-cycle phone identities coexist');
+select ok((select is_self_registered from public.prospects where admission_cycle_id = 'b5000000-0000-4000-8000-000000000001' and phone_hmac = decode(repeat('1c',32),'hex')), 'the reused phone creates a current-cycle self-registered student');
 
 delete from public.rate_limit_buckets;
 insert into public.rate_limit_buckets(key_hash, route, window_started_at, count, expires_at)
@@ -96,10 +124,10 @@ select is((
   from generate_series(1, 4) n
 ), 'rate_limited', 'phone registration bucket is bounded');
 
-select is((select count(*) from (values ('public'::name), ('anon'::name), ('authenticated'::name)) roles(role) where has_function_privilege(roles.role, 'public.register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure, 'execute')), 0::bigint, 'public, anon, and authenticated cannot execute registration');
-select ok(has_function_privilege('service_role', 'public.register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure, 'execute'), 'service_role can execute registration');
-select ok((select prosecdef from pg_catalog.pg_proc where oid = 'public.register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure), 'registration is security definer');
-select ok(exists(select 1 from pg_catalog.pg_proc procedure cross join lateral pg_catalog.unnest(coalesce(procedure.proconfig, array[]::text[])) setting(value) where procedure.oid = 'public.register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure and setting.value = 'search_path=""'), 'registration has an empty search path');
+select is((select count(*) from (values ('public'::name), ('anon'::name), ('authenticated'::name)) roles(role) where has_function_privilege(roles.role, 'public.register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure, 'execute')), 0::bigint, 'public, anon, and authenticated cannot execute registration');
+select ok(has_function_privilege('service_role', 'public.register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure, 'execute'), 'service_role can execute registration');
+select ok((select prosecdef from pg_catalog.pg_proc where oid = 'public.register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure), 'registration is security definer');
+select ok(exists(select 1 from pg_catalog.pg_proc procedure cross join lateral pg_catalog.unnest(coalesce(procedure.proconfig, array[]::text[])) setting(value) where procedure.oid = 'public.register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)'::regprocedure and setting.value = 'search_path=""'), 'registration has an empty search path');
 
 select * from finish();
 rollback;

@@ -1,4 +1,6 @@
-export const studentPhoneDigits = (value: string): string => value.replace(/\D/gu, '').slice(0, 11)
+export const studentPhoneInputDigits = (value: string): string => value.replace(/\D/gu, '')
+
+export const studentPhoneDigits = (value: string): string => studentPhoneInputDigits(value).slice(0, 11)
 
 export const formatStudentPhoneInput = (value: string): string => {
   const digits = studentPhoneDigits(value)

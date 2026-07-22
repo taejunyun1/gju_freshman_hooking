@@ -154,7 +154,7 @@ select col_is_null('public', 'prospects', 'name_iv', 'name IVs remain nullable d
 select col_type_is('public', 'prospects', 'is_test', 'boolean', 'test-roster membership is boolean');
 select col_not_null('public', 'prospects', 'is_test', 'test-roster membership is always known');
 select col_default_is('public', 'prospects', 'is_test', 'false', 'ordinary prospects are not tests by default');
-select col_is_unique('public', 'prospects', 'phone_hmac', 'global phone uniqueness remains during expand');
+select col_is_unique('public', 'prospects', array['admission_cycle_id', 'phone_hmac'], 'phone identity is unique within an admission cycle');
 
 select lives_ok(
   $$insert into public.prospects(

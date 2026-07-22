@@ -109,6 +109,62 @@ describe('student account pages', () => {
     expect(wrapper.find('nuxt-link-stub[to="/login"]').exists()).toBe(true)
   })
 
+  it('uses the shared limits and blocks invalid name, school, and exact Korean mobile input before fetch', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('$fetch', fetch)
+    const { default: RegisterPage } = await import('../../../app/pages/register.vue')
+    const wrapper = mount(RegisterPage, { global: { stubs: { NuxtLink: true } } })
+    const name = wrapper.get<HTMLInputElement>('input[name="name"]')
+    const phone = wrapper.get<HTMLInputElement>('input[name="phone"]')
+    const highSchool = wrapper.get<HTMLInputElement>('input[name="highSchool"]')
+
+    expect(name.attributes('maxlength')).toBe('40')
+    await name.setValue('가'.repeat(41))
+    await phone.setValue('010123456789')
+    await highSchool.setValue('   ')
+    await wrapper.find('select[name="grade"]').setValue('high3')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(phone.element.value.replace(/\D/gu, '')).toBe('010123456789')
+    expect(name.attributes('aria-invalid')).toBe('true')
+    expect(name.attributes('aria-describedby')).toBe('register-name-error')
+    expect(phone.attributes('aria-invalid')).toBe('true')
+    expect(phone.attributes('aria-describedby')).toBe('register-phone-error')
+    expect(highSchool.attributes('aria-invalid')).toBe('true')
+    expect(highSchool.attributes('aria-describedby')).toBe('register-high-school-error')
+    expect(wrapper.get('#register-name-error').text()).toBe('이름은 1자 이상 40자 이하로 입력해 주세요.')
+    expect(wrapper.get('#register-phone-error').text()).toBe('휴대전화 번호는 010으로 시작하는 숫자 11자리여야 합니다.')
+    expect(wrapper.get('#register-high-school-error').text()).toBe('고등학교는 1자 이상 40자 이하로 입력해 주세요.')
+
+    await name.setValue('김 사진')
+    await phone.setValue('01112345678')
+    await highSchool.setValue('빛고을고등학교')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(wrapper.get('#register-phone-error').text()).toContain('010으로 시작')
+  })
+
+  it('keeps a generic registration failure only for an unknown server error', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockRejectedValue(new Error('private backend detail')))
+    const { default: RegisterPage } = await import('../../../app/pages/register.vue')
+    const wrapper = mount(RegisterPage, { global: { stubs: { NuxtLink: true } } })
+
+    await wrapper.find('input[name="name"]').setValue('김 사진')
+    await wrapper.find('input[name="phone"]').setValue('01012345678')
+    await wrapper.find('input[name="highSchool"]').setValue('빛고을고등학교')
+    await wrapper.find('select[name="grade"]').setValue('high3')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.register-form__error').text()).toBe('등록을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    expect(wrapper.text()).not.toContain('private backend detail')
+    expect(wrapper.findAll('.register-form__field-error')).toHaveLength(0)
+  })
+
   it('uses numeric PIN guidance without exposing backend authentication details', async () => {
     const fetch = vi.fn().mockRejectedValue(new Error('unexpected backend detail'))
     vi.stubGlobal('$fetch', fetch)

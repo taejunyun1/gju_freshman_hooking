@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { applicantRosterRowSchema } from '../../../shared/schemas/admission-roster'
+import { derivePasswordDigest } from '../../../server/modules/identity/roster-credentials'
+import { postgresByteaFromBytes } from '../../../server/utils/postgres-bytea'
 
 const keyring = {
   phoneHmacKey: new Uint8Array(32).fill(1),
@@ -57,6 +59,8 @@ describe('student self-registration service', () => {
     expect(calls.map(call => call.name)).toEqual(['list_admission_cycles_v1', 'register_roster_student_v1'])
     const args = calls[1]!.args
     expect(args).toEqual(expect.objectContaining({
+      p_expected_cycle_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      p_expected_cycle_year: 2026,
       p_phone_hmac: expect.stringMatching(/^\\x[0-9a-f]{64}$/u),
       p_phone_ciphertext: expect.stringMatching(/^\\x[0-9a-f]+$/u),
       p_phone_iv: expect.stringMatching(/^\\x[0-9a-f]{24}$/u),
@@ -80,6 +84,88 @@ describe('student self-registration service', () => {
       expect.objectContaining({ eventName: 'registration_started', path: '/api/student/register' }),
       expect.objectContaining({ eventName: 'registration_completed', prospectId: 42, path: '/api/student/register' }),
     ])
+  })
+
+  it('re-reads a rolled-over cycle and creates only a session whose digest uses the new year', async () => {
+    const { createStudentSelfRegistrationService } = await import('../../../server/modules/identity/student-self-registration')
+    const cycles = [
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7', year: 2027, status: 'current' as const },
+      { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8', year: 2028, status: 'current' as const },
+    ]
+    const registrationCalls: Record<string, unknown>[] = []
+    const createdAccountDigests: unknown[] = []
+    let cycleReads = 0
+    const service = createStudentSelfRegistrationService({
+      keyring,
+      now: () => new Date('2026-07-22T00:00:00.000Z'),
+      random: () => new Uint8Array(32).fill(registrationCalls.length + 1),
+      rpc: async (name: string, args?: Record<string, unknown>) => {
+        if (name === 'list_admission_cycles_v1') {
+          return { data: [cycles[cycleReads++]], error: null }
+        }
+        registrationCalls.push(args ?? {})
+        if (registrationCalls.length === 1) return { data: { kind: 'cycle_changed' }, error: null }
+        createdAccountDigests.push(args?.p_password_digest)
+        return {
+          data: { kind: 'created', prospectId: 84, expiresAt: '2026-07-22T12:00:00.000Z' },
+          error: null,
+        }
+      },
+      writeEvent: async () => undefined,
+    })
+    const staleDigest = postgresByteaFromBytes(await derivePasswordDigest('279442', keyring.currentPassword.pepper))
+    const currentDigest = postgresByteaFromBytes(await derivePasswordDigest('289442', keyring.currentPassword.pepper))
+
+    await expect(service.registerStudent(rosterRow, context)).resolves.toEqual(expect.objectContaining({
+      kind: 'created',
+      expiresAt: '2026-07-22T12:00:00.000Z',
+    }))
+
+    expect(cycleReads).toBe(2)
+    expect(registrationCalls).toHaveLength(2)
+    expect(registrationCalls[0]).toEqual(expect.objectContaining({
+      p_expected_cycle_id: cycles[0]!.id,
+      p_expected_cycle_year: 2027,
+      p_password_digest: staleDigest,
+    }))
+    expect(registrationCalls[1]).toEqual(expect.objectContaining({
+      p_expected_cycle_id: cycles[1]!.id,
+      p_expected_cycle_year: 2028,
+      p_password_digest: currentDigest,
+    }))
+    expect(createdAccountDigests).toEqual([currentDigest])
+    expect(createdAccountDigests).not.toContain(staleDigest)
+    expect(registrationCalls[0]!.p_token_hash).not.toBe(registrationCalls[1]!.p_token_hash)
+  })
+
+  it('fails closed after one retry when the cycle changes again', async () => {
+    const { createStudentSelfRegistrationService } = await import('../../../server/modules/identity/student-self-registration')
+    let cycleReads = 0
+    let registrationCalls = 0
+    const service = createStudentSelfRegistrationService({
+      keyring,
+      random: () => new Uint8Array(32).fill(registrationCalls + 1),
+      rpc: async (name: string) => {
+        if (name === 'list_admission_cycles_v1') {
+          cycleReads += 1
+          return {
+            data: [{
+              id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa${cycleReads}`,
+              year: 2026 + cycleReads,
+              status: 'current',
+            }],
+            error: null,
+          }
+        }
+        registrationCalls += 1
+        return { data: { kind: 'cycle_changed' }, error: null }
+      },
+      writeEvent: async () => undefined,
+    })
+
+    await expect(service.registerStudent(rosterRow, context)).rejects.toThrow('IDENTITY_STORE_INVALID')
+    expect(cycleReads).toBe(2)
+    expect(registrationCalls).toBe(2)
   })
 
   it.each(['existing', 'rate_limited'] as const)('does not issue a browser session when registration is %s', async (kind) => {

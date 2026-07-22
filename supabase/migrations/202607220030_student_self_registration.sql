@@ -3,7 +3,16 @@
 alter table public.prospects
   add column is_self_registered boolean not null default false;
 
+-- Phone identity is annual. Archived applicants must not prevent the same
+-- person from participating in the current admission cycle.
+alter table public.prospects
+  drop constraint if exists prospects_phone_hmac_key,
+  add constraint prospects_admission_cycle_phone_hmac_key
+    unique (admission_cycle_id, phone_hmac);
+
 create function public.register_roster_student_v1(
+  p_expected_cycle_id uuid,
+  p_expected_cycle_year integer,
   p_phone_hmac bytea,
   p_phone_ciphertext bytea,
   p_phone_iv bytea,
@@ -27,9 +36,11 @@ declare
   v_now timestamptz := pg_catalog.clock_timestamp();
   v_prospect_id bigint;
 begin
-  -- Protected values are produced by the Worker. The database validates only
-  -- their storage shape and never accepts a cycle or administrator identity.
-  if p_phone_hmac is null or pg_catalog.octet_length(p_phone_hmac) <> 32
+  -- The expected cycle is a server-originated compare-and-swap value. It is
+  -- never accepted from the browser and cannot select a non-current cycle.
+  if p_expected_cycle_id is null
+    or p_expected_cycle_year is null or p_expected_cycle_year not between 2020 and 2200
+    or p_phone_hmac is null or pg_catalog.octet_length(p_phone_hmac) <> 32
     or p_phone_ciphertext is null or pg_catalog.octet_length(p_phone_ciphertext) < 16
     or p_phone_iv is null or pg_catalog.octet_length(p_phone_iv) <> 12
     or p_name_hmac is null or pg_catalog.octet_length(p_name_hmac) <> 32
@@ -53,7 +64,14 @@ begin
   where status = 'current'
   for update;
 
-  if not found or p_password_key_version <> v_cycle.password_key_version then
+  if not found
+    or p_expected_cycle_id <> v_cycle.id
+    or p_expected_cycle_year <> v_cycle.year
+  then
+    return pg_catalog.jsonb_build_object('kind', 'cycle_changed');
+  end if;
+
+  if p_password_key_version <> v_cycle.password_key_version then
     return pg_catalog.jsonb_build_object('kind', 'validation_error');
   end if;
 
@@ -101,7 +119,13 @@ begin
   );
 exception
   when unique_violation then
-    return pg_catalog.jsonb_build_object('kind', 'existing');
+    if exists (
+      select 1 from public.prospects
+      where admission_cycle_id = v_cycle.id and phone_hmac = p_phone_hmac
+    ) then
+      return pg_catalog.jsonb_build_object('kind', 'existing');
+    end if;
+    return pg_catalog.jsonb_build_object('kind', 'validation_error');
   when others then
     return pg_catalog.jsonb_build_object('kind', 'validation_error');
 end;
@@ -176,9 +200,9 @@ end;
 $$;
 
 revoke all on function public.register_roster_student_v1(
-  bytea, bytea, bytea, bytea, bytea, bytea, bytea, integer, bytea, bytea, timestamptz, text, text
+  uuid, integer, bytea, bytea, bytea, bytea, bytea, bytea, bytea, integer, bytea, bytea, timestamptz, text, text
 ) from public, anon, authenticated;
 
 grant execute on function public.register_roster_student_v1(
-  bytea, bytea, bytea, bytea, bytea, bytea, bytea, integer, bytea, bytea, timestamptz, text, text
+  uuid, integer, bytea, bytea, bytea, bytea, bytea, bytea, bytea, integer, bytea, bytea, timestamptz, text, text
 ) to service_role;

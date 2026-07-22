@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
+import { applicantRosterRowSchema, type ApplicantRosterRow } from '../../shared/schemas/admission-roster'
 import type { ApiSuccess } from '../../shared/types/api'
+import { MAX_APPLICANT_NAME_LENGTH } from '../../shared/utils/applicant-normalization'
 import {
   formatStudentPhoneInput,
-  studentPhoneDigits,
+  studentPhoneInputDigits,
 } from '../utils/student-phone-input'
 
 type RegistrationResult =
@@ -17,14 +19,22 @@ const submitting = ref(false)
 const registrationState = ref<'idle' | 'existing'>('idle')
 const errorMessage = ref('')
 const form = reactive({ name: '', phone: '', highSchool: '', grade: '' })
+const fieldErrors = reactive({ name: '', phone: '', highSchool: '', grade: '' })
 
 onMounted(() => {
   hydrated.value = true
 })
 
+const formatRegistrationPhoneInput = (value: string): string => {
+  const digits = studentPhoneInputDigits(value)
+  const formatted = formatStudentPhoneInput(digits)
+  return digits.length <= 11 ? formatted : `${formatted}${digits.slice(11)}`
+}
+
 const updatePhone = (event: Event): void => {
   const input = event.target as HTMLInputElement
-  const formatted = formatStudentPhoneInput(input.value)
+  const formatted = formatRegistrationPhoneInput(input.value)
+  fieldErrors.phone = ''
   form.phone = formatted
   input.value = formatted
 }
@@ -38,31 +48,77 @@ const pastePhone = (event: ClipboardEvent): void => {
   const selectionEnd = input.selectionEnd ?? selectionStart
   const beforeSelection = input.value.slice(0, selectionStart)
   const pastedText = event.clipboardData.getData('text')
-  const formatted = formatStudentPhoneInput(
+  const formatted = formatRegistrationPhoneInput(
     `${beforeSelection}${pastedText}${input.value.slice(selectionEnd)}`,
   )
   const caret = Math.min(
-    formatStudentPhoneInput(`${beforeSelection}${pastedText}`).length,
+    formatRegistrationPhoneInput(`${beforeSelection}${pastedText}`).length,
     formatted.length,
   )
 
   form.phone = formatted
+  fieldErrors.phone = ''
   input.value = formatted
   input.setSelectionRange(caret, caret)
 }
 
+const validateRegistrationInput = (): ApplicantRosterRow | null => {
+  fieldErrors.name = ''
+  fieldErrors.phone = ''
+  fieldErrors.highSchool = ''
+  fieldErrors.grade = ''
+
+  let name: ApplicantRosterRow['name'] | undefined
+  let phone: ApplicantRosterRow['phone'] | undefined
+  let highSchool: ApplicantRosterRow['highSchool'] | undefined
+  let grade: ApplicantRosterRow['grade'] | undefined
+  try {
+    name = applicantRosterRowSchema.shape.name.parse(form.name)
+  }
+  catch {
+    fieldErrors.name = '이름은 1자 이상 40자 이하로 입력해 주세요.'
+  }
+  try {
+    phone = applicantRosterRowSchema.shape.phone.parse(studentPhoneInputDigits(form.phone))
+  }
+  catch {
+    fieldErrors.phone = '휴대전화 번호는 010으로 시작하는 숫자 11자리여야 합니다.'
+  }
+  try {
+    highSchool = applicantRosterRowSchema.shape.highSchool.parse(form.highSchool)
+  }
+  catch {
+    fieldErrors.highSchool = '고등학교는 1자 이상 40자 이하로 입력해 주세요.'
+  }
+  try {
+    grade = applicantRosterRowSchema.shape.grade.parse(form.grade)
+  }
+  catch {
+    fieldErrors.grade = '학년을 선택해 주세요.'
+  }
+
+  if (name === undefined || phone === undefined || highSchool === undefined || grade === undefined) return null
+  return { name, phone, highSchool, grade }
+}
+
 const submitRegistration = async (): Promise<void> => {
   if (registrationState.value === 'existing') return
+
+  const input = validateRegistrationInput()
+  if (!input) {
+    errorMessage.value = ''
+    return
+  }
 
   submitting.value = true
   errorMessage.value = ''
   try {
     const response = await $fetch<ApiSuccess<RegistrationResult>>('/api/student/register', {
       body: {
-        name: form.name,
-        phone: studentPhoneDigits(form.phone),
-        highSchool: form.highSchool,
-        grade: form.grade,
+        name: input.name,
+        phone: input.phone,
+        highSchool: input.highSchool,
+        grade: input.grade,
       },
       method: 'POST',
     })
@@ -118,6 +174,7 @@ const submitRegistration = async (): Promise<void> => {
 
         <form
           class="register-form"
+          novalidate
           @submit.prevent="submitRegistration"
         >
           <fieldset
@@ -131,9 +188,20 @@ const submitRegistration = async (): Promise<void> => {
                 v-model="form.name"
                 name="name"
                 autocomplete="name"
-                maxlength="30"
+                :maxlength="MAX_APPLICANT_NAME_LENGTH"
+                :aria-invalid="fieldErrors.name ? 'true' : undefined"
+                :aria-describedby="fieldErrors.name ? 'register-name-error' : undefined"
                 required
+                @input="fieldErrors.name = ''"
               >
+              <p
+                v-if="fieldErrors.name"
+                id="register-name-error"
+                class="register-form__field-error"
+                role="alert"
+              >
+                {{ fieldErrors.name }}
+              </p>
             </div>
             <div class="register-form__field">
               <label for="register-phone">휴대전화 번호</label>
@@ -146,10 +214,20 @@ const submitRegistration = async (): Promise<void> => {
                 maxlength="13"
                 autocomplete="tel"
                 placeholder="010-0000-0000"
+                :aria-invalid="fieldErrors.phone ? 'true' : undefined"
+                :aria-describedby="fieldErrors.phone ? 'register-phone-error' : undefined"
                 required
                 @input="updatePhone"
                 @paste="pastePhone"
               >
+              <p
+                v-if="fieldErrors.phone"
+                id="register-phone-error"
+                class="register-form__field-error"
+                role="alert"
+              >
+                {{ fieldErrors.phone }}
+              </p>
             </div>
             <div class="register-form__field">
               <label for="register-high-school">고등학교</label>
@@ -159,8 +237,19 @@ const submitRegistration = async (): Promise<void> => {
                 name="highSchool"
                 autocomplete="organization"
                 maxlength="40"
+                :aria-invalid="fieldErrors.highSchool ? 'true' : undefined"
+                :aria-describedby="fieldErrors.highSchool ? 'register-high-school-error' : undefined"
                 required
+                @input="fieldErrors.highSchool = ''"
               >
+              <p
+                v-if="fieldErrors.highSchool"
+                id="register-high-school-error"
+                class="register-form__field-error"
+                role="alert"
+              >
+                {{ fieldErrors.highSchool }}
+              </p>
             </div>
             <div class="register-form__field">
               <label for="register-grade">학년</label>
@@ -168,7 +257,10 @@ const submitRegistration = async (): Promise<void> => {
                 id="register-grade"
                 v-model="form.grade"
                 name="grade"
+                :aria-invalid="fieldErrors.grade ? 'true' : undefined"
+                :aria-describedby="fieldErrors.grade ? 'register-grade-error' : undefined"
                 required
+                @change="fieldErrors.grade = ''"
               >
                 <option disabled value="">학년 선택</option>
                 <option value="high1">고1</option>
@@ -178,6 +270,14 @@ const submitRegistration = async (): Promise<void> => {
                 <option value="ged">검정고시</option>
                 <option value="other">기타</option>
               </select>
+              <p
+                v-if="fieldErrors.grade"
+                id="register-grade-error"
+                class="register-form__field-error"
+                role="alert"
+              >
+                {{ fieldErrors.grade }}
+              </p>
             </div>
             <p class="register-form__notice">PIN은 자동 생성되며, 다음 로그인부터 사용합니다.</p>
             <p
@@ -348,6 +448,7 @@ const submitRegistration = async (): Promise<void> => {
 }
 
 .register-form__notice,
+.register-form__field-error,
 .register-form__error,
 .register-form__existing {
   margin: 0;
@@ -356,6 +457,7 @@ const submitRegistration = async (): Promise<void> => {
 }
 
 .register-form__notice { color: var(--color-muted); }
+.register-form__field-error { margin: 0; color: var(--color-error); font-size: 0.8125rem; line-height: 1.5; }
 .register-form__error { color: var(--color-error); }
 .register-form__existing { color: var(--color-primary-strong); }
 .register-form__existing a { color: var(--color-primary); text-underline-offset: 0.2em; }

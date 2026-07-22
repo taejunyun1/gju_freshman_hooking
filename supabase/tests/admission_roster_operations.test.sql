@@ -1,6 +1,6 @@
 begin;
 
-select plan(63);
+select plan(64);
 
 insert into auth.users(id) values ('a4000000-0000-4000-8000-000000000001');
 insert into public.admin_users(id, is_active) values ('a4000000-0000-4000-8000-000000000001', true);
@@ -113,7 +113,7 @@ select is((select phone_hmac from public.prospects where phone_hmac=decode(repea
 select is((public.change_roster_student_phone_v1((select id from public.prospects where phone_hmac=decode(repeat('24',32),'hex')),1,3,decode(repeat('a3',32),'hex'),decode(repeat('a4',16),'hex'),decode(repeat('a5',12),'hex'),decode(repeat('a6',32),'hex'))->>'code'),'PASSWORD_GENERATION_CONFLICT','phone change rejects stale generation');
 select is((select count(*) from public.student_sessions s join public.prospects p on p.id=s.prospect_id where p.phone_hmac=decode(repeat('24',32),'hex') and s.revoked_at is null),2::bigint,'stale phone change leaves sessions active');
 
--- The bridge-era global phone uniqueness blocks a test-account collision without altering the current cycle.
+-- Cycle start retains its explicit test-account collision guard without altering the current cycle.
 select is((public.start_admission_cycle_v1('a4000000-0000-4000-8000-000000000030',2031,1,(select admin_id from roster_fixture),(select test_rows from roster_fixture))->>'code'),'TEST_PHONE_CONFLICT','test-account phone collision aborts a cycle start');
 select is((select status from public.admission_cycles where id=(select cycle_id from roster_fixture)),'current','collision leaves the existing cycle current');
 
@@ -146,7 +146,7 @@ select is(jsonb_array_length(public.apply_applicant_roster_v1(
   'a4000000-0000-4000-8000-000000000031',1,'a4000000-0000-4000-8000-000000000001',
   decode(repeat('d1',32),'hex'),'a4000000-0000-4000-8000-000000000032',(select rows from high_volume_roster)
 )->'added'),200,'idempotent retry returns every original credential reference');
-create temporary table global_phone_collision as
+create temporary table archived_phone_reuse as
 select jsonb_build_object(
   'nameHmac',repeat('e1',32),'nameCiphertext',repeat('e2',16),'nameIv',repeat('e3',12),
   'phoneHmac',repeat('24',32),'phoneCiphertext',repeat('e4',16),'phoneIv',repeat('e5',12),
@@ -154,17 +154,34 @@ select jsonb_build_object(
 ) student;
 select is((public.apply_applicant_roster_v1(
   'a4000000-0000-4000-8000-000000000031',1,'a4000000-0000-4000-8000-000000000001',
-  decode(repeat('e7',32),'hex'),'a4000000-0000-4000-8000-000000000033',jsonb_build_array((select student from global_phone_collision))
-)->>'diagnosticCode'),'23505','database failures return a safe SQLSTATE for Worker diagnostics');
+  decode(repeat('e7',32),'hex'),'a4000000-0000-4000-8000-000000000033',jsonb_build_array((select student from archived_phone_reuse))
+)->>'kind'),'success','roster import can reuse an archived-cycle phone in the current cycle');
+insert into public.prospects(
+  nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage,
+  region, admission_cycle_id, name_hmac, name_ciphertext, name_iv
+) values (
+  'roster:a4000000-0000-4000-8000-000000000031:' || repeat('ef',32), decode(repeat('ee',32),'hex'),
+  decode(repeat('e1',16),'hex'), decode(repeat('e2',12),'hex'), '충돌진단고', 'high3', 'other',
+  'a4000000-0000-4000-8000-000000000031', decode(repeat('e3',32),'hex'),
+  decode(repeat('e4',16),'hex'), decode(repeat('e5',12),'hex')
+);
+select is((public.apply_applicant_roster_v1(
+  'a4000000-0000-4000-8000-000000000031',2,'a4000000-0000-4000-8000-000000000001',
+  decode(repeat('f1',32),'hex'),'a4000000-0000-4000-8000-000000000034',jsonb_build_array(jsonb_build_object(
+    'nameHmac',repeat('f2',32),'nameCiphertext',repeat('f3',16),'nameIv',repeat('f4',12),
+    'phoneHmac',repeat('ef',32),'phoneCiphertext',repeat('f5',16),'phoneIv',repeat('f6',12),
+    'schoolName','충돌진단고','applicantStage','high3','passwordDigest',repeat('f7',32),'passwordGeneration',1
+  ))
+)->>'diagnosticCode'),'23505','database failures still return a safe SQLSTATE for Worker diagnostics');
 
 -- The RPC surface is executable only by service_role.
 select is((select count(*) from (values
   ('public'::name),('anon'::name),('authenticated'::name)
 ) roles(role) cross join (values
-  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
+  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
 ) functions(signature) where has_function_privilege(roles.role, ('public.' || functions.signature)::regprocedure, 'execute')),0::bigint,'public anon and authenticated cannot execute roster mutations');
 select is((select count(*) from (values
-  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
+  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(uuid,integer,bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
 ) functions(signature) where has_function_privilege('service_role', ('public.' || functions.signature)::regprocedure, 'execute')),13::bigint,'service_role can execute every roster RPC');
 
 select * from finish();

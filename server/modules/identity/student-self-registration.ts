@@ -42,19 +42,20 @@ const registrationResultSchema = z.discriminatedUnion('kind', [
   }).strict(),
   z.object({ kind: z.literal('existing') }).strict(),
   z.object({ kind: z.literal('rate_limited') }).strict(),
+  z.object({ kind: z.literal('cycle_changed') }).strict(),
 ])
 
 const throwOnStoreError = (error: { code?: string } | null): void => {
   if (error) throw new Error('IDENTITY_STORE_UNAVAILABLE')
 }
 
-const getCurrentCycle = async (rpc: Rpc): Promise<{ year: number }> => {
+const getCurrentCycle = async (rpc: Rpc): Promise<{ id: string, year: number }> => {
   const { data, error } = await rpc('list_admission_cycles_v1')
   throwOnStoreError(error)
   const cycles = z.array(currentCycleSchema).safeParse(data)
   const current = cycles.success ? cycles.data.filter(cycle => cycle.status === 'current') : []
   if (current.length !== 1) throw new Error('IDENTITY_STORE_INVALID')
-  return { year: current[0]!.year }
+  return { id: current[0]!.id, year: current[0]!.year }
 }
 
 const registrationIpHmac = async (ip: string, key: Uint8Array): Promise<Uint8Array> => {
@@ -99,42 +100,56 @@ export const createStudentSelfRegistrationService = (dependencies: StudentSelfRe
     input: ApplicantRosterRow,
     context: RosterIdentityRequestContext,
   ): Promise<RegistrationResult> => {
-    const cycle = await getCurrentCycle(dependencies.rpc)
-    const issuedAt = now()
-    const expiresAt = new Date(issuedAt.getTime() + SESSION_ABSOLUTE_MILLISECONDS)
-    const [phone, name, initialPassword, session] = await Promise.all([
+    let cycle = await getCurrentCycle(dependencies.rpc)
+    const [phone, name, ipHmac] = await Promise.all([
       protectPhone(input.phone, dependencies.keyring.phoneHmacKey, dependencies.keyring.piiEncryptionKey),
       protectApplicantName(input.name, dependencies.keyring.nameHmacKey, dependencies.keyring.piiEncryptionKey),
-      deriveInitialPassword({ admissionYear: cycle.year, phone: input.phone }),
-      createSessionToken(random),
-    ])
-    const [passwordDigest, ipHmac] = await Promise.all([
-      derivePasswordDigest(initialPassword, dependencies.keyring.currentPassword.pepper),
       registrationIpHmac(context.ip, dependencies.keyring.phoneHmacKey),
     ])
 
     await writeEventSafely(dependencies.writeEvent, 'registration_started', context)
-    const { data, error } = await dependencies.rpc('register_roster_student_v1', {
-      p_phone_hmac: postgresByteaFromBytes(phone.hmac),
-      p_phone_ciphertext: postgresByteaFromBytes(phone.ciphertext),
-      p_phone_iv: postgresByteaFromBytes(phone.iv),
-      p_name_hmac: postgresByteaFromBytes(name.hmac),
-      p_name_ciphertext: postgresByteaFromBytes(name.ciphertext),
-      p_name_iv: postgresByteaFromBytes(name.iv),
-      p_password_digest: postgresByteaFromBytes(passwordDigest),
-      p_password_key_version: dependencies.keyring.currentPassword.version,
-      p_ip_hmac: postgresByteaFromBytes(ipHmac),
-      p_token_hash: postgresByteaFromBytes(session.hash),
-      p_expires_at: expiresAt.toISOString(),
-      p_school_name: input.highSchool,
-      p_applicant_stage: input.grade,
-    })
-    throwOnStoreError(error)
-    const result = parseRegistrationResult(data)
-    if (result.kind !== 'created') return result
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const issuedAt = now()
+      const expiresAt = new Date(issuedAt.getTime() + SESSION_ABSOLUTE_MILLISECONDS)
+      const [initialPassword, session] = await Promise.all([
+        deriveInitialPassword({ admissionYear: cycle.year, phone: input.phone }),
+        createSessionToken(random),
+      ])
+      const passwordDigest = await derivePasswordDigest(
+        initialPassword,
+        dependencies.keyring.currentPassword.pepper,
+      )
+      const { data, error } = await dependencies.rpc('register_roster_student_v1', {
+        p_expected_cycle_id: cycle.id,
+        p_expected_cycle_year: cycle.year,
+        p_phone_hmac: postgresByteaFromBytes(phone.hmac),
+        p_phone_ciphertext: postgresByteaFromBytes(phone.ciphertext),
+        p_phone_iv: postgresByteaFromBytes(phone.iv),
+        p_name_hmac: postgresByteaFromBytes(name.hmac),
+        p_name_ciphertext: postgresByteaFromBytes(name.ciphertext),
+        p_name_iv: postgresByteaFromBytes(name.iv),
+        p_password_digest: postgresByteaFromBytes(passwordDigest),
+        p_password_key_version: dependencies.keyring.currentPassword.version,
+        p_ip_hmac: postgresByteaFromBytes(ipHmac),
+        p_token_hash: postgresByteaFromBytes(session.hash),
+        p_expires_at: expiresAt.toISOString(),
+        p_school_name: input.highSchool,
+        p_applicant_stage: input.grade,
+      })
+      throwOnStoreError(error)
+      const result = parseRegistrationResult(data)
+      if (result.kind === 'cycle_changed') {
+        if (attempt === 1) throw new Error('IDENTITY_STORE_INVALID')
+        cycle = await getCurrentCycle(dependencies.rpc)
+        continue
+      }
+      if (result.kind !== 'created') return result
 
-    await writeEventSafely(dependencies.writeEvent, 'registration_completed', context, result.prospectId)
-    return { kind: 'created', sessionToken: session.raw, expiresAt: result.expiresAt }
+      await writeEventSafely(dependencies.writeEvent, 'registration_completed', context, result.prospectId)
+      return { kind: 'created', sessionToken: session.raw, expiresAt: result.expiresAt }
+    }
+
+    throw new Error('IDENTITY_STORE_INVALID')
   }
 
   return { registerStudent }

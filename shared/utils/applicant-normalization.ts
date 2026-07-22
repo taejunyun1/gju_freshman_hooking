@@ -1,5 +1,7 @@
 export type NormalizedApplicantStage = 'high1' | 'high2' | 'high3' | 'graduate' | 'ged' | 'other'
 
+export const MAX_APPLICANT_NAME_LENGTH = 40
+
 const applicantStageValues: Readonly<Record<string, NormalizedApplicantStage>> = {
   high1: 'high1',
   high2: 'high2',
@@ -17,7 +19,7 @@ const applicantStageValues: Readonly<Record<string, NormalizedApplicantStage>> =
 
 export const normalizeApplicantName = (input: string): string => {
   const value = input.normalize('NFKC').trim().replace(/\p{White_Space}+/gu, ' ')
-  if ([...value].length < 1 || [...value].length > 40 || /[\p{Cc}\p{Cf}]/u.test(value)) {
+  if ([...value].length < 1 || [...value].length > MAX_APPLICANT_NAME_LENGTH || /[\p{Cc}\p{Cf}]/u.test(value)) {
     throw new Error('APPLICANT_NAME_INVALID')
   }
   return value
