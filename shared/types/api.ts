@@ -1,4 +1,4 @@
-import type { ApplicantStage, Region } from '../schemas/identity'
+import type { ApplicantRosterRow } from '../schemas/admission-roster'
 import type { CounselingStatus, QuestionGroup, TrackKey, VisualKey } from './domain'
 import type { AdminEquipmentInventoryItem, AdminResource } from '../schemas/admin-resources'
 import type { AdminFaculty } from '../schemas/admin-faculty'
@@ -13,12 +13,7 @@ export type {
   RosterPreviewResult,
 } from '../schemas/admission-roster'
 
-export type RegistrationInput = {
-  phone: string
-  schoolName: string
-  applicantStage: ApplicantStage
-  region: Region
-}
+export type RegistrationInput = ApplicantRosterRow
 
 export type LoginInput = {
   phone: string
@@ -26,8 +21,9 @@ export type LoginInput = {
 }
 
 export type RegistrationResult =
-  | { kind: 'created', nickname: string, initialPassword: string }
+  | { kind: 'created', sessionToken: string, expiresAt: string }
   | { kind: 'existing' }
+  | { kind: 'rate_limited' }
 
 export type LoginResult =
   | { kind: 'authenticated', sessionToken: string, expiresAt: string }
