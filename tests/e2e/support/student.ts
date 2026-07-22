@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { expect, type Page } from '@playwright/test'
 export { uniqueAssessmentPhone } from './phone'
 
@@ -9,6 +10,19 @@ type OnRegistered = (student: RegisteredStudent) => Promise<void>
 type LocalCredentials = { phone: string, password: string, nickname?: string }
 
 const fallbackPasswordForPhone = (phone: string): string => `${phone.replace(/\D/gu, '').slice(-4)}AA`
+
+type PlaywrightTestIdentity = {
+  retry: number
+  testId: string
+}
+
+export const uniqueSelfRegistrationPhone = (testInfo: PlaywrightTestIdentity): string => {
+  const digest = createHash('sha256')
+    .update(`student-self-registration:${testInfo.testId}:${testInfo.retry}`)
+    .digest()
+  const suffix = (digest.readUInt32BE(0) % 10_000_000).toString().padStart(7, '0')
+  return `0109${suffix}`
+}
 
 export const registerAndLoginStudent = async (
   page: Page,

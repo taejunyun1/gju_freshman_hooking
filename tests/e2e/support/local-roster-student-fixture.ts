@@ -17,6 +17,7 @@ export type LocalRosterStudentFixture = {
 }
 
 type LocalRosterStudentFixtureHooks = {
+  admissionYear?: number
   beforeVerification?: () => void
 }
 
@@ -95,6 +96,9 @@ export const provisionLocalRosterStudent = (
   hooks: LocalRosterStudentFixtureHooks = {},
 ): LocalRosterStudentFixture => {
   if (!/^010\d{8}$/u.test(phone)) throw new Error('E2E fixture 전화번호 형식이 올바르지 않습니다.')
+  if (hooks.admissionYear !== undefined && (!Number.isInteger(hooks.admissionYear) || hooks.admissionYear < 2020 || hooks.admissionYear > 2200)) {
+    throw new Error('E2E fixture 입학연도 형식이 올바르지 않습니다.')
+  }
   requireLocalRuntime()
 
   const password = passwordForPhone(phone)
@@ -116,13 +120,14 @@ limit 1;
     throw new Error('현재 입학전형 주기의 비밀번호 키 버전이 E2E 실행 환경과 다릅니다.')
   }
 
+  const admissionYear = hooks.admissionYear ?? 2200
   const cycleId = existingCycleId ?? randomUUID()
   const createdCycle = existingCycleId === undefined
   if (createdCycle) {
     runDatabaseSql(String.raw`
 insert into public.admission_cycles(id, year, status, roster_version, password_key_version, archived_at)
 select '${cycleId}'::uuid, candidate_year, 'current', 0, ${version}, null
-from pg_catalog.generate_series(2200, 2020, -1) candidate_year
+from pg_catalog.generate_series(${admissionYear}, ${admissionYear}, -1) candidate_year
 where not exists (
   select 1 from public.admission_cycles existing where existing.year = candidate_year
 )
