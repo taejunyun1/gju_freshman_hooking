@@ -113,4 +113,27 @@ describe('student self-registration service', () => {
 
     await expect(service.registerStudent(rosterRow, context)).rejects.toThrow('IDENTITY_STORE_INVALID')
   })
+
+  it('fails closed when the registration RPC returns an unsafe integer prospect ID', async () => {
+    const { createStudentSelfRegistrationService } = await import('../../../server/modules/identity/student-self-registration')
+    const writeEvent = vi.fn(async () => undefined)
+    const service = createStudentSelfRegistrationService({
+      keyring,
+      rpc: async (name: string) => name === 'list_admission_cycles_v1'
+        ? { data: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', year: 2026, status: 'current' }], error: null }
+        : {
+            data: {
+              kind: 'created',
+              prospectId: Number.MAX_SAFE_INTEGER + 1,
+              expiresAt: '2026-07-22T12:00:00.000Z',
+            },
+            error: null,
+          },
+      writeEvent,
+    })
+
+    await expect(service.registerStudent(rosterRow, context)).rejects.toThrow('IDENTITY_STORE_INVALID')
+    expect(writeEvent).toHaveBeenCalledTimes(1)
+    expect(writeEvent).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'registration_started' }))
+  })
 })

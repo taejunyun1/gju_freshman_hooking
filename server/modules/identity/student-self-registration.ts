@@ -37,7 +37,7 @@ const currentCycleSchema = z.object({
 const registrationResultSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('created'),
-    prospectId: z.number().int().positive(),
+    prospectId: z.number().int().positive().refine(Number.isSafeInteger),
     expiresAt: z.string().datetime({ offset: true }),
   }).strict(),
   z.object({ kind: z.literal('existing') }).strict(),
