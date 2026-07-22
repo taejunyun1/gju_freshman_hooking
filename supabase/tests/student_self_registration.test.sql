@@ -63,9 +63,9 @@ insert into public.rate_limit_buckets(key_hash, route, window_started_at, count,
 select
   extensions.digest('roster-register-global', 'sha256'),
   'roster-register-global',
-  pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600),
+  pg_catalog.to_timestamp(pg_catalog.floor(extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600),
   64,
-  pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600) + interval '10 minutes';
+  pg_catalog.to_timestamp(pg_catalog.floor(extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600) + interval '10 minutes';
 select is(
   (pg_temp.register_student(
     p_phone_hmac => decode(repeat('19', 32), 'hex'),
