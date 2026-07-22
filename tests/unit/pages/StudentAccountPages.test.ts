@@ -119,8 +119,14 @@ describe('student account pages', () => {
     const highSchool = wrapper.get<HTMLInputElement>('input[name="highSchool"]')
 
     expect(name.attributes('maxlength')).toBe('40')
+    expect(phone.attributes('maxlength')).toBeUndefined()
     await name.setValue('가'.repeat(41))
-    await phone.setValue('010123456789')
+    phone.element.value = '010123456789'
+    phone.element.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: '9',
+      inputType: 'insertText',
+    }))
     await highSchool.setValue('   ')
     await wrapper.find('select[name="grade"]').setValue('high3')
     await wrapper.find('form').trigger('submit')

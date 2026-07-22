@@ -1,6 +1,20 @@
 begin;
 
-select plan(19);
+select plan(21);
+
+insert into public.admission_cycles (
+  id,
+  year,
+  status,
+  roster_version,
+  password_key_version
+) values (
+  'e1000000-0000-4000-8000-000000000001',
+  2026,
+  'current',
+  0,
+  1
+);
 
 select has_function(
   'public',
@@ -31,6 +45,16 @@ select ok(
       and setting.value = 'search_path=""'
   ),
   'register_student has an empty search path'
+);
+
+select ok(
+  pg_catalog.strpos(
+    pg_catalog.pg_get_functiondef(
+      'public.register_student(bytea,bytea,bytea,text,text,text,text,bytea,bytea)'::regprocedure
+    ),
+    'on conflict do nothing'
+  ) > 0,
+  'register_student resolves duplicates against the active unique constraints'
 );
 
 select is(
@@ -86,6 +110,16 @@ select is(
   (select count(*)::integer from public.prospects where phone_hmac = decode(repeat('11', 32), 'hex')),
   1,
   'the protected phone has one prospect'
+);
+
+select is(
+  (
+    select admission_cycle_id
+    from public.prospects
+    where phone_hmac = decode(repeat('11', 32), 'hex')
+  ),
+  'e1000000-0000-4000-8000-000000000001'::uuid,
+  'the legacy registration contract binds the prospect to the current cycle'
 );
 
 select is(

@@ -211,7 +211,6 @@ const submitRegistration = async (): Promise<void> => {
                 name="phone"
                 type="tel"
                 inputmode="numeric"
-                maxlength="13"
                 autocomplete="tel"
                 placeholder="010-0000-0000"
                 :aria-invalid="fieldErrors.phone ? 'true' : undefined"

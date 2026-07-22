@@ -10,6 +10,68 @@ alter table public.prospects
   add constraint prospects_admission_cycle_phone_hmac_key
     unique (admission_cycle_id, phone_hmac);
 
+-- The legacy identity RPC predates annual admission cycles. Keep its protected
+-- input and table-return contract while letting the active unique constraints
+-- decide whether the prospect insert is a duplicate.
+create or replace function public.register_student(
+  p_phone_hmac bytea,
+  p_phone_ciphertext bytea,
+  p_phone_iv bytea,
+  p_nickname text,
+  p_school_name text,
+  p_applicant_stage text,
+  p_region text,
+  p_password_hash bytea,
+  p_password_salt bytea
+)
+returns table(kind text)
+language sql
+security definer
+set search_path = ''
+as $$
+  with current_cycle as (
+    select id
+    from public.admission_cycles
+    where status = 'current'
+  ), inserted_prospect as (
+    insert into public.prospects (
+      phone_hmac,
+      phone_ciphertext,
+      phone_iv,
+      nickname,
+      school_name,
+      applicant_stage,
+      region,
+      admission_cycle_id
+    )
+    select
+      p_phone_hmac,
+      p_phone_ciphertext,
+      p_phone_iv,
+      p_nickname,
+      p_school_name,
+      p_applicant_stage,
+      p_region,
+      current_cycle.id
+    from current_cycle
+    on conflict do nothing
+    returning id
+  ), inserted_credential as (
+    insert into public.student_credentials (
+      prospect_id,
+      password_hash,
+      password_salt
+    )
+    select id, p_password_hash, p_password_salt
+    from inserted_prospect
+    returning prospect_id
+  )
+  select case
+    when exists (select 1 from inserted_credential) then 'created'
+    else 'existing'
+  end;
+$$;
+
 create function public.register_roster_student_v1(
   p_expected_cycle_id uuid,
   p_expected_cycle_year integer,
