@@ -58,14 +58,23 @@ select is((pg_temp.register_student(p_phone_hmac => decode(repeat('13', 32), 'he
 select is((pg_temp.register_student(p_phone_hmac => decode(repeat('14', 32), 'hex'), p_key_version => 6)->>'kind'), 'validation_error', 'wrong password key version is rejected');
 select is((public.register_roster_student_v1(decode(repeat('18',32),'hex'),decode(repeat('22',16),'hex'),decode(repeat('33',12),'hex'),decode(repeat('44',32),'hex'),decode(repeat('55',16),'hex'),decode(repeat('66',12),'hex'),decode(repeat('77',32),'hex'),7,decode(repeat('88',32),'hex'),decode(repeat('9e',32),'hex'),pg_catalog.clock_timestamp()+interval '13 hours','신규등록고','high3')->>'kind'), 'validation_error', 'session expiry beyond twelve hours is rejected');
 
-select is((
-  select (array_agg(pg_temp.register_student(
-    p_phone_hmac => decode(lpad(to_hex(n), 64, '0'), 'hex'),
-    p_ip_hmac => decode(lpad(to_hex(n + 1000), 64, '0'), 'hex'),
-    p_token_hash => decode('03' || lpad(to_hex(n), 62, '0'), 'hex')
-  )->>'kind' order by n))[65]
-  from generate_series(1, 65) n
-), 'rate_limited', 'global registration bucket is bounded');
+delete from public.rate_limit_buckets;
+insert into public.rate_limit_buckets(key_hash, route, window_started_at, count, expires_at)
+select
+  extensions.digest('roster-register-global', 'sha256'),
+  'roster-register-global',
+  pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600),
+  64,
+  pg_catalog.to_timestamp(pg_catalog.floor(pg_catalog.extract(epoch from pg_catalog.clock_timestamp()) / 600) * 600) + interval '10 minutes';
+select is(
+  (pg_temp.register_student(
+    p_phone_hmac => decode(repeat('19', 32), 'hex'),
+    p_ip_hmac => decode(repeat('8a', 32), 'hex'),
+    p_token_hash => decode('03' || repeat('00', 31), 'hex')
+  )->>'kind'),
+  'rate_limited',
+  'global registration bucket is shared across token hashes and bounded at 64'
+);
 
 delete from public.rate_limit_buckets;
 select is((

@@ -25,7 +25,6 @@ as $$
 declare
   v_cycle record;
   v_now timestamptz := pg_catalog.clock_timestamp();
-  v_rate_shard integer;
   v_prospect_id bigint;
 begin
   -- Protected values are produced by the Worker. The database validates only
@@ -58,9 +57,8 @@ begin
     return pg_catalog.jsonb_build_object('kind', 'validation_error');
   end if;
 
-  v_rate_shard := pg_catalog.get_byte(p_token_hash, 0) % 4;
   if not public.consume_rate_limit(
-    'roster-register-global:' || v_rate_shard, 'roster-register-global', 64, interval '10 minutes'
+    'roster-register-global', 'roster-register-global', 64, interval '10 minutes'
   ) or not public.consume_rate_limit(
     pg_catalog.encode(p_ip_hmac, 'hex'), 'roster-register-ip', 8, interval '10 minutes'
   ) or not public.consume_rate_limit(
@@ -106,6 +104,37 @@ exception
     return pg_catalog.jsonb_build_object('kind', 'existing');
   when others then
     return pg_catalog.jsonb_build_object('kind', 'validation_error');
+end;
+$$;
+
+-- Preview must use the same classifier as apply: self-registered students are
+-- neither deactivated when omitted nor unchanged when an official CSV claims
+-- their protected phone identity.
+do $$
+declare
+  v_definition text;
+begin
+  select pg_catalog.pg_get_functiondef(
+    'public.preview_applicant_roster_v1(uuid,jsonb)'::regprocedure
+  ) into v_definition;
+
+  if pg_catalog.strpos(v_definition, E'p.status = ''active'' and p.name_hmac = pg_catalog.decode(x.value->>''nameHmac'', ''hex'') and p.school_name = x.value->>''schoolName'' and p.applicant_stage = x.value->>''applicantStage''') = 0
+    or pg_catalog.strpos(v_definition, E'where p.admission_cycle_id = p_cycle_id and not p.is_test and p.status = ''active''') = 0
+  then
+    raise exception 'self-registration migration requires the expected roster preview definition';
+  end if;
+
+  v_definition := pg_catalog.replace(
+    v_definition,
+    E'p.status = ''active'' and p.name_hmac = pg_catalog.decode(x.value->>''nameHmac'', ''hex'') and p.school_name = x.value->>''schoolName'' and p.applicant_stage = x.value->>''applicantStage''',
+    E'p.status = ''active'' and not p.is_self_registered and p.name_hmac = pg_catalog.decode(x.value->>''nameHmac'', ''hex'') and p.school_name = x.value->>''schoolName'' and p.applicant_stage = x.value->>''applicantStage'''
+  );
+  v_definition := pg_catalog.replace(
+    v_definition,
+    E'where p.admission_cycle_id = p_cycle_id and not p.is_test and p.status = ''active''',
+    E'where p.admission_cycle_id = p_cycle_id and not p.is_test and not p.is_self_registered and p.status = ''active'''
+  );
+  execute v_definition;
 end;
 $$;
 

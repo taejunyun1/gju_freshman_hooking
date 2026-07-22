@@ -1,6 +1,6 @@
 begin;
 
-select plan(62);
+select plan(63);
 
 insert into auth.users(id) values ('a4000000-0000-4000-8000-000000000001');
 insert into public.admin_users(id, is_active) values ('a4000000-0000-4000-8000-000000000001', true);
@@ -80,6 +80,17 @@ insert into public.prospects(
   'roster:self-registration-preserve', decode(repeat('a7',32),'hex'), decode(repeat('a8',16),'hex'), decode(repeat('a9',12),'hex'),
   '자율등록고', 'high2', 'other', (select cycle_id from roster_fixture), decode(repeat('aa',32),'hex'), decode(repeat('ab',16),'hex'), decode(repeat('ac',12),'hex'), true
 );
+select is((public.preview_applicant_roster_v1((select cycle_id from roster_fixture),(select rows from roster_delta))->'counts'->>'inactive')::integer,0,'preview excludes an omitted self-registered student from inactive counts');
+create temporary table roster_with_identical_self_registration as select (select rows from roster_delta) || jsonb_build_array(jsonb_build_object(
+  'nameHmac',repeat('aa',32),'nameCiphertext',repeat('ab',16),'nameIv',repeat('ac',12),
+  'phoneHmac',repeat('a7',32),'phoneCiphertext',repeat('a8',16),'phoneIv',repeat('a9',12),
+  'schoolName','자율등록고','applicantStage','high2','passwordDigest',repeat('ae',32),'passwordGeneration',1
+)) rows;
+select is((
+  select preview_row->>'action'
+  from jsonb_array_elements(public.preview_applicant_roster_v1((select cycle_id from roster_fixture),(select rows from roster_with_identical_self_registration))->'rows') preview_row
+  where preview_row->>'phoneHmac'=repeat('a7',32)
+),'update','preview treats an otherwise identical self-registered CSV row as an update');
 select is((public.apply_applicant_roster_v1((select cycle_id from roster_fixture),2,(select admin_id from roster_fixture),decode(repeat('ad',32),'hex'),'a4000000-0000-4000-8000-000000000024',(select rows from roster_delta))->>'kind'),'success','CSV apply succeeds while self-registered student is absent');
 select ok((select status='active' and is_self_registered from public.prospects where phone_hmac=decode(repeat('a7',32),'hex')),'absent self-registered student remains active');
 create temporary table roster_with_official_self_registration as select (select rows from roster_delta) || jsonb_build_array(jsonb_build_object(
