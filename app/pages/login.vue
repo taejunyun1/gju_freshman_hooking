@@ -153,6 +153,12 @@ const submitLogin = async (): Promise<void> => {
           >
             초기 PIN을 잊으셨나요?
           </NuxtLink>
+          <NuxtLink
+            class="login-form__register"
+            to="/register"
+          >
+            처음 방문인가요? 간단 등록하기
+          </NuxtLink>
           </fieldset>
         </form>
       </div>
@@ -311,12 +317,15 @@ const submitLogin = async (): Promise<void> => {
   cursor: pointer;
 }
 
-.login-form__reset {
+.login-form__reset,
+.login-form__register {
   justify-self: start;
   color: var(--color-primary-strong);
   font-size: 0.8125rem;
   text-underline-offset: 0.2em;
 }
+
+.login-form__register { color: var(--color-muted); }
 
 .login-form__submit:disabled { cursor: wait; opacity: 0.66; }
 

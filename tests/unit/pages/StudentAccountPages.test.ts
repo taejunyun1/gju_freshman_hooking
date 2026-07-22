@@ -27,6 +27,76 @@ const dispatchPaste = (input: HTMLInputElement, text: string): Event => {
 }
 
 describe('student account pages', () => {
+  it('links from login to the simple student registration form', async () => {
+    const { default: LoginPage } = await import('../../../app/pages/login.vue')
+    const wrapper = mount(LoginPage, { global: { stubs: { NuxtLink: true } } })
+
+    expect(wrapper.find('nuxt-link-stub[to="/register"]').exists()).toBe(true)
+  })
+
+  it('registers four familiar student details, formats the phone, and starts assessment without exposing a PIN', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      data: { kind: 'created', expiresAt: '2026-07-22T12:00:00.000Z' },
+      requestId: 'request-id',
+    })
+    const navigateTo = vi.fn()
+    vi.stubGlobal('$fetch', fetch)
+    vi.stubGlobal('navigateTo', navigateTo)
+    const { default: RegisterPage } = await import('../../../app/pages/register.vue')
+    const wrapper = mount(RegisterPage, { global: { stubs: { NuxtLink: true } } })
+
+    expect(wrapper.text()).toContain('PIN은 자동 생성되며, 다음 로그인부터 사용합니다.')
+    expect(wrapper.find('input[name="name"]').attributes('required')).toBeDefined()
+    expect(wrapper.find('input[name="phone"]').attributes('required')).toBeDefined()
+    expect(wrapper.find('input[name="highSchool"]').attributes('required')).toBeDefined()
+    expect(wrapper.find('input[name="grade"]').attributes('required')).toBeDefined()
+    expect(wrapper.find('input[name="phone"]').attributes('type')).toBe('tel')
+    expect(wrapper.find('input[name="phone"]').attributes('inputmode')).toBe('numeric')
+
+    await wrapper.find('input[name="name"]').setValue('김 사진')
+    await wrapper.find('input[name="phone"]').setValue('010-12가34 5678')
+    await wrapper.find('input[name="highSchool"]').setValue('빛고을고등학교')
+    await wrapper.find('input[name="grade"]').setValue('고등학교 3학년')
+    expect(wrapper.find<HTMLInputElement>('input[name="phone"]').element.value).toBe('010-1234-5678')
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(fetch).toHaveBeenCalledWith('/api/student/register', {
+      body: {
+        name: '김 사진',
+        phone: '01012345678',
+        highSchool: '빛고을고등학교',
+        grade: '고등학교 3학년',
+      },
+      method: 'POST',
+    })
+    expect(navigateTo).toHaveBeenCalledWith('/assessment', { replace: true })
+    expect(wrapper.text()).not.toMatch(/(?:초기\s*)?PIN\s*(?:값|번호|:|은)\s*\d/iu)
+
+    const registerHtml = await renderAccountPage(RegisterPage)
+    expect(registerHtml).not.toMatch(/(?:초기\s*)?PIN\s*(?:값|번호|:|은)\s*\d/iu)
+  })
+
+  it('offers login when the phone number is already registered', async () => {
+    vi.stubGlobal('$fetch', vi.fn().mockResolvedValue({
+      data: { kind: 'existing' },
+      requestId: 'request-id',
+    }))
+    const { default: RegisterPage } = await import('../../../app/pages/register.vue')
+    const wrapper = mount(RegisterPage, { global: { stubs: { NuxtLink: true } } })
+
+    await wrapper.find('input[name="name"]').setValue('김 사진')
+    await wrapper.find('input[name="phone"]').setValue('01012345678')
+    await wrapper.find('input[name="highSchool"]').setValue('빛고을고등학교')
+    await wrapper.find('input[name="grade"]').setValue('고등학교 3학년')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('이미 등록된 번호입니다. 로그인으로 이동해 주세요.')
+    expect(wrapper.find('nuxt-link-stub[to="/login"]').exists()).toBe(true)
+  })
+
   it('uses numeric PIN guidance without exposing backend authentication details', async () => {
     const fetch = vi.fn().mockRejectedValue(new Error('unexpected backend detail'))
     vi.stubGlobal('$fetch', fetch)
