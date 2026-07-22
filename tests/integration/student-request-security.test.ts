@@ -48,6 +48,25 @@ describe('student browser mutation security', () => {
     })).resolves.toBeUndefined()
   })
 
+  it('allows same-origin registration without requiring a pre-existing session CSRF token', async () => {
+    const { createStudentRequestSecurityMiddleware } = await import('../../server/middleware/20-student-request-security')
+    const middleware = createStudentRequestSecurityMiddleware({
+      getCsrf: event => (event as TestEvent).csrf,
+      getMethod: event => (event as TestEvent).method,
+      getOrigin: event => (event as TestEvent).origin,
+      getPath: event => (event as TestEvent).path,
+      getRequestOrigin: event => (event as TestEvent).requestOrigin,
+      getSessionToken: event => (event as TestEvent).sessionToken,
+    })
+
+    await expect(middleware({
+      method: 'POST',
+      origin: 'https://photo-next.example',
+      path: '/api/student/register',
+      requestOrigin: 'https://photo-next.example',
+    })).resolves.toBeUndefined()
+  })
+
   it.each([undefined, 'https://cross-origin.example'])(
     'rejects missing or cross-origin browser mutations before route handling: %s',
     async (origin) => {

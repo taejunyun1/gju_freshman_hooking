@@ -527,10 +527,10 @@ describe('deployment and E2E safety contracts', () => {
     expect(playwrightConfig).toMatch(/env:\s*localRuntimeEnvironment\(\)/u)
   })
 
-  it('keeps public registration removed from the application API and E2E support', () => {
+  it('keeps self-registration out of E2E support so tests cannot bypass its public API contract', () => {
     const studentSupport = readFileSync('tests/e2e/support/student.ts', 'utf8')
 
-    expect(existsSync('server/api/student/register.post.ts')).toBe(false)
+    expect(existsSync('server/api/student/register.post.ts')).toBe(true)
     expect(existsSync('tests/e2e/support/local-registration-rate-limit.ts')).toBe(false)
     expect(studentSupport).not.toContain('/api/student/register')
     expect(studentSupport).not.toContain('clearLocalRegistrationRateLimitBuckets')
