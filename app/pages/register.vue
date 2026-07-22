@@ -164,15 +164,20 @@ const submitRegistration = async (): Promise<void> => {
             </div>
             <div class="register-form__field">
               <label for="register-grade">학년</label>
-              <input
+              <select
                 id="register-grade"
                 v-model="form.grade"
                 name="grade"
-                autocomplete="off"
-                maxlength="20"
-                placeholder="예: 고등학교 3학년"
                 required
               >
+                <option disabled value="">학년 선택</option>
+                <option value="high1">고1</option>
+                <option value="high2">고2</option>
+                <option value="high3">고3</option>
+                <option value="graduate">고교 졸업</option>
+                <option value="ged">검정고시</option>
+                <option value="other">기타</option>
+              </select>
             </div>
             <p class="register-form__notice">PIN은 자동 생성되며, 다음 로그인부터 사용합니다.</p>
             <p
@@ -322,7 +327,8 @@ const submitRegistration = async (): Promise<void> => {
   font-weight: 700;
 }
 
-.register-form input {
+.register-form input,
+.register-form select {
   min-height: 3.25rem;
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
@@ -333,6 +339,7 @@ const submitRegistration = async (): Promise<void> => {
 }
 
 .register-form input:focus-visible,
+.register-form select:focus-visible,
 .register-form__submit:focus-visible,
 .register-page__brand:focus-visible,
 .register-form__existing a:focus-visible {

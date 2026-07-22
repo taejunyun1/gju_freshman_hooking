@@ -49,14 +49,26 @@ describe('student account pages', () => {
     expect(wrapper.find('input[name="name"]').attributes('required')).toBeDefined()
     expect(wrapper.find('input[name="phone"]').attributes('required')).toBeDefined()
     expect(wrapper.find('input[name="highSchool"]').attributes('required')).toBeDefined()
-    expect(wrapper.find('input[name="grade"]').attributes('required')).toBeDefined()
+    const grade = wrapper.get<HTMLSelectElement>('select[name="grade"]')
+    expect(grade.attributes('required')).toBeDefined()
+    const gradeOptions = grade.findAll('option')
+      .filter(option => option.attributes('value'))
+      .map(option => ({ value: option.attributes('value'), label: option.text() }))
+    expect(gradeOptions).toEqual([
+      { value: 'high1', label: '고1' },
+      { value: 'high2', label: '고2' },
+      { value: 'high3', label: '고3' },
+      { value: 'graduate', label: '고교 졸업' },
+      { value: 'ged', label: '검정고시' },
+      { value: 'other', label: '기타' },
+    ])
     expect(wrapper.find('input[name="phone"]').attributes('type')).toBe('tel')
     expect(wrapper.find('input[name="phone"]').attributes('inputmode')).toBe('numeric')
 
     await wrapper.find('input[name="name"]').setValue('김 사진')
     await wrapper.find('input[name="phone"]').setValue('010-12가34 5678')
     await wrapper.find('input[name="highSchool"]').setValue('빛고을고등학교')
-    await wrapper.find('input[name="grade"]').setValue('고등학교 3학년')
+    await grade.setValue('high3')
     expect(wrapper.find<HTMLInputElement>('input[name="phone"]').element.value).toBe('010-1234-5678')
 
     await wrapper.find('form').trigger('submit')
@@ -67,7 +79,7 @@ describe('student account pages', () => {
         name: '김 사진',
         phone: '01012345678',
         highSchool: '빛고을고등학교',
-        grade: '고등학교 3학년',
+        grade: 'high3',
       },
       method: 'POST',
     })
@@ -89,7 +101,7 @@ describe('student account pages', () => {
     await wrapper.find('input[name="name"]').setValue('김 사진')
     await wrapper.find('input[name="phone"]').setValue('01012345678')
     await wrapper.find('input[name="highSchool"]').setValue('빛고을고등학교')
-    await wrapper.find('input[name="grade"]').setValue('고등학교 3학년')
+    await wrapper.find('select[name="grade"]').setValue('high3')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
