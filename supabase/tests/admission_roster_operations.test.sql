@@ -1,6 +1,6 @@
 begin;
 
-select plan(57);
+select plan(62);
 
 insert into auth.users(id) values ('a4000000-0000-4000-8000-000000000001');
 insert into public.admin_users(id, is_active) values ('a4000000-0000-4000-8000-000000000001', true);
@@ -71,6 +71,25 @@ select is((select result->'counts'->>'unchanged' from delta_apply)::integer,1,'a
 select is((select result->'counts'->>'update' from delta_apply)::integer,1,'apply counts changed active rows as updates');
 select is((select result->'counts'->>'inactive' from delta_apply)::integer,1,'apply counts absent active non-test rows as inactive');
 
+-- A self-registration survives a CSV omission, then becomes ordinary roster data
+-- as soon as the official CSV includes its phone number.
+insert into public.prospects(
+  nickname, phone_hmac, phone_ciphertext, phone_iv, school_name, applicant_stage,
+  region, admission_cycle_id, name_hmac, name_ciphertext, name_iv, is_self_registered
+) values (
+  'roster:self-registration-preserve', decode(repeat('a7',32),'hex'), decode(repeat('a8',16),'hex'), decode(repeat('a9',12),'hex'),
+  '자율등록고', 'high2', 'other', (select cycle_id from roster_fixture), decode(repeat('aa',32),'hex'), decode(repeat('ab',16),'hex'), decode(repeat('ac',12),'hex'), true
+);
+select is((public.apply_applicant_roster_v1((select cycle_id from roster_fixture),2,(select admin_id from roster_fixture),decode(repeat('ad',32),'hex'),'a4000000-0000-4000-8000-000000000024',(select rows from roster_delta))->>'kind'),'success','CSV apply succeeds while self-registered student is absent');
+select ok((select status='active' and is_self_registered from public.prospects where phone_hmac=decode(repeat('a7',32),'hex')),'absent self-registered student remains active');
+create temporary table roster_with_official_self_registration as select (select rows from roster_delta) || jsonb_build_array(jsonb_build_object(
+  'nameHmac',repeat('b7',32),'nameCiphertext',repeat('b8',16),'nameIv',repeat('b9',12),
+  'phoneHmac',repeat('a7',32),'phoneCiphertext',repeat('ba',16),'phoneIv',repeat('bb',12),
+  'schoolName','공식명단고','applicantStage','high3','passwordDigest',repeat('bc',32),'passwordGeneration',1
+)) rows;
+select is((public.apply_applicant_roster_v1((select cycle_id from roster_fixture),3,(select admin_id from roster_fixture),decode(repeat('bd',32),'hex'),'a4000000-0000-4000-8000-000000000025',(select rows from roster_with_official_self_registration))->>'kind'),'success','CSV apply matches a self-registered student by phone');
+select ok((select status='active' and not is_self_registered and school_name='공식명단고' and applicant_stage='high3' from public.prospects where phone_hmac=decode(repeat('a7',32),'hex')),'matching CSV row converts the student to regular roster behavior');
+
 -- Both generation CAS paths reject a non-increasing or stale request without side effects.
 insert into public.student_sessions(prospect_id,token_hash,expires_at,idle_expires_at)
 select id,decode(repeat('a1',32),'hex'),now()+interval '1 hour',now()+interval '1 hour' from public.prospects where phone_hmac=decode(repeat('24',32),'hex');
@@ -131,11 +150,11 @@ select is((public.apply_applicant_roster_v1(
 select is((select count(*) from (values
   ('public'::name),('anon'::name),('authenticated'::name)
 ) roles(role) cross join (values
-  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)')
+  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
 ) functions(signature) where has_function_privilege(roles.role, ('public.' || functions.signature)::regprocedure, 'execute')),0::bigint,'public anon and authenticated cannot execute roster mutations');
 select is((select count(*) from (values
-  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)')
-) functions(signature) where has_function_privilege('service_role', ('public.' || functions.signature)::regprocedure, 'execute')),12::bigint,'service_role can execute every roster RPC');
+  ('start_admission_cycle_v1(uuid,integer,integer,uuid,jsonb)'::text),('list_admission_cycles_v1()'),('preview_applicant_roster_v1(uuid,jsonb)'),('apply_applicant_roster_v1(uuid,integer,uuid,bytea,uuid,jsonb)'),('list_roster_students_v1(uuid,text,boolean)'),('read_roster_student_v1(bigint)'),('read_current_roster_credentials_v1()'),('add_roster_student_v1(uuid,uuid,jsonb)'),('update_roster_student_profile_v1(bigint,bytea,bytea,bytea,text,text)'),('change_roster_student_phone_v1(bigint,integer,integer,bytea,bytea,bytea,bytea)'),('set_roster_student_status_v1(bigint,text)'),('reissue_roster_student_password_v1(bigint,integer,integer,bytea)'),('register_roster_student_v1(bytea,bytea,bytea,bytea,bytea,bytea,bytea,integer,bytea,bytea,timestamptz,text,text)')
+) functions(signature) where has_function_privilege('service_role', ('public.' || functions.signature)::regprocedure, 'execute')),13::bigint,'service_role can execute every roster RPC');
 
 select * from finish();
 rollback;
