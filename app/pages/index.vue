@@ -3,6 +3,36 @@ import { onMounted } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import DepartmentPhotoRotator from '../components/common/DepartmentPhotoRotator.vue'
 import { landingDepartmentPhotos } from '../../shared/content/department-photos'
+import {
+  LANDING_DISCOVERY_COPY,
+  PUBLIC_DEPARTMENT_JSON_LD,
+  PUBLIC_SEO,
+  PUBLIC_SITE_URL,
+  PUBLIC_WEB_SITE_JSON_LD,
+} from '../../shared/content/public-seo'
+
+useServerSeoMeta({
+  title: PUBLIC_SEO.title,
+  description: PUBLIC_SEO.description,
+  robots: 'index, follow',
+  ogType: 'website',
+  ogTitle: PUBLIC_SEO.title,
+  ogDescription: PUBLIC_SEO.description,
+  ogUrl: PUBLIC_SITE_URL,
+  ogImage: PUBLIC_SEO.image,
+  twitterCard: 'summary_large_image',
+  twitterTitle: PUBLIC_SEO.title,
+  twitterDescription: PUBLIC_SEO.description,
+  twitterImage: PUBLIC_SEO.image,
+})
+
+useServerHead({
+  link: [{ rel: 'canonical', href: PUBLIC_SITE_URL }],
+  script: [
+    { type: 'application/ld+json', innerHTML: JSON.stringify(PUBLIC_WEB_SITE_JSON_LD) },
+    { type: 'application/ld+json', innerHTML: JSON.stringify(PUBLIC_DEPARTMENT_JSON_LD) },
+  ],
+})
 
 onMounted(() => {
   void $fetch('/api/events', {
@@ -105,6 +135,14 @@ onMounted(() => {
           </aside>
         </div>
       </section>
+
+      <section
+        class="seo-discovery"
+        data-seo-discovery
+      >
+        <h2>{{ LANDING_DISCOVERY_COPY.title }}</h2>
+        <p>{{ LANDING_DISCOVERY_COPY.body }}</p>
+      </section>
     </main>
 
     <footer class="landing__footer">
@@ -123,6 +161,7 @@ onMounted(() => {
 .landing__masthead,
 .landing__hero,
 .sequence,
+.seo-discovery,
 .landing__footer {
   width: min(100% - 2.5rem, var(--timeline));
   margin-inline: auto;
@@ -388,6 +427,30 @@ onMounted(() => {
   word-break: keep-all;
 }
 
+.seo-discovery {
+  max-width: var(--content);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
+  padding-block: clamp(3.5rem, 8vw, 5rem);
+}
+
+.seo-discovery h2 {
+  max-width: 25ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 3vw, 1.625rem);
+  letter-spacing: -0.045em;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+
+.seo-discovery p {
+  max-width: 44rem;
+  margin: 1rem 0 0;
+  color: var(--color-muted);
+  line-height: 1.75;
+  word-break: keep-all;
+}
+
 .landing__footer {
   min-height: 5rem;
   display: flex;
@@ -408,6 +471,7 @@ onMounted(() => {
   .landing__masthead,
   .landing__hero,
   .sequence,
+  .seo-discovery,
   .landing__footer {
     width: min(100% - 5rem, var(--timeline));
   }

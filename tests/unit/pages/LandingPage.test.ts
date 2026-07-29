@@ -11,6 +11,8 @@ const NuxtLinkStub = {
 describe('landing page', () => {
   beforeEach(() => {
     vi.stubGlobal('$fetch', vi.fn().mockResolvedValue(undefined))
+    vi.stubGlobal('useServerSeoMeta', vi.fn())
+    vi.stubGlobal('useServerHead', vi.fn())
   })
 
   it('explains the four-stage connection in order', () => {
@@ -39,6 +41,19 @@ describe('landing page', () => {
     expect(startLinks).toHaveLength(1)
     expect(startLinks[0].text()).toBe('나의 연결 경로 찾기')
     expect(startLinks[0].classes()).toContain('landing__cta')
+  })
+
+  it('adds the approved high-school discovery copy without another CTA', () => {
+    const wrapper = mount(LandingPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+
+    const discovery = wrapper.get('[data-seo-discovery]')
+
+    expect(discovery.get('h2').text()).toBe('사진영상학과에서 무엇을 배우는지, 관심사부터 확인해보세요.')
+    expect(discovery.text()).toContain('영상촬영·편집')
+    expect(discovery.text()).toContain('광주·전남·전북')
+    expect(wrapper.findAll('a[href="/login"]')).toHaveLength(1)
   })
 
   it('shows one eager-loading rotating event photo below the primary CTA', () => {

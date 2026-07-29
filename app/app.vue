@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { DOCUMENT_BRAND } from '#shared/constants/department-brand'
+import { PUBLIC_SEO } from '#shared/content/public-seo'
 
 useHead({
-  title: DOCUMENT_BRAND,
+  title: PUBLIC_SEO.title,
   meta: [{
     name: 'description',
-    content: '광주대학교 사진영상미디어학과에서 관심사를 교과과정, 프로젝트, 교수진과 진로로 연결해 보는 PHOTO:NEXT입니다.',
+    content: PUBLIC_SEO.description,
   }],
 })
 </script>
