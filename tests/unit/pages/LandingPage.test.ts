@@ -56,6 +56,21 @@ describe('landing page', () => {
     expect(wrapper.findAll('a[href="/login"]')).toHaveLength(1)
   })
 
+  it('shows a compact four-track curriculum explorer before the discovery copy', () => {
+    const wrapper = mount(LandingPage, {
+      global: { stubs: { NuxtLink: NuxtLinkStub } },
+    })
+
+    const explorer = wrapper.get('[data-curriculum-route-explorer]')
+    const sequence = wrapper.get('.sequence')
+    const discovery = wrapper.get('[data-seo-discovery]')
+
+    expect(explorer.attributes('data-variant')).toBe('compact')
+    expect(explorer.findAll('[data-curriculum-track]')).toHaveLength(4)
+    expect(sequence.element.compareDocumentPosition(explorer.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(discovery.element.compareDocumentPosition(explorer.element) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  })
+
   it('shows one eager-loading rotating event photo below the primary CTA', () => {
     const wrapper = mount(LandingPage, {
       global: { stubs: { NuxtLink: NuxtLinkStub } },

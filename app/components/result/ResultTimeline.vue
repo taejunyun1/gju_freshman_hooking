@@ -4,6 +4,7 @@ import { DEPARTMENT_NAME } from '../../../shared/constants/department-brand'
 import { trackLabels } from '../../../shared/types/domain'
 import type { ResultSnapshot } from '../../../shared/types/result'
 import CounselingCTA from '../counseling/CounselingCTA.vue'
+import CurriculumRouteExplorer from '../curriculum/CurriculumRouteExplorer.vue'
 import CapabilityEvidence from './CapabilityEvidence.vue'
 import CareerRecommendations from './CareerRecommendations.vue'
 import CareerNarrative from './CareerNarrative.vue'
@@ -92,6 +93,16 @@ const hasOutcomes = computed(() => (
           :extracurricular="[]"
         />
       </slot>
+    </section>
+
+    <section
+      class="result-timeline__section result-timeline__section--wide"
+      data-result-section="curriculum-route"
+    >
+      <CurriculumRouteExplorer
+        :default-track="snapshot.rankedTracks[0]"
+        variant="detailed"
+      />
     </section>
 
     <section

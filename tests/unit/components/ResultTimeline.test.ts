@@ -64,6 +64,7 @@ describe('result master sequence', () => {
       'interests',
       'scores',
       'learning-path',
+      'curriculum-route',
       'faculty',
       'counseling-mid',
       'career-narrative',
@@ -72,6 +73,15 @@ describe('result master sequence', () => {
       'counseling',
     ])
     expect(wrapper.get('h1').text()).toBe('선택한 관심사는 4년 동안 이렇게 이어집니다')
+  })
+
+  it('shows the detailed curriculum explorer for the highest-ranked track', async () => {
+    const snapshot = makeResultSnapshot()
+    const wrapper = await mountTimeline(snapshot)
+    const explorer = wrapper.get('[data-result-section="curriculum-route"] [data-curriculum-route-explorer]')
+
+    expect(explorer.attributes('data-variant')).toBe('detailed')
+    expect(explorer.attributes('data-active-track')).toBe(snapshot.rankedTracks[0])
   })
 
   it('introduces the result with the official department name before the track summary', async () => {

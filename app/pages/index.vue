@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { DEPARTMENT_SERVICE_BRAND, HOME_ARIA_LABEL } from '../../shared/constants/department-brand'
 import DepartmentPhotoRotator from '../components/common/DepartmentPhotoRotator.vue'
+import CurriculumRouteExplorer from '../components/curriculum/CurriculumRouteExplorer.vue'
 import { landingDepartmentPhotos } from '../../shared/content/department-photos'
 import {
   LANDING_DISCOVERY_COPY,
@@ -136,6 +137,10 @@ onMounted(() => {
         </div>
       </section>
 
+      <section class="landing__curriculum">
+        <CurriculumRouteExplorer variant="compact" />
+      </section>
+
       <section
         class="seo-discovery"
         data-seo-discovery
@@ -161,6 +166,7 @@ onMounted(() => {
 .landing__masthead,
 .landing__hero,
 .sequence,
+.landing__curriculum,
 .seo-discovery,
 .landing__footer {
   width: min(100% - 2.5rem, var(--timeline));
