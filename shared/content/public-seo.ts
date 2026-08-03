@@ -17,6 +17,7 @@ export const PRIVATE_CRAWLER_PATHS = Object.freeze([
 
 export const PUBLIC_NOINDEX_PATHS = Object.freeze([
   '/curriculum-routes.html',
+  '/curriculum-routes',
 ])
 
 export const PUBLIC_SEO = Object.freeze({

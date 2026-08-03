@@ -27,6 +27,7 @@ describe('public crawler routes', () => {
     expect(robots).toContain('Disallow: /admin/')
     expect(robots).toContain('Disallow: /api/')
     expect(robots).toContain('Disallow: /curriculum-routes.html')
+    expect(robots).toContain('Disallow: /curriculum-routes')
     expect(sitemapEvent.headers['content-type']).toBe('application/xml; charset=utf-8')
     expect(sitemap).toContain('<loc>https://photo-next-mvp.taejunyun.workers.dev/</loc>')
     expect(sitemap).not.toContain('<lastmod>')
@@ -48,6 +49,8 @@ describe('public crawler routes', () => {
 
     expect(PRIVATE_CRAWLER_PATHS).not.toContain('/curriculum-routes.html')
     expect(PUBLIC_NOINDEX_PATHS).toContain('/curriculum-routes.html')
+    expect(PUBLIC_NOINDEX_PATHS).toContain('/curriculum-routes')
     expect(routeRules['/curriculum-routes.html'].headers['X-Robots-Tag']).toBe('noindex, nofollow, noarchive')
+    expect(routeRules['/curriculum-routes'].headers['X-Robots-Tag']).toBe('noindex, nofollow, noarchive')
   })
 })
