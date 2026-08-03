@@ -55,11 +55,25 @@ const createRoute = (
   seniorItems: readonly string[],
   seniorOutcome: string,
   seniorKind: CurriculumStage['kind'] = 'course',
+  secondYear?: Readonly<{
+    phase: string
+    items: readonly string[]
+    outcome: string
+  }>,
 ): CurriculumRoute => Object.freeze({
   label,
   summary,
   stages: Object.freeze([
-    ...commonStages,
+    commonStages[0],
+    secondYear
+      ? Object.freeze({
+          year: 2,
+          phase: secondYear.phase,
+          kind: 'course' as const,
+          items: Object.freeze([...secondYear.items]),
+          outcome: secondYear.outcome,
+        })
+      : commonStages[1],
     Object.freeze({
       year: 3,
       phase: '전공심화·프로젝트',
@@ -87,9 +101,19 @@ export const curriculumRoutes: Readonly<Record<CurriculumTrackKey, CurriculumRou
       '영상 콘텐츠 크리에이터 워크숍',
     ],
     '인터뷰·드론·크리에이터 작업으로 영상 제작 언어를 확장합니다.',
-    ['영상·AI 통합 포트폴리오', '졸업전시·캡스톤 제작'],
-    '개별 교과목이 아닌 통합 제작 단계로, 나만의 영상·AI 작업을 완성합니다.',
-    'outcome',
+    ['예술사진 워크숍', '예술사진 랩'],
+    '예술사진의 제작·비평 과정을 거쳐 영상·AI 작업을 포트폴리오로 확장합니다.',
+    'course',
+    {
+      phase: '영상제작·편집 확장',
+      items: [
+        '내러티브 영상촬영',
+        '비주얼 스토리 메이킹',
+        '영상 컬러와 포스트 프로덕션',
+        '영상드론기초',
+      ],
+      outcome: '촬영한 장면을 편집·색보정하고, 영상 제작의 흐름을 확장합니다.',
+    },
   ),
   art_photo: createRoute(
     '예술사진',

@@ -13,8 +13,21 @@ describe('four-year curriculum routes', () => {
     expect(curriculumRoutes.commercial.stages[3]!.items).toContain('커머셜 포토그라피 랩')
   })
 
-  it('uses a non-course video fourth-year outcome and a safe fallback', () => {
-    expect(curriculumRoutes.video.stages[3]!.kind).toBe('outcome')
+  it('keeps the video route editing courses in year two', () => {
+    expect(curriculumRoutes.video.stages[1]!.items).toEqual([
+      '내러티브 영상촬영',
+      '비주얼 스토리 메이킹',
+      '영상 컬러와 포스트 프로덕션',
+      '영상드론기초',
+    ])
+  })
+
+  it('uses the art photography workshop and lab in video year four and keeps a safe fallback', () => {
+    expect(curriculumRoutes.video.stages[3]!.kind).toBe('course')
+    expect(curriculumRoutes.video.stages[3]!.items).toEqual([
+      '예술사진 워크숍',
+      '예술사진 랩',
+    ])
     expect(resolveCurriculumTrack('unknown')).toBe('video')
   })
 })
