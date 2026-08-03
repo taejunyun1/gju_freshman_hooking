@@ -3,9 +3,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "nuxt build",
+    "build": "pnpm generate:curriculum-routes && nuxt build",
     "deploy:preview": "node scripts/verify-env.mjs && node scripts/deploy-preview.mjs",
     "dev": "nuxt dev",
+    "generate:curriculum-routes": "tsx scripts/generate-curriculum-routes-html.ts",
     "lint": "eslint .",
     "postinstall": "nuxt prepare",
     "test": "vitest run --project unit --project integration",
