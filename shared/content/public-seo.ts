@@ -15,6 +15,10 @@ export const PRIVATE_CRAWLER_PATHS = Object.freeze([
   '/api/',
 ])
 
+export const PUBLIC_NOINDEX_PATHS = Object.freeze([
+  '/curriculum-routes.html',
+])
+
 export const PUBLIC_SEO = Object.freeze({
   title: '광주대학교 사진영상미디어학과 | 사진·영상·편집 진로·입시 안내',
   description: '광주·전남·전북 고등학생을 위한 광주대학교 사진영상미디어학과 안내. 사진, 영상촬영·편집, 광고사진, AI·드론 관심사를 교과과정·프로젝트·교수진·진로와 연결해 봅니다.',

@@ -1,10 +1,17 @@
-import { PRIVATE_CRAWLER_PATHS } from './shared/content/public-seo'
+import { PRIVATE_CRAWLER_PATHS, PUBLIC_NOINDEX_PATHS } from './shared/content/public-seo'
 
 const PRIVATE_ROBOTS_HEADER = 'noindex, nofollow, noarchive'
 
 const privateRouteRules = Object.fromEntries(
   PRIVATE_CRAWLER_PATHS.map(path => [
     `${path.endsWith('/') ? path.slice(0, -1) : path}/**`,
+    { headers: { 'X-Robots-Tag': PRIVATE_ROBOTS_HEADER } },
+  ]),
+)
+
+const publicNoindexRouteRules = Object.fromEntries(
+  PUBLIC_NOINDEX_PATHS.map(path => [
+    path,
     { headers: { 'X-Robots-Tag': PRIVATE_ROBOTS_HEADER } },
   ]),
 )
@@ -28,7 +35,7 @@ export default defineNuxtConfig({
     },
   },
   nitro: { preset: 'cloudflare-module' },
-  routeRules: privateRouteRules,
+  routeRules: { ...privateRouteRules, ...publicNoindexRouteRules },
   typescript: { strict: true, typeCheck: true },
   hooks: {
     'vite:extendConfig': async (config) => {

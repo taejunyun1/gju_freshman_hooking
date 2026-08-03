@@ -60,7 +60,29 @@ const selectTrack = (track: CurriculumTrackKey) => {
       </button>
     </div>
 
-    <div class="curriculum-route-explorer__timeline">
+    <div
+      v-if="variant === 'compact'"
+      class="curriculum-route-explorer__compact-summary"
+      data-curriculum-compact-summary
+      aria-label="1학년부터 4학년까지의 요약 경로"
+    >
+      <ol>
+        <li
+          v-for="stage in route.stages"
+          :key="stage.year"
+          :data-curriculum-compact-stage="stage.year"
+        >
+          <p>{{ stage.year }}Y</p>
+          <strong>{{ stage.phase }}</strong>
+          <span>{{ stage.items[0] }}</span>
+        </li>
+      </ol>
+    </div>
+
+    <div
+      v-else
+      class="curriculum-route-explorer__timeline"
+    >
       <article
         v-for="stage in route.stages"
         :key="stage.year"
@@ -173,6 +195,58 @@ const selectTrack = (track: CurriculumTrackKey) => {
   margin-top: 1rem;
 }
 
+.curriculum-route-explorer__compact-summary {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.curriculum-route-explorer__compact-summary ol {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+  gap: 0;
+  min-inline-size: 40rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.curriculum-route-explorer__compact-summary li {
+  position: relative;
+  display: grid;
+  gap: 0.3rem;
+  min-block-size: 7.75rem;
+  padding: 0.75rem;
+  border-block: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-inline-start: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  background: var(--color-canvas);
+}
+
+.curriculum-route-explorer__compact-summary li:last-child {
+  border-inline-end: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.curriculum-route-explorer__compact-summary p {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.065em;
+}
+
+.curriculum-route-explorer__compact-summary strong {
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.curriculum-route-explorer__compact-summary span {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
 .curriculum-route-explorer__stage {
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
   border-radius: var(--radius-card);
@@ -209,13 +283,8 @@ const selectTrack = (track: CurriculumTrackKey) => {
   word-break: keep-all;
 }
 
-.curriculum-route-explorer--compact .curriculum-route-explorer__heading span,
-.curriculum-route-explorer--compact .curriculum-route-explorer__outcome {
+.curriculum-route-explorer--compact .curriculum-route-explorer__heading span {
   font-size: 0.8125rem;
-}
-
-.curriculum-route-explorer--compact .curriculum-route-explorer__stage {
-  padding: 0.875rem;
 }
 
 @media (min-width: 1024px) {

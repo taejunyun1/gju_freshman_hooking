@@ -26,13 +26,14 @@ describe('public crawler routes', () => {
     expect(robots).toContain('Sitemap: https://photo-next-mvp.taejunyun.workers.dev/sitemap.xml')
     expect(robots).toContain('Disallow: /admin/')
     expect(robots).toContain('Disallow: /api/')
+    expect(robots).toContain('Disallow: /curriculum-routes.html')
     expect(sitemapEvent.headers['content-type']).toBe('application/xml; charset=utf-8')
     expect(sitemap).toContain('<loc>https://photo-next-mvp.taejunyun.workers.dev/</loc>')
     expect(sitemap).not.toContain('<lastmod>')
   })
 
-  it('adds noindex headers to every private path rule while preserving the root', async () => {
-    const [{ default: nuxtConfig }, { PRIVATE_CRAWLER_PATHS }] = await Promise.all([
+  it('adds noindex headers to private routes and the public standalone download while preserving the root', async () => {
+    const [{ default: nuxtConfig }, { PRIVATE_CRAWLER_PATHS, PUBLIC_NOINDEX_PATHS }] = await Promise.all([
       import('../../nuxt.config'),
       import('../../shared/content/public-seo'),
     ])
@@ -44,5 +45,9 @@ describe('public crawler routes', () => {
 
       expect(rule.headers['X-Robots-Tag']).toBe('noindex, nofollow, noarchive')
     }
+
+    expect(PRIVATE_CRAWLER_PATHS).not.toContain('/curriculum-routes.html')
+    expect(PUBLIC_NOINDEX_PATHS).toContain('/curriculum-routes.html')
+    expect(routeRules['/curriculum-routes.html'].headers['X-Robots-Tag']).toBe('noindex, nofollow, noarchive')
   })
 })

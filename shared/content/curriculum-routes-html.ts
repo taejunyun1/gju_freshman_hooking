@@ -11,6 +11,10 @@ const escapeHtml = (value: string): string => value
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;')
 
+const standaloneExternalResourcePattern = /<(?:link|script|img)\b[^>]*\b(?:href|src)\s*=/iu
+
+export const hasStandaloneExternalResource = (html: string): boolean => standaloneExternalResourcePattern.test(html)
+
 const renderStage = (
   stage: CurriculumRoute['stages'][number],
 ): string => {
@@ -66,7 +70,7 @@ export const renderCurriculumRoutesHtml = (): string => {
     return `<button type="button" data-track-button="${key}" aria-pressed="${index === 0 ? 'true' : 'false'}">${escapeHtml(label)}<span>${index === 0 ? '선택됨' : '경로 보기'}</span></button>`
   }).join('')
 
-  return `<!doctype html>
+  const document = `<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
@@ -133,4 +137,11 @@ export const renderCurriculumRoutesHtml = (): string => {
 </body>
 </html>
 `
+  const normalizedDocument = document.replace(/[ \t]+$/gmu, '').trim()
+
+  if (hasStandaloneExternalResource(normalizedDocument)) {
+    throw new Error('Standalone curriculum HTML must not reference external resources.')
+  }
+
+  return normalizedDocument
 }

@@ -21,4 +21,27 @@ describe('CurriculumRouteExplorer', () => {
 
     expect(wrapper.get('[data-curriculum-route-explorer]').attributes('data-active-track')).toBe('video')
   })
+
+  it('uses a concise four-year strip for the compact landing variant', () => {
+    const wrapper = mount(CurriculumRouteExplorer, {
+      props: { defaultTrack: 'commercial', variant: 'compact' },
+    })
+
+    expect(wrapper.findAll('[data-curriculum-track]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-curriculum-compact-stage]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-curriculum-stage]')).toHaveLength(0)
+    expect(wrapper.find('[data-curriculum-compact-summary]').text()).toContain('1Y')
+    expect(wrapper.find('[data-curriculum-compact-summary]').text()).toContain('4Y')
+    expect(wrapper.text()).not.toContain('기획부터 촬영·후반작업까지 상업 포트폴리오를 완성합니다.')
+  })
+
+  it('keeps full course and outcome detail for the detailed result variant', () => {
+    const wrapper = mount(CurriculumRouteExplorer, {
+      props: { defaultTrack: 'commercial', variant: 'detailed' },
+    })
+
+    expect(wrapper.findAll('[data-curriculum-stage]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-curriculum-compact-stage]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('기획부터 촬영·후반작업까지 상업 포트폴리오를 완성합니다.')
+  })
 })
