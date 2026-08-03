@@ -75,6 +75,7 @@ export const renderCurriculumRoutesHtml = (): string => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <title>PHOTO:NEXT | 1~4학년 커리큘럼 루트</title>
   <style>
     :root { color-scheme: light; --blue: #2863eb; --navy: #17284b; --canvas: #f4f7ff; --surface: #fff; --line: #ccdaff; --muted: #5c6d8d; --radius: 24px; }
