@@ -1,4 +1,5 @@
-const keepalivePath = '/rest/v1/admission_cycles?select=id&limit=1'
+// Auth settings is public-key authenticated and does not read student or operation data.
+const keepalivePath = '/auth/v1/settings'
 
 export const createSupabaseKeepalive = ({ fetchImpl = fetch } = {}) => async (environment) => {
   const supabaseUrl = environment.NUXT_PUBLIC_SUPABASE_URL

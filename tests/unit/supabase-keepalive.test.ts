@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSupabaseKeepalive } from '../../cloudflare/supabase-keepalive.mjs'
 
 describe('Supabase keepalive', () => {
-  it('uses the public runtime credentials for one bounded lightweight database request', async () => {
+  it('uses the public runtime credentials for one bounded, data-free Auth settings request', async () => {
     const request = vi.fn(async () => new Response('[]', { status: 200 }))
     const keepalive = createSupabaseKeepalive({ fetchImpl: request })
 
@@ -13,7 +13,7 @@ describe('Supabase keepalive', () => {
 
     expect(request).toHaveBeenCalledOnce()
     expect(request).toHaveBeenCalledWith(
-      'https://example-project.supabase.co/rest/v1/admission_cycles?select=id&limit=1',
+      'https://example-project.supabase.co/auth/v1/settings',
       expect.objectContaining({
         headers: {
           apikey: 'public-key',
