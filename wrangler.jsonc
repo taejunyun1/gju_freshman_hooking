@@ -12,6 +12,9 @@
   "observability": {
     "enabled": true
   },
+  "triggers": {
+    "crons": ["17 3 * * *"]
+  },
   "env": {
     "staging": {
       "name": "photo-next-mvp-staging",
