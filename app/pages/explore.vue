@@ -2,8 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AssessmentStep from '../components/assessment/AssessmentStep.vue'
 import AssessmentProgress from '../components/assessment/AssessmentProgress.vue'
-import ResultTimeline from '../components/result/ResultTimeline.vue'
-import CapabilityEvidence from '../components/result/CapabilityEvidence.vue'
+import PublicExploreResult from '../components/result/PublicExploreResult.vue'
 import PublicCounselingForm from '../components/counseling/PublicCounselingForm.vue'
 import { publicExploreSchema } from '../../shared/schemas/public-explore'
 import { decodeResultSnapshot } from '../../shared/schemas/result'
@@ -90,7 +89,7 @@ const next = async () => {
   try {
     const response = await $fetch<{ data: ResultSnapshot }>('/api/public-explore/result', { method: 'POST', body: assessment.value, retry: 0 })
     snapshot.value = decodeResultSnapshot(response.data)
-    await nextTick(); document.getElementById('result-title')?.scrollIntoView({ block: 'start' })
+    await nextTick(); document.querySelector('[data-public-visual-result]')?.scrollIntoView({ block: 'start' })
   }
   catch (failure) {
     const response = (failure as { data?: { error?: { code?: string, message?: string } } }).data
@@ -145,13 +144,9 @@ const updateSelection = (values: string[]) => {
       </div>
       <div v-else role="status"><p>{{ error || '설문을 준비하고 있어요…' }}</p><button v-if="error" class="public-explore__primary" @click="loadOptions">다시 불러오기</button></div>
     </section>
-    <ResultTimeline v-else :snapshot="snapshot" result-public-id="public-explore">
-      <template #counseling-mid>
-        <div class="public-explore__mid"><div><p class="public-explore__eyebrow">NEXT STEP</p><h2 id="counseling-midpoint-title">이 관심을 입학 준비로 이어볼까요?</h2><p>궁금한 점이 생겼다면, 이름과 연락처만 남겨 상담을 신청할 수 있어요.</p></div><a href="#public-counseling" class="public-explore__primary">내 관심 분야로 상담받기 →</a></div>
-      </template>
-      <template #capability-evidence><CapabilityEvidence :equipment="snapshot.resources.equipment" :facility="snapshot.resources.facility" result-public-id="public-explore" :telemetry-enabled="false" /></template>
+    <PublicExploreResult v-else :snapshot="snapshot">
       <template #counseling><PublicCounselingForm :assessment="assessment" :sent="sent" @sent="sent = true" /></template>
-    </ResultTimeline>
+    </PublicExploreResult>
     <footer class="public-explore__footer">
       <div class="public-explore__footer-inner">
         <a href="https://gjuphoto.com/" class="public-explore__brand" aria-label="광주대학교 사진영상미디어학과 홈페이지"><img src="/brand/gjuphoto/dpim-logo-light.svg" alt="dpim 광주대학교 사진영상미디어학과" width="220" height="42" loading="lazy"></a>
@@ -188,15 +183,10 @@ p { line-height: 1.7; color: var(--color-muted); }
 .public-explore__secondary { color: var(--color-primary); background: transparent; border-color: var(--department-border); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .public-explore__error { border: 1px solid var(--color-error); padding: 1rem; border-radius: 16px; color: var(--color-error); }
-.public-explore__mid { display: flex; align-items: center; justify-content: space-between; gap: 2rem; background: var(--color-primary-soft); border: 1px solid var(--department-border); border-radius: var(--radius-panel); padding: clamp(1.5rem, 4vw, 2.5rem); }
-.public-explore__mid h2 { font-size: 1.4rem; margin: .5rem 0; }
-.public-explore__mid p { margin: .5rem 0; }
-.public-explore__mid a { flex-shrink: 0; }
 .public-explore__footer { padding: 2.5rem 2rem; border-top: 1px solid var(--department-border); font-size: .75rem; background: var(--color-surface); }
 .public-explore__footer-inner { max-width: 1216px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
 .public-explore__footer p { margin: 0 0 .4rem; }
 .public-explore__footer a { color: var(--color-primary); }
-@media(max-width: 720px) { .public-explore__mid { display: grid; gap: 1rem; } }
 @media(max-width: 600px) {
   .public-explore__nav { width: calc(100% - 2rem); gap: .75rem; padding: 1rem 0; }
   .public-explore__brand img { height: 34px; }
