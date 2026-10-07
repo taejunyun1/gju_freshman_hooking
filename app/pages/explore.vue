@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AssessmentStep from '../components/assessment/AssessmentStep.vue'
 import AssessmentProgress from '../components/assessment/AssessmentProgress.vue'
 import PublicExploreResult from '../components/result/PublicExploreResult.vue'
@@ -29,6 +29,9 @@ const ready = ref(false)
 const loading = ref(false)
 const error = ref('')
 const storageNotice = ref('')
+let restoreOnReload = false
+let resultRequest = 0
+let disposed = false
 const groupLabels = ['해보고 싶은 일', '만들고 싶은 결과물', '작업 방식', '진로 방향']
 const currentGroup = computed(() => catalog.value?.groups.find(group => group.key === questionGroups[step.value]))
 const assessment = computed(() => ({ catalogRevision: catalog.value?.catalogRevision ?? '', visitorSeed: visitorSeed.value, selections: selections.value }))
@@ -51,11 +54,12 @@ const loadOptions = async () => {
   error.value = ''; loading.value = true
   try {
     const response = await $fetch<{ data: PublicAssessmentCatalog }>('/api/public-explore/options', { retry: 0 })
+    if (disposed) return
     catalog.value = response.data
     if (!ready.value) {
       visitorSeed.value = newSeed()
       try {
-        const stored = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null')
+        const stored = restoreOnReload ? JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') : null
         if (stored?.catalogRevision === response.data.catalogRevision) {
           for (const group of response.data.groups) {
             const allowed = new Set(group.options.map(option => option.key))
@@ -79,30 +83,59 @@ const loadOptions = async () => {
   catch { error.value = '설문 선택지를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' }
   finally { loading.value = false }
 }
-onMounted(loadOptions)
+const clearStoredVisit = () => {
+  try { sessionStorage.removeItem(storageKey) } catch { /* Survey remains usable. */ }
+}
+const resetVisit = () => {
+  resultRequest++
+  selections.value = emptySelections(); snapshot.value = null; step.value = 0; sent.value = false
+  visitorSeed.value = newSeed(); error.value = ''; loading.value = false
+  restoreOnReload = false
+  clearStoredVisit()
+  window.scrollTo({ top: 0 })
+}
+const handlePageShow = (event: PageTransitionEvent) => {
+  // Back/forward cache restores the existing Vue instance without mounting again.
+  if (event.persisted) resetVisit()
+}
+onMounted(() => {
+  const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+  restoreOnReload = navigation?.type === 'reload'
+  if (!restoreOnReload) clearStoredVisit()
+  window.addEventListener('pageshow', handlePageShow)
+  void loadOptions()
+})
+onBeforeUnmount(() => {
+  disposed = true
+  ready.value = false
+  resultRequest++
+  window.removeEventListener('pageshow', handlePageShow)
+  clearStoredVisit()
+})
 const focusSurvey = async () => { await nextTick(); document.getElementById('explore-question')?.scrollIntoView({ block: 'start' }) }
 const next = async () => {
   if (!canAdvance.value || loading.value) return
   if (step.value < 3) { step.value++; await focusSurvey(); return }
   if (!publicExploreSchema.safeParse(assessment.value).success) { error.value = '선택 항목과 기타 관심사 입력을 다시 확인해 주세요.'; return }
   error.value = ''; loading.value = true
+  const request = ++resultRequest
   try {
     const response = await $fetch<{ data: ResultSnapshot }>('/api/public-explore/result', { method: 'POST', body: assessment.value, retry: 0 })
+    if (request !== resultRequest) return
     snapshot.value = decodeResultSnapshot(response.data)
     await nextTick(); document.querySelector('[data-public-visual-result]')?.scrollIntoView({ block: 'start' })
   }
   catch (failure) {
+    if (request !== resultRequest) return
     const response = (failure as { data?: { error?: { code?: string, message?: string } } }).data
     error.value = response?.error?.message ?? '결과를 준비하지 못했습니다. 선택은 그대로 유지됩니다. 다시 시도해 주세요.'
     if (response?.error?.code === 'ASSESSMENT_CATALOG_STALE') { ready.value = true; await loadOptions(); error.value = '선택지가 업데이트되었습니다. 선택을 확인하고 결과를 다시 만들어 주세요.' }
   }
-  finally { loading.value = false }
+  finally { if (request === resultRequest) loading.value = false }
 }
 const restart = () => {
   if (!window.confirm('이 탭의 선택과 결과를 지우고 처음부터 시작할까요? 이미 보낸 상담 메일은 삭제되지 않습니다.')) return
-  selections.value = emptySelections(); snapshot.value = null; step.value = 0; sent.value = false; visitorSeed.value = newSeed(); error.value = ''
-  try { sessionStorage.removeItem(storageKey) } catch { /* Survey remains usable. */ }
-  window.scrollTo({ top: 0 })
+  resetVisit()
 }
 const updateSelection = (values: string[]) => {
   if (!currentGroup.value) return
@@ -130,7 +163,7 @@ const updateSelection = (values: string[]) => {
         <h1>좋아하는 장면에서,<br>나의 진로를 찾아보세요.</h1>
         <p>관심 있는 일을 고르면, 광주대학교 사진영상미디어학과에서 이어갈 수 있는 수업과 프로젝트를 보여드려요.</p>
         <div class="public-explore__badges"><span>로그인 없이</span><span>네 단계 선택</span><span>나만의 4년 경로</span></div>
-        <p class="public-explore__notice">선택과 결과는 이 브라우저 탭에 임시 보관됩니다. 추천 계산을 위해 서버로 전송되지만 학생 DB에 기록하지 않습니다. 공용 기기에서는 이용 후 ‘처음부터’를 눌러 주세요.</p>
+        <p class="public-explore__notice">새로고침하면 진행 중인 선택을 이어 볼 수 있고, 페이지를 나갔다 다시 방문하면 처음부터 시작합니다. 선택과 결과는 학생 DB에 기록하지 않습니다.</p>
       </div>
       <p v-if="storageNotice" role="status" class="public-explore__notice">{{ storageNotice }}</p>
       <div v-if="catalog && currentGroup" id="explore-question">
