@@ -5,6 +5,12 @@
   "compatibility_date": "2026-07-14",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "routes": [{ "pattern": "next.gjuphoto.com", "custom_domain": true }],
+  // Add COUNSELING_EMAIL with destination_address photographygju@gmail.com after recipient verification.
+  "ratelimits": [
+    { "name": "PUBLIC_EXPLORE_LIMIT", "namespace_id": "2601001", "simple": { "limit": 300, "period": 60 } },
+    { "name": "PUBLIC_COUNSELING_LIMIT", "namespace_id": "2601002", "simple": { "limit": 2, "period": 60 } }
+  ],
   "assets": {
     "directory": ".output/public",
     "binding": "ASSETS"
@@ -18,7 +24,12 @@
   "env": {
     "staging": {
       "name": "photo-next-mvp-staging",
-      "workers_dev": true
+      "workers_dev": true,
+      "routes": [],
+      "ratelimits": [
+        { "name": "PUBLIC_EXPLORE_LIMIT", "namespace_id": "2601011", "simple": { "limit": 300, "period": 60 } },
+        { "name": "PUBLIC_COUNSELING_LIMIT", "namespace_id": "2601012", "simple": { "limit": 2, "period": 60 } }
+      ]
     }
   }
 }

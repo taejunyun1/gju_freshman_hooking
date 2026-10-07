@@ -600,6 +600,140 @@ const recordSafely = async (writer: EventWriter, event: Parameters<EventWriter>[
   }
 }
 
+export const buildAssessmentRecommendation = ({
+  catalog, selections, candidates, facultyCandidates, distributionKey, completedAt,
+}: {
+  catalog: readonly AssessmentOption[]
+  selections: AssessmentSelections
+  candidates: readonly ResourceCandidate[]
+  facultyCandidates: Awaited<ReturnType<AssessmentCompletionDependencies['loadFacultyCandidates']>>
+  distributionKey?: number
+  completedAt: string
+}) => {
+  const input = { selections }
+  let scored
+  try {
+    scored = scoreAssessment(catalog, input.selections)
+  }
+  catch (error) {
+    if (error instanceof AssessmentScoringError
+      && error.code !== 'ASSESSMENT_CATALOG_INVALID') throw new AppError('ASSESSMENT_INVALID')
+    throw error
+  }
+  const selected = selectedOptionsInCatalogOrder(catalog, input.selections)
+  const labelsByTag = selectedLabelsByTag(selected, scored.interestVector)
+  const selectedInterests = orderSelectedInterestsByTopTrackContribution(
+    selected,
+    scored.rankedTracks[0]!,
+  )
+  const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
+
+  assertResourceCandidates(candidates)
+  const matchingInput = withPrimaryTrackPathway({
+    candidates,
+    interestVector: scored.interestVector,
+    selectedInterests: matchingEvidence,
+    primaryTrack: scored.rankedTracks[0]!,
+    secondaryTrack: scored.rankedTracks[1]!,
+  })
+  const preparedResources = prepareResourceCandidates({
+    candidates: matchingInput.candidates,
+    interestVector: matchingInput.interestVector,
+    selectedInterests: matchingInput.selectedInterests,
+  })
+  const rawRanked = rankResources({
+    candidates: preparedResources.candidates,
+    interestVector: matchingInput.interestVector,
+    selectedInterests: matchingInput.selectedInterests,
+    primaryTrack: matchingInput.primaryTrack,
+    secondaryTrack: matchingInput.secondaryTrack,
+    syntheticPathwayCourseIds: matchingInput.syntheticPathwayCourseIds,
+    syntheticPathwayEvidenceKeys: matchingInput.syntheticPathwayEvidenceKeys,
+  })
+  const ranked = {
+    ...rawRanked,
+    course: restoreRankedResources(
+      rawRanked.course,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+    capabilityEvidence: restoreRankedResources(
+      rawRanked.capabilityEvidence,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+    extracurricularProject: restoreRankedResources(
+      rawRanked.extracurricularProject,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+    studentWork: restoreRankedResources(
+      rawRanked.studentWork,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+    career: restoreRankedResources(
+      rawRanked.career,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+    support: restoreRankedResources(
+      rawRanked.support,
+      preparedResources.originalsById,
+      preparedResources.reasonsById,
+    ),
+  }
+  const learningPath = buildLearningPath(ranked.course)
+
+  const facultyRecommendation = recommendFaculty({
+    student: {
+      trackScores: scored.trackScores,
+      interestVector: scored.interestVector,
+      selectedLabels: labelsByTag,
+    },
+    faculty: facultyCandidates.faculty,
+    specialistLinks: facultyCandidates.specialistLinks,
+    distributionKey,
+  })
+  const faculty = {
+    primary: facultyRecommendation.primary,
+    backup: facultyRecommendation.backup,
+    specialists: facultyRecommendation.specialists,
+  }
+  const resources = {
+    course: ranked.course,
+    equipment: ranked.capabilityEvidence.filter(resource => resource.type === 'equipment'),
+    facility: ranked.capabilityEvidence.filter(resource => resource.type === 'facility'),
+    extracurricular: ranked.extracurricularProject.filter(resource => resource.type === 'extracurricular'),
+    project: ranked.extracurricularProject.filter(resource => resource.type === 'project'),
+    student_work: ranked.studentWork,
+    career: ranked.career,
+    support: ranked.support.slice(0, 3),
+  }
+  const environmentScore = computeEnvironmentScore({
+    facility: resources.facility,
+    equipment: resources.equipment,
+    learningPath,
+    hasPrimaryFaculty: faculty.primary.id > 0,
+  })
+  const resultSnapshotCore: ResultSnapshotCore = {
+    completedAt,
+    selectedInterests,
+    trackScores: scored.trackScores,
+    rankedTracks: [
+      scored.rankedTracks[0]!,
+      scored.rankedTracks[1]!,
+      scored.rankedTracks[2]!,
+      scored.rankedTracks[3]!,
+    ],
+    environmentScore,
+    learningPath,
+    resources,
+    faculty,
+  }
+  return { coreSnapshot: resultSnapshotCore, scored, selected }
+}
+
 export const createAssessmentCompletionService = (dependencies: AssessmentCompletionDependencies) => {
   const submitAssessment = async (
     rawInput: unknown,
@@ -643,130 +777,15 @@ export const createAssessmentCompletionService = (dependencies: AssessmentComple
       const revision = await deadline.run(() => createAssessmentCatalogRevision(catalog))
       if (input.catalogRevision !== revision) throw new AppError('ASSESSMENT_CATALOG_STALE')
 
-      let scored
-      try {
-        scored = scoreAssessment(catalog, input.selections)
-      }
-      catch (error) {
-        if (error instanceof AssessmentScoringError
-          && error.code !== 'ASSESSMENT_CATALOG_INVALID') throw new AppError('ASSESSMENT_INVALID')
-        throw error
-      }
-      const selected = selectedOptionsInCatalogOrder(catalog, input.selections)
-      const labelsByTag = selectedLabelsByTag(selected, scored.interestVector)
-      const selectedInterests = orderSelectedInterestsByTopTrackContribution(
-        selected,
-        scored.rankedTracks[0]!,
-      )
-      const matchingEvidence = Object.entries(labelsByTag).map(([key, label]) => ({ key, label }))
-      const campaignId = null
-
       const candidates = await deadline.run(dependencies.loadResourceCandidates)
-      assertResourceCandidates(candidates)
-      const matchingInput = withPrimaryTrackPathway({
-        candidates,
-        interestVector: scored.interestVector,
-        selectedInterests: matchingEvidence,
-        primaryTrack: scored.rankedTracks[0]!,
-        secondaryTrack: scored.rankedTracks[1]!,
-      })
-      const preparedResources = prepareResourceCandidates({
-        candidates: matchingInput.candidates,
-        interestVector: matchingInput.interestVector,
-        selectedInterests: matchingInput.selectedInterests,
-      })
-      const rawRanked = rankResources({
-        candidates: preparedResources.candidates,
-        interestVector: matchingInput.interestVector,
-        selectedInterests: matchingInput.selectedInterests,
-        primaryTrack: matchingInput.primaryTrack,
-        secondaryTrack: matchingInput.secondaryTrack,
-        syntheticPathwayCourseIds: matchingInput.syntheticPathwayCourseIds,
-        syntheticPathwayEvidenceKeys: matchingInput.syntheticPathwayEvidenceKeys,
-      })
-      const ranked = {
-        ...rawRanked,
-        course: restoreRankedResources(
-          rawRanked.course,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-        capabilityEvidence: restoreRankedResources(
-          rawRanked.capabilityEvidence,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-        extracurricularProject: restoreRankedResources(
-          rawRanked.extracurricularProject,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-        studentWork: restoreRankedResources(
-          rawRanked.studentWork,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-        career: restoreRankedResources(
-          rawRanked.career,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-        support: restoreRankedResources(
-          rawRanked.support,
-          preparedResources.originalsById,
-          preparedResources.reasonsById,
-        ),
-      }
-      const learningPath = buildLearningPath(ranked.course)
-
       const facultyCandidates = await deadline.run(dependencies.loadFacultyCandidates)
-      const facultyRecommendation = recommendFaculty({
-        student: {
-          trackScores: scored.trackScores,
-          interestVector: scored.interestVector,
-          selectedLabels: labelsByTag,
-        },
-        faculty: facultyCandidates.faculty,
-        specialistLinks: facultyCandidates.specialistLinks,
+      const { coreSnapshot: resultSnapshotCore, scored, selected } = buildAssessmentRecommendation({
+        catalog, selections: input.selections, candidates, facultyCandidates,
         distributionKey: session.prospectId,
+        completedAt: (dependencies.now ?? (() => new Date().toISOString()))(),
       })
-      const faculty = {
-        primary: facultyRecommendation.primary,
-        backup: facultyRecommendation.backup,
-        specialists: facultyRecommendation.specialists,
-      }
-      const resources = {
-        course: ranked.course,
-        equipment: ranked.capabilityEvidence.filter(resource => resource.type === 'equipment'),
-        facility: ranked.capabilityEvidence.filter(resource => resource.type === 'facility'),
-        extracurricular: ranked.extracurricularProject.filter(resource => resource.type === 'extracurricular'),
-        project: ranked.extracurricularProject.filter(resource => resource.type === 'project'),
-        student_work: ranked.studentWork,
-        career: ranked.career,
-        support: ranked.support.slice(0, 3),
-      }
-      const environmentScore = computeEnvironmentScore({
-        facility: resources.facility,
-        equipment: resources.equipment,
-        learningPath,
-        hasPrimaryFaculty: faculty.primary.id > 0,
-      })
-      const completedAt = (dependencies.now ?? (() => new Date().toISOString()))()
-      const resultSnapshotCore: ResultSnapshotCore = {
-        completedAt,
-        selectedInterests,
-        trackScores: scored.trackScores,
-        rankedTracks: [
-          scored.rankedTracks[0]!,
-          scored.rankedTracks[1]!,
-          scored.rankedTracks[2]!,
-          scored.rankedTracks[3]!,
-        ],
-        environmentScore,
-        learningPath,
-        resources,
-        faculty,
-      }
+      const { environmentScore } = resultSnapshotCore
+      const campaignId = null
       const resolvedNarrative = await deadline.run(() => dependencies.resolveCareerNarrative({
           prospectId: session.prospectId,
           idempotencyKey: input.idempotencyKey,

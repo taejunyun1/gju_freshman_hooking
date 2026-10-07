@@ -25,6 +25,7 @@ import { AppError } from '../../../server/utils/app-error'
 import { createAbsoluteDeadline } from '../../../server/utils/absolute-deadline'
 import { RequestBodyLimitError } from '../../../server/utils/bounded-request-body'
 import { decodeResultSnapshot } from '../../../shared/schemas/result'
+import { createPublicExploreService } from '../../../server/modules/public-explore/service'
 import type { CareerNarrative } from '../../../shared/types/career-narrative'
 import type { AssessmentSelections } from '../../../shared/types/domain'
 
@@ -427,6 +428,34 @@ const createSubmit = (
 })
 
 describe('assessment completion service', () => {
+  it('public exploration reuses matching without sessions, student writes, narrative writes or events', async () => {
+    const dependencies = serviceDependencies()
+    const getStudentSession = vi.fn(dependencies.getStudentSession)
+    const service = createPublicExploreService({ ...dependencies, getStudentSession } as never, () => Date.parse(completedAt))
+    const options = await service.getOptions()
+    const result = await service.recommend({ catalogRevision: options.catalogRevision, visitorSeed: 42, selections: selections() })
+    expect(result.rankedTracks[0]).toBe('commercial')
+    expect(result.learningPath[3].resources.length).toBeGreaterThan(0)
+    expect(result.careerNarrative.source).toBe('deterministic')
+    expect(getStudentSession).not.toHaveBeenCalled()
+    for (const write of [dependencies.consumeRateLimit, dependencies.completeAssessment, dependencies.resolveCareerNarrative, dependencies.recordEvent]) expect(write).not.toHaveBeenCalled()
+    expect(dependencies.loadActiveOptions).toHaveBeenCalledTimes(1)
+    expect(dependencies.loadResourceCandidates).toHaveBeenCalledTimes(1)
+    expect(dependencies.loadFacultyCandidates).toHaveBeenCalledTimes(1)
+  })
+
+  it('public catalog cache expires and old selections fail with a specific stale error', async () => {
+    let time = Date.parse(completedAt)
+    const dependencies = serviceDependencies()
+    const service = createPublicExploreService(dependencies, () => time)
+    await Promise.all([service.getOptions(), service.getOptions()])
+    expect(dependencies.loadActiveOptions).toHaveBeenCalledTimes(1)
+    await expect(service.recommend({ catalogRevision: `sha256:${'0'.repeat(64)}`, visitorSeed: 42, selections: selections() })).rejects.toMatchObject({ code: 'ASSESSMENT_CATALOG_STALE' })
+    time += 600_001
+    await service.getOptions()
+    expect(dependencies.loadActiveOptions).toHaveBeenCalledTimes(2)
+  })
+
   it('preserves a legacy course while new 2026 course snapshots carry requirementType', async () => {
     const completeAssessment = vi.fn(async () => ({ assessmentId: 701, publicId, created: true }))
     const current2026 = {

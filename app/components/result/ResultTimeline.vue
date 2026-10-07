@@ -130,10 +130,10 @@ const hasOutcomes = computed(() => (
       data-result-section="counseling-mid"
       aria-labelledby="counseling-midpoint-title"
     >
-      <CounselingCTA
+      <slot name="counseling-mid"><CounselingCTA
         :assessment-public-id="resultPublicId"
         variant="compact"
-      />
+      /></slot>
     </section>
 
     <slot name="career-narrative">
@@ -228,7 +228,7 @@ const hasOutcomes = computed(() => (
       data-result-section="counseling"
       aria-labelledby="counseling-title"
     >
-      <CounselingCTA :assessment-public-id="resultPublicId" />
+      <slot name="counseling"><CounselingCTA :assessment-public-id="resultPublicId" /></slot>
     </section>
   </article>
 </template>
