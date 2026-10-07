@@ -10,8 +10,14 @@ import { decodeResultSnapshot } from '../../shared/schemas/result'
 import { questionGroups, type AssessmentSelections } from '../../shared/types/domain'
 import type { PublicAssessmentCatalog } from '../../shared/types/api'
 import type { ResultSnapshot } from '../../shared/types/result'
+import '../assets/css/public-explore.css'
 
 useSeoMeta({ title: '나의 사진·영상 진로 찾기 | 광주대학교 사진영상미디어학과', description: '로그인 없이 관심 분야를 골라 사진·영상·AI·예술사진·다큐멘터리·광고사진의 대학 학습경로와 진로를 살펴보세요.' })
+useHead({
+  bodyAttrs: { class: 'department-explore-page' },
+  link: [{ rel: 'icon', type: 'image/svg+xml', href: '/brand/gjuphoto/favicon.svg' }],
+  meta: [{ name: 'theme-color', content: '#070709' }],
+})
 const storageKey = 'photo-next:public-explore:v1'
 const emptySelections = (): AssessmentSelections => ({ work: [], result: [], style: [], career: [], careerOther: null })
 const catalog = ref<PublicAssessmentCatalog | null>(null)
@@ -109,12 +115,19 @@ const updateSelection = (values: string[]) => {
 <template>
   <main class="public-explore">
     <header class="public-explore__header">
-      <a href="https://gjuphoto.com/" class="public-explore__brand">PHOTO:<span>NEXT</span><small>광주대학교 사진영상미디어학과</small></a>
-      <button v-if="ready" class="public-explore__reset" @click="restart">처음부터</button>
+      <div class="public-explore__nav">
+        <a href="https://gjuphoto.com/" class="public-explore__brand" aria-label="광주대학교 사진영상미디어학과 홈페이지">
+          <img src="/brand/gjuphoto/dpim-logo-light.svg" alt="dpim 광주대학교 사진영상미디어학과" width="220" height="42">
+        </a>
+        <nav class="public-explore__nav-actions" aria-label="진로 탐색 메뉴">
+          <a href="https://gjuphoto.com/" class="public-explore__home">학과 홈페이지 <span aria-hidden="true">↗</span></a>
+          <button v-if="ready" class="public-explore__reset" @click="restart">처음부터</button>
+        </nav>
+      </div>
     </header>
     <section v-if="!snapshot" class="public-explore__survey">
       <div class="public-explore__intro">
-        <p class="public-explore__eyebrow">YOUR INTEREST → YOUR NEXT</p>
+        <p class="public-explore__eyebrow">DPIM · FIND YOUR PATH</p>
         <h1>좋아하는 장면에서,<br>나의 진로를 찾아보세요.</h1>
         <p>관심 있는 일을 고르면, 광주대학교 사진영상미디어학과에서 이어갈 수 있는 수업과 프로젝트를 보여드려요.</p>
         <div class="public-explore__badges"><span>로그인 없이</span><span>네 단계 선택</span><span>나만의 4년 경로</span></div>
@@ -139,37 +152,59 @@ const updateSelection = (values: string[]) => {
       <template #capability-evidence><CapabilityEvidence :equipment="snapshot.resources.equipment" :facility="snapshot.resources.facility" result-public-id="public-explore" :telemetry-enabled="false" /></template>
       <template #counseling><PublicCounselingForm :assessment="assessment" :sent="sent" @sent="sent = true" /></template>
     </ResultTimeline>
-    <footer class="public-explore__footer"><a href="https://gjuphoto.com/">학과 홈페이지로 돌아가기 ↗</a><p>광주대학교 사진영상미디어학과 · PHOTO:NEXT</p></footer>
+    <footer class="public-explore__footer">
+      <div class="public-explore__footer-inner">
+        <a href="https://gjuphoto.com/" class="public-explore__brand" aria-label="광주대학교 사진영상미디어학과 홈페이지"><img src="/brand/gjuphoto/dpim-logo-light.svg" alt="dpim 광주대학교 사진영상미디어학과" width="220" height="42" loading="lazy"></a>
+        <div><p>광주대학교 사진영상미디어학과</p><a href="https://gjuphoto.com/">학과 홈페이지로 돌아가기 ↗</a></div>
+      </div>
+    </footer>
   </main>
 </template>
 
 <style scoped>
-.public-explore { min-height: 100vh; background: var(--color-canvas); }
-.public-explore__header { width: min(100% - 2.5rem, 1120px); margin: auto; padding: 1.6rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.public-explore__brand { color: var(--color-ink); text-decoration: none; font-size: 1.35rem; font-weight: 900; letter-spacing: -.05em; }
-.public-explore__brand span { color: var(--color-primary); }
-.public-explore__brand small { display: block; font-size: .65rem; font-weight: 600; letter-spacing: 0; margin-top: .3rem; color: var(--color-muted); }
-.public-explore__reset { border: 1px solid #cad5ec; padding: .6rem .9rem; border-radius: 999px; background: white; color: var(--color-muted); cursor: pointer; font: inherit; font-size: .8rem; }
-.public-explore__survey { width: min(100% - 2.5rem, 960px); margin: 1rem auto 4rem; }
-.public-explore__intro { border: 1px solid #d5dffd; border-radius: var(--radius-panel); background: white; padding: clamp(1.5rem, 5vw, 3rem); margin-bottom: 2rem; }
-.public-explore__eyebrow { color: var(--color-primary); font: 700 .7rem var(--font-mono); letter-spacing: .06em; }
-h1 { font-size: clamp(1.75rem, 4vw, 2rem); line-height: 1.3; margin: 1rem 0; }
+.public-explore { min-height: 100vh; background: radial-gradient(ellipse at 15% 0%, rgba(99, 102, 241, .07), transparent 50%), var(--color-canvas); }
+.public-explore__header { background: rgba(8, 8, 12, .85); border-bottom: 1px solid var(--department-border); backdrop-filter: blur(20px); }
+.public-explore__nav { width: min(100% - 4rem, 1216px); margin: auto; padding: 1.25rem 0; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.public-explore__brand { display: inline-flex; flex-shrink: 0; text-decoration: none; }
+.public-explore__brand img { display: block; width: auto; height: 42px; max-width: 100%; }
+.public-explore__nav-actions { display: flex; align-items: center; gap: 1.5rem; }
+.public-explore__home { color: var(--color-muted); font-size: .875rem; font-weight: 600; text-decoration: none; }
+.public-explore__home:hover { color: var(--color-primary); }
+.public-explore__reset { min-height: 44px; border: 1px solid var(--department-border); padding: .6rem 1rem; border-radius: var(--radius-control); background: transparent; color: var(--color-primary); cursor: pointer; font: inherit; font-size: .8rem; }
+.public-explore__reset:hover { background: var(--color-primary-soft); border-color: var(--color-muted); }
+.public-explore__survey { width: min(100% - 4rem, 1040px); margin: 3rem auto 5rem; }
+.public-explore__intro { border: 1px solid var(--department-border); border-radius: var(--radius-panel); background: rgba(18, 18, 26, .75); padding: clamp(1.5rem, 5vw, 3rem); margin-bottom: 2.5rem; }
+.public-explore__eyebrow { color: var(--color-muted); font: 600 .7rem var(--font-mono); letter-spacing: .1em; }
+h1 { font-size: clamp(1.75rem, 4vw, 2rem); line-height: 1.35; letter-spacing: -.035em; margin: 1.2rem 0; }
 p { line-height: 1.7; color: var(--color-muted); }
 .public-explore__badges { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.3rem 0; }
-.public-explore__badges span { padding: .4rem .75rem; background: var(--color-primary-soft); border-radius: 999px; color: var(--color-primary); font-size: .75rem; font-weight: 650; }
+.public-explore__badges span { padding: .4rem .75rem; background: transparent; border: 1px solid var(--department-border); border-radius: 999px; color: var(--color-primary); font-size: .75rem; font-weight: 550; }
 .public-explore__notice { font-size: .75rem; margin-bottom: 0; }
 #explore-question { scroll-margin-top: 1.5rem; }
 .public-explore__actions { display: flex; justify-content: flex-end; gap: .8rem; }
 .public-explore__primary, .public-explore__secondary { display: inline-flex; align-items: center; justify-content: center; border-radius: 16px; padding: .95rem 1.35rem; text-decoration: none; font: inherit; font-weight: 750; border: 1px solid var(--color-primary); cursor: pointer; }
-.public-explore__primary { background: var(--color-primary); color: white; }
-.public-explore__secondary { color: var(--color-primary); background: white; }
+.public-explore__primary { background: var(--color-primary); color: var(--color-canvas); }
+.public-explore__primary:hover:not(:disabled) { background: #e2e2ec; }
+.public-explore__secondary { color: var(--color-primary); background: transparent; border-color: var(--department-border); }
 button:disabled { opacity: .45; cursor: not-allowed; }
-.public-explore__error { border: 1px solid #ba263b; padding: 1rem; border-radius: 16px; color: #a3212d; }
-.public-explore__mid { display: flex; align-items: center; justify-content: space-between; gap: 2rem; background: var(--color-primary-soft); border: 1px solid #c3d3ff; border-radius: var(--radius-panel); padding: clamp(1.5rem, 4vw, 2.5rem); }
+.public-explore__error { border: 1px solid var(--color-error); padding: 1rem; border-radius: 16px; color: var(--color-error); }
+.public-explore__mid { display: flex; align-items: center; justify-content: space-between; gap: 2rem; background: var(--color-primary-soft); border: 1px solid var(--department-border); border-radius: var(--radius-panel); padding: clamp(1.5rem, 4vw, 2.5rem); }
 .public-explore__mid h2 { font-size: 1.4rem; margin: .5rem 0; }
 .public-explore__mid p { margin: .5rem 0; }
 .public-explore__mid a { flex-shrink: 0; }
-.public-explore__footer { text-align: center; padding: 2rem 1rem; border-top: 1px solid #d5dffd; font-size: .75rem; }
+.public-explore__footer { padding: 2.5rem 2rem; border-top: 1px solid var(--department-border); font-size: .75rem; background: var(--color-surface); }
+.public-explore__footer-inner { max-width: 1216px; margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.public-explore__footer p { margin: 0 0 .4rem; }
 .public-explore__footer a { color: var(--color-primary); }
 @media(max-width: 720px) { .public-explore__mid { display: grid; gap: 1rem; } }
+@media(max-width: 600px) {
+  .public-explore__nav { width: calc(100% - 2rem); gap: .75rem; padding: 1rem 0; }
+  .public-explore__brand img { height: 34px; }
+  .public-explore__nav-actions { gap: .5rem; }
+  .public-explore__home { display: none; }
+  .public-explore__survey { width: calc(100% - 2rem); margin-top: 1.5rem; }
+  .public-explore__intro { padding: 1.5rem 1.25rem; }
+  .public-explore__footer { padding: 2rem 1rem; }
+  .public-explore__footer-inner { align-items: flex-start; flex-direction: column; }
+}
 </style>

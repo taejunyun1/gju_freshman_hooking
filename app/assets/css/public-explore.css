@@ -1,0 +1,52 @@
+/* Department homepage palette, scoped to the login-free journey only. */
+body.department-explore-page {
+  background: #070709;
+  color-scheme: dark;
+}
+
+.public-explore {
+  --color-primary: #f4f4f8;
+  --color-primary-strong: #f4f4f8;
+  --color-primary-soft: #1f1f28;
+  --color-canvas: #070709;
+  --color-surface: #0f0f14;
+  --color-muted: #b8b8c8;
+  --color-error: #ff9b9b;
+  --color-ink: var(--color-primary-strong);
+  --color-sequence: var(--color-primary);
+  --color-resource: var(--color-primary);
+  --color-signal: var(--color-primary);
+  --department-border: rgba(255, 255, 255, 0.12);
+  --font-display: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-body: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --radius-control: 0.875rem;
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+  --shadow-raised: 0 0.875rem 2.25rem rgba(0, 0, 0, 0.25);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  color-scheme: dark;
+}
+
+.public-explore :focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+.public-explore .assessment-step legend { line-height: 1.3; letter-spacing: -0.035em; }
+.public-explore .assessment-step__eyebrow { color: var(--color-muted); }
+.public-explore .selection-graphic { background: #15151c; }
+.public-explore .selection-graphic__code { color: var(--color-muted); }
+.public-explore .option-card--selected .selection-graphic { background: #2d2d3a; }
+.public-explore .option-card__copy { padding: 1rem; }
+.public-explore .option-card__control { min-height: 3rem; }
+.public-explore .result-timeline__summary h1 { max-width: 19ch; line-height: 1.35; letter-spacing: -0.035em; }
+.public-explore .learning-path__ruler { background: #1f1f28; color: var(--color-muted); }
+.public-explore .result-timeline__section-heading > p,
+.public-explore .result-timeline__eyebrow { color: var(--color-muted); }
+
+@media (max-width: 600px) {
+  .public-explore .assessment-step__grid { gap: 0.65rem; }
+  .public-explore .option-card__copy { padding: 0.8rem; }
+  .public-explore .option-card__copy strong { font-size: 0.875rem; }
+}

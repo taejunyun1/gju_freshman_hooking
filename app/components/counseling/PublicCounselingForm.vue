@@ -67,7 +67,7 @@ const phoneInput = (event: Event) => {
 </template>
 
 <style scoped>
-.public-counseling { padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--color-primary); border-radius: var(--radius-panel); background: white; scroll-margin-top: 1rem; }
+.public-counseling { padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid color-mix(in srgb, var(--color-primary) 24%, transparent); border-radius: var(--radius-panel); background: var(--color-surface); scroll-margin-top: 1rem; }
 .public-counseling__eyebrow { color: var(--color-primary); font: 700 .7rem var(--font-mono); letter-spacing: .08em; }
 h2 { font-size: clamp(1.4rem, 3vw, 2rem); margin: .8rem 0; }
 p { line-height: 1.7; color: var(--color-muted); }
@@ -75,14 +75,15 @@ fieldset { border: 0; margin: 1.5rem 0 0; padding: 0; display: grid; gap: 1.2rem
 .public-counseling__row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 label { display: grid; gap: .6rem; font-size: .9rem; font-weight: 650; }
 label span { display: inline; font-weight: 400; color: var(--color-muted); }
-input:not([type=checkbox]), textarea { width: 100%; min-width: 0; border: 1px solid #bfc9df; border-radius: 14px; padding: .9rem 1rem; background: white; color: var(--color-ink); font: inherit; }
+input:not([type=checkbox]), textarea { width: 100%; min-width: 0; border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent); border-radius: 14px; padding: .9rem 1rem; background: var(--color-canvas); color: var(--color-ink); font: inherit; }
+input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 1; }
 textarea { resize: vertical; }
 .public-counseling__privacy { margin: 0; font-size: .78rem; }
 .public-counseling__consent { display: flex; align-items: flex-start; line-height: 1.5; }
 .public-counseling__consent input { width: 1.1rem; height: 1.1rem; flex-shrink: 0; accent-color: var(--color-primary); }
-button { justify-self: start; padding: 1rem 1.4rem; color: white; background: var(--color-primary); border: 0; border-radius: 16px; font: inherit; font-weight: 750; cursor: pointer; }
+button { justify-self: start; padding: 1rem 1.4rem; color: var(--color-canvas); background: var(--color-primary); border: 0; border-radius: 16px; font: inherit; font-weight: 750; cursor: pointer; }
 button:disabled { opacity: .5; }
-.public-counseling__error { color: #a3212d; margin: 0; }
+.public-counseling__error { color: var(--color-error); margin: 0; }
 .public-counseling__success { border-radius: 16px; padding: 1.2rem; background: var(--color-primary-soft); line-height: 1.6; }
 .public-counseling__email { display: inline-block; margin-top: 1rem; color: var(--color-primary); font-size: .85rem; }
 .public-counseling__trap { display: none; }
